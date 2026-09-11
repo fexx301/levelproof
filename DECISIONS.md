@@ -21,6 +21,17 @@ Build-window decisions and measured evidence, newest first. Dates are 2026.
 - **Model evaluation scheduled for the week of Sep 11** (previously undated).
   Model choice cascades into prompts, cache identity, and the video; a failed
   §10.1 bar discovered late is unrecoverable. Eval cost cap unchanged.
+- **Model pricing snapshot (live OpenRouter catalog, fetched Sep 11).**
+  Eval slate for §10.1, all with native structured outputs and ≥128k context:
+  `openai/gpt-oss-120b` ($0.037/$0.17 per M in/out), `deepseek/deepseek-v4-flash`
+  ($0.086/$0.17), `google/gemini-2.5-flash-lite` ($0.0999/$0.40); alternates
+  `qwen/qwen3.5-flash-02-23`, `meta-llama/llama-4-scout`. Estimated per-compile
+  cost at 4k in / 1k out (envelope to be verified): $0.0003–0.0008; the full
+  3-model × 24-call eval ≈ $0.05, inside the $0.25 cap. Fallback ladder if the
+  bar fails: deepseek-v3.2 / qwen-plus (~$0.0015–0.0018 per compile), then
+  gemini-3.x-flash / gpt-5.4-mini / claude-haiku-4.5 (~$0.004–0.009). Batch
+  variants excluded (async turnaround); `:free` tier excluded (rate limits
+  during judging).
 - **Unfamiliar-prompt video segment** will be rehearsed against the deployed
   URL with pre-screened prompts — unfamiliar to the tool, not to the author.
 - **Provider-failure rehearsal** (key killed mid-session) added to the
