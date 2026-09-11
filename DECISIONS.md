@@ -2,6 +2,27 @@
 
 Build-window decisions and measured evidence, newest first. Dates are 2026.
 
+## Sep 11 (core engine)
+
+- **Core engine landed** (first half of the §14 Sep 11–12 gate): strict Zod
+  schemas and the bounded edit vocabulary (`shared/schema.ts`); versioned
+  catalog `catalog-1.0.0` (400 cm pitch, 300 cm spacing, 160 cm player,
+  25 cm radius); FNV-1a revision identity (`serialize`); geometry-derived
+  connectivity with overlap/headroom rejection (`topology`); semantic
+  validation and atomic patches with rule protection (`level`); the single
+  `transitions`/`step` movement engine shared by player, ghost, verifier,
+  and search (`movement`); bounded BFS with the three separate checks and
+  replay-checked witnesses (`verifier`); baseline and trap golden fixtures.
+- **Measured spike evidence (golden fixtures only — not worst case):**
+  baseline 17 explored states, trap 19, both verifications 0.6 ms combined.
+  Stress layouts near the configured limits are front-loaded into spike
+  week per the Sep 11 decisions.
+- **Suite: 28 tests green** across movement derivation, verification
+  semantics, and patch atomicity; strict typecheck and lint clean. The trap
+  fixture's recovery witness matches the spec exactly, and the trap built
+  through the ordinary patch path has identical revision identity to the
+  fixture.
+
 ## Sep 11
 
 - **Repo and provenance.** Public workspace initialized; private pre-window

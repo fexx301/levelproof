@@ -1,0 +1,10 @@
+{
+  "scannedAt": "2026-09-11",
+  "designContract": "levelBuild.md §12 governs presentation; Hallmark defers to it where it speaks",
+  "fontStack": null,
+  "palette": null,
+  "motion": "motion-cut (no framer-motion/gsap/lenis installed; scene animation is core-driven polyline motion, not UI microinteraction)",
+  "spacing": null,
+  "framework": "Vite + React + Zustand + imperative Three.js planned (spec §3); only the core toolchain is installed",
+  "hallmarkRuns": 0
+}
