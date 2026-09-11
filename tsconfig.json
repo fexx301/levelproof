@@ -14,5 +14,5 @@
     "noEmit": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["shared", "src", "tests", "eslint.config.js"]
+  "include": ["shared", "src", "tests", "scripts", "eslint.config.js"]
 }
