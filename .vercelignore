@@ -1,0 +1,8 @@
+# Private pre-window planning documents (spec §16 provenance) — never deploy.
+# Defense in depth: .gitignore covers commits; this covers CLI deployments.
+levelBuild*.md
+newVRidea*.md
+taskproof.md
+
+# OS noise
+.DS_Store
