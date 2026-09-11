@@ -6,3 +6,7 @@ taskproof.md
 
 # OS noise
 .DS_Store
+
+# Secrets — never deploy (gitignored for commits; this covers CLI deploys)
+.env
+.env.*
