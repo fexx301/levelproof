@@ -2,6 +2,21 @@
 
 Build-window decisions and measured evidence, newest first. Dates are 2026.
 
+## Sep 11 (minimal scene deployed)
+
+- **Minimal deployed scene live at `https://levelproof.vercel.app`**
+  (Vercel, Vite auto-detected, first deployment promoted to production).
+  The diorama renders from the compiled core through imperative three.js;
+  the check strip shows the three results with revision identity,
+  explored-state count, and verification duration surfaced; a fixture toggle
+  switches between the baseline (all checks pass) and the switch trap
+  (recovery fails with the stranded-at-vault-approach explanation).
+  Verified in a real browser against the deployed URL, not only locally.
+- **Scaffold styling only** — the designed §12 shell (technical tone,
+  Hallmark pass) replaces it; custom-property tokens keep the seam clean.
+- **Deployment note:** deployment-hash URLs sit behind team SSO (standard
+  deployment protection); the public entry point is the production domain.
+
 ## Sep 11 (core engine)
 
 - **Core engine landed** (first half of the §14 Sep 11–12 gate): strict Zod

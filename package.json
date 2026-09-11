@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "deploy": "vercel --prod --yes --name levelproof"
   },
   "dependencies": {
     "react": "^19.3.0",

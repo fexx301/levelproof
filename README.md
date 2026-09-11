@@ -2,6 +2,8 @@
 
 Build a puzzle with AI. Watch how it breaks. Fix it without losing the idea.
 
+**Try it:** <https://levelproof.vercel.app>
+
 An AI puzzle creator with automatic playtesting. Describe a small 3D puzzle in
 plain language; a live model compiles your intent into kit operations, and a
 deterministic playtester explores every reachable state — replaying concrete
@@ -14,5 +16,8 @@ ship them.
 - **Play:** reproduce the failure yourself, then try the repaired puzzle.
 
 > Status: build in progress for the AI Builder Hackathon 2026
-> (Sep 11 – Nov 11, 2026). Pre-window planning notes are kept private and
-> excluded from this repository.
+> (Sep 11 – Nov 11, 2026). The deterministic core engine, golden fixtures,
+> and a minimal scene with the three-check strip are live; the language
+> flow, ghost playback, and repair cards land over the build window.
+> Pre-window planning notes are kept private and excluded from this
+> repository.
