@@ -22,6 +22,10 @@ Build-window decisions and measured evidence, newest first. Dates are 2026.
   fixture's recovery witness matches the spec exactly, and the trap built
   through the ordinary patch path has identical revision identity to the
   fixture.
+- **Provider key loaded by the owner** into local `.env` (gitignored and
+  deployment-excluded; presence-checked without ever printing the value).
+  OpenRouter credit ~$10 with the $4.50 per-key spend limit enforced. The
+  §10.1 model evaluation is unblocked once the provider adapter exists.
 
 ## Sep 11
 
