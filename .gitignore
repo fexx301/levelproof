@@ -1,0 +1,25 @@
+# Private planning notes: exclude ALL Markdown except the README
+*.md
+!README.md
+
+# macOS
+.DS_Store
+
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+coverage/
+
+# Environment & secrets — commit placeholders only, never real keys
+.env
+.env.*
+!.env.example
+
+# Vercel
+.vercel/
+
+# Logs / caches
+*.log
+.vite/
