@@ -1,6 +1,7 @@
-# Private planning notes: exclude ALL Markdown except the README
-*.md
-!README.md
+# Private pre-window planning documents (spec §16 provenance) — never commit
+levelBuild*.md
+newVRidea*.md
+taskproof.md
 
 # macOS
 .DS_Store
