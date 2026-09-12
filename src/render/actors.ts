@@ -54,11 +54,21 @@ export interface PlayerCallbacks {
   onState: (info: PlayerStateInfo) => void;
 }
 
+/** Engine-state hooks the scene implements: doors that seal, plates that
+ * depress, keys that vanish. The actors report; the engine's state decides. */
+export interface WorldEvents {
+  updateState(state: GameState): void;
+  collectKey(keyId: string): void;
+  activateSwitch(switchId: string): void;
+  resetWorld(): void;
+}
+
 export interface ActorContext {
   scene: THREE.Scene;
   compiled: CompiledLevel;
   register: (update: (dt: number, elapsed: number) => void) => () => void;
   follow: (target: THREE.Object3D | null) => void;
+  world: WorldEvents;
 }
 
 interface PathStep {
@@ -246,6 +256,8 @@ export class GhostActor {
       this.mesh.position.set(start.x, start.y + ACTOR_CENTER_OFFSET_CM, start.z);
     }
     ctx.scene.add(this.mesh);
+    ctx.world.resetWorld();
+    ctx.world.updateState(route.length > 0 ? route[0]!.before : initialState(ctx.compiled));
     // The witness route is drawn on the floor ahead of the ghost: the viewer
     // sees the doomed path, not just a pawn in the dark.
     this.trail = buildTrail(this.steps, kind);
@@ -281,6 +293,8 @@ export class GhostActor {
     this.finished = false;
     this.keys = [];
     this.switches = [];
+    this.ctx.world.resetWorld();
+    this.ctx.world.updateState(initialState(this.ctx.compiled));
     if (this.steps.length > 0) {
       const start = this.steps[0]!.points[0]!;
       this.mesh.position.set(start.x, start.y + ACTOR_CENTER_OFFSET_CM, start.z);
@@ -291,6 +305,7 @@ export class GhostActor {
   dispose(): void {
     this.unregister();
     this.ctx.follow(null);
+    this.ctx.world.resetWorld();
     this.ctx.scene.remove(this.mesh);
     this.ctx.scene.remove(this.trail);
     for (const child of [...this.mesh.children, ...this.trail.children]) {
@@ -341,8 +356,15 @@ export class GhostActor {
   };
 
   private arrive(move: MoveRecord): void {
-    if (move.events.collectedKey) this.keys = [...this.keys, move.events.collectedKey];
-    if (move.events.activatedSwitch) this.switches = [...this.switches, move.events.activatedSwitch];
+    this.ctx.world.updateState(move.after);
+    if (move.events.collectedKey) {
+      this.keys = [...this.keys, move.events.collectedKey];
+      this.ctx.world.collectKey(move.events.collectedKey);
+    }
+    if (move.events.activatedSwitch) {
+      this.switches = [...this.switches, move.events.activatedSwitch];
+      this.ctx.world.activateSwitch(move.events.activatedSwitch);
+    }
     this.callbacks.onArrive(move);
     this.emit();
   }
@@ -384,6 +406,8 @@ export class PlayerActor {
     this.mesh.add(actorBody(0xd7d2c4, 0x6e6a5e, 1), underRing(0xf2eee4));
     this.placeAtSpawn();
     ctx.scene.add(this.mesh);
+    ctx.world.resetWorld();
+    ctx.world.updateState(this.state);
     ctx.follow(this.mesh);
     this.unregister = ctx.register(this.update);
     this.emit();
@@ -397,8 +421,15 @@ export class PlayerActor {
     if (reducedMotion()) {
       // Reduced motion: instant transition, no interpolation.
       this.state = move.after;
-      if (move.events.collectedKey) this.keys = [...this.keys, move.events.collectedKey];
-      if (move.events.activatedSwitch) this.switches = [...this.switches, move.events.activatedSwitch];
+      this.ctx.world.updateState(move.after);
+      if (move.events.collectedKey) {
+        this.keys = [...this.keys, move.events.collectedKey];
+        this.ctx.world.collectKey(move.events.collectedKey);
+      }
+      if (move.events.activatedSwitch) {
+        this.switches = [...this.switches, move.events.activatedSwitch];
+        this.ctx.world.activateSwitch(move.events.activatedSwitch);
+      }
       const destination = move.segments[move.segments.length - 1]!;
       this.mesh.position.set(
         destination.x,
@@ -419,6 +450,8 @@ export class PlayerActor {
     this.state = initialState(this.ctx.compiled);
     this.keys = [];
     this.switches = [];
+    this.ctx.world.resetWorld();
+    this.ctx.world.updateState(this.state);
     this.placeAtSpawn();
     this.emit();
   }
@@ -433,6 +466,7 @@ export class PlayerActor {
   dispose(): void {
     this.unregister();
     this.ctx.follow(null);
+    this.ctx.world.resetWorld();
     this.ctx.scene.remove(this.mesh);
     for (const child of this.mesh.children) {
       if (child instanceof THREE.Mesh) {
@@ -450,8 +484,15 @@ export class PlayerActor {
       const move = this.animation.move;
       this.animation = null;
       this.state = move.after;
-      if (move.events.collectedKey) this.keys = [...this.keys, move.events.collectedKey];
-      if (move.events.activatedSwitch) this.switches = [...this.switches, move.events.activatedSwitch];
+      this.ctx.world.updateState(move.after);
+      if (move.events.collectedKey) {
+        this.keys = [...this.keys, move.events.collectedKey];
+        this.ctx.world.collectKey(move.events.collectedKey);
+      }
+      if (move.events.activatedSwitch) {
+        this.switches = [...this.switches, move.events.activatedSwitch];
+        this.ctx.world.activateSwitch(move.events.activatedSwitch);
+      }
       this.emit();
       return;
     }

@@ -3,6 +3,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import type { MoveRecord } from '../core/movement.js';
 import { CARDINALS, type Cardinal, type Door, type LevelModule } from '../../shared/schema.js';
 import { GEOMETRY, centerPoint, dirDelta, portPoint, type Vec3 } from '../core/catalog.js';
+import { doorPassable, type GameState } from '../core/movement.js';
 import { neighbor, type CompiledLevel } from '../core/topology.js';
 import {
   GhostActor,
@@ -62,6 +63,26 @@ interface Mats {
   spawn: THREE.MeshStandardMaterial;
   goal: THREE.MeshStandardMaterial;
   goalHalo: THREE.MeshStandardMaterial;
+}
+
+/** Mutable per-entity visuals driven by engine state (§12): doors that
+ * seal, plates that depress, keys that vanish into inventory. */
+interface DoorVisual {
+  group: THREE.Group;
+  openY: number;
+  closedY: number;
+  targetOpen: boolean;
+}
+
+interface SwitchVisual {
+  plate: THREE.Mesh;
+  rim: THREE.Mesh;
+}
+
+interface WorldVisuals {
+  keys: Map<string, THREE.Group>;
+  switches: Map<string, SwitchVisual>;
+  doors: Map<string, DoorVisual>;
 }
 
 function standard(color: number, metalness = 0): THREE.MeshStandardMaterial {
@@ -202,7 +223,7 @@ function doorMaterial(mats: Mats, door: Door): THREE.MeshStandardMaterial {
 }
 
 /** Door frame: two posts, a lintel, and a sill across the shared port. */
-function addDoorFrames(world: THREE.Group, mats: Mats, compiled: CompiledLevel): void {
+function addDoorFrames(world: THREE.Group, mats: Mats, compiled: CompiledLevel, visuals: WorldVisuals): void {
   for (const door of compiled.level.doors) {
     const material = doorMaterial(mats, door);
     for (const dir of CARDINALS) {
@@ -241,8 +262,49 @@ function addDoorFrames(world: THREE.Group, mats: Mats, compiled: CompiledLevel):
       );
       sill.position.set(p.x, p.y + 5, p.z);
       world.add(sill);
-      // Type telegraph: a keyhole gem on keyed doors, a warning bar on seals.
+      // Portcullis slab for stateful doors: keyed doors rest LOCKED (the
+      // vault reads as locked); sealing doors rest OPEN and slam when their
+      // switch fires. The engine decides openness — doorPassable() below.
       const conditions = door.conditions;
+      if (conditions?.requiresKey !== undefined || conditions?.requiresKeys !== undefined || conditions?.closesAfterSwitch !== undefined) {
+        const slab = new THREE.Group();
+        const slabHeight = DOOR_POST_HEIGHT_CM - 14;
+        const barCount = 4;
+        for (let bar = 0; bar < barCount; bar++) {
+          const t = bar / (barCount - 1);
+          const barMesh = new THREE.Mesh(
+            new THREE.BoxGeometry(10, slabHeight, 10),
+            material,
+          );
+          barMesh.position.set(
+            (alongX ? (t - 0.5) * GEOMETRY.portWidthCm : 0),
+            slabHeight / 2,
+            (alongX ? 0 : (t - 0.5) * GEOMETRY.portWidthCm),
+          );
+          slab.add(barMesh);
+        }
+        const rail = new THREE.Mesh(
+          new THREE.BoxGeometry(
+            alongX ? GEOMETRY.portWidthCm + 8 : 12,
+            12,
+            alongX ? 12 : GEOMETRY.portWidthCm + 8,
+          ),
+          material,
+        );
+        rail.position.y = slabHeight;
+        slab.add(rail);
+        const keyed = conditions?.requiresKey !== undefined || conditions?.requiresKeys !== undefined;
+        const startsOpen = !keyed; // sealing doors start open; keyed start locked
+        slab.position.set(p.x, p.y + (startsOpen ? DOOR_POST_HEIGHT_CM + 10 : 0), p.z);
+        world.add(slab);
+        visuals.doors.set(door.id, {
+          group: slab,
+          openY: p.y + DOOR_POST_HEIGHT_CM + 10,
+          closedY: p.y,
+          targetOpen: startsOpen,
+        });
+      }
+      // Type telegraph: a keyhole gem on keyed doors, a warning bar on seals.
       const requiredKeys = conditions?.requiresKeys ?? (conditions?.requiresKey !== undefined ? [conditions.requiresKey] : []);
       if (requiredKeys.length > 0) {
         // One keyhole gem per required key, fanned across the lintel.
@@ -285,6 +347,7 @@ function addItems(
   mats: Mats,
   compiled: CompiledLevel,
   decorUpdates: DecorUpdate[],
+  visuals: WorldVisuals,
 ): void {
   for (const key of compiled.level.keys) {
     const m = compiled.moduleById.get(key.moduleId);
@@ -308,10 +371,14 @@ function addItems(
     const baseY = c.y + 105;
     group.position.set(c.x, baseY, c.z);
     world.add(group);
+    group.userData.baseY = baseY;
+    visuals.keys.set(key.id, group);
     decorUpdates.push((dt, elapsed) => {
       if (reducedMotion()) return;
-      group.rotation.y += dt * 0.7;
-      group.position.y = baseY + Math.sin(elapsed * 0.002) * 8;
+      if (group.visible) {
+        group.rotation.y += dt * 0.7;
+        group.position.y = baseY + Math.sin(elapsed * 0.002) * 8;
+      }
     });
   }
   for (const pad of compiled.level.switches) {
@@ -322,10 +389,12 @@ function addItems(
     base.position.set(c.x, c.y + 6, c.z);
     const plate = new THREE.Mesh(new THREE.CylinderGeometry(46, 50, 16, 24), mats.switchPad);
     plate.position.set(c.x, c.y + 14, c.z);
-    const rim = new THREE.Mesh(new THREE.TorusGeometry(64, 6, 8, 32), mats.switchRim);
+    const rim = new THREE.Mesh(new THREE.TorusGeometry(64, 6, 8, 32), mats.switchRim.clone());
     rim.rotation.x = Math.PI / 2;
     rim.position.set(c.x, c.y + 12, c.z);
+    plate.userData.restY = plate.position.y;
     world.add(base, plate, rim);
+    visuals.switches.set(pad.id, { plate, rim });
   }
   const spawn = compiled.moduleById.get(compiled.spawn);
   if (spawn) {
@@ -375,12 +444,13 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel): SceneHan
   const mats = buildMats();
   const world = new THREE.Group();
   scene.add(world);
+  const visuals: WorldVisuals = { keys: new Map(), switches: new Map(), doors: new Map() };
   for (const m of compiled.level.modules) {
     addModule(world, mats, compiled, m);
   }
-  addDoorFrames(world, mats, compiled);
+  addDoorFrames(world, mats, compiled, visuals);
   const decorUpdates: DecorUpdate[] = [];
-  addItems(world, mats, compiled, decorUpdates);
+  addItems(world, mats, compiled, decorUpdates, visuals);
   // Everything solid casts and receives; upper floors shadow lower ones.
   world.traverse((obj) => {
     if (obj instanceof THREE.Mesh) {
@@ -622,6 +692,74 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel): SceneHan
     return quad;
   };
 
+  // ---- Engine-driven world state (§12 visible mechanism state) ----
+  // The engine decides openness: doorPassable() against the live actor
+  // state. Keyed doors rest locked; sealing doors rest open and slam shut
+  // the moment their switch fires — the viewer sees the trap happen.
+  let actorState: GameState | null = null;
+  const restOpen = (doorId: string): boolean => {
+    const door = compiled.level.doors.find((d) => d.id === doorId);
+    if (!door?.conditions) return true;
+    return door.conditions.requiresKey === undefined && door.conditions.requiresKeys === undefined;
+  };
+  const setDoorTargets = (): void => {
+    for (const [id, visual] of visuals.doors) {
+      visual.targetOpen = actorState === null ? restOpen(id) : doorPassable(compiled, id, actorState);
+    }
+  };
+  decorUpdates.push((dt: number) => {
+    for (const visual of visuals.doors.values()) {
+      const targetY = visual.targetOpen ? visual.openY : visual.closedY;
+      if (Math.abs(visual.group.position.y - targetY) < 0.5) continue;
+      const speed = visual.targetOpen ? 6 : 11; // closes slam faster than opens
+      const k = reducedMotion() ? 1 : 1 - Math.exp(-dt * speed);
+      visual.group.position.y += (targetY - visual.group.position.y) * k;
+    }
+  });
+  const worldEvents = {
+    updateState(state: GameState): void {
+      actorState = state;
+      setDoorTargets();
+    },
+    collectKey(keyId: string): void {
+      const group = visuals.keys.get(keyId);
+      if (!group || !group.visible) return;
+      if (reducedMotion()) {
+        group.visible = false;
+        return;
+      }
+      let progress = 0;
+      decorUpdates.push((dt: number) => {
+        if (!group.visible || progress >= 1) return;
+        progress = Math.min(1, progress + dt / 0.45);
+        const baseY = group.userData.baseY as number;
+        group.position.y = baseY + progress * 40;
+        group.scale.setScalar(1.6 * (1 - progress));
+        if (progress >= 1) group.visible = false;
+      });
+    },
+    activateSwitch(switchId: string): void {
+      const visual = visuals.switches.get(switchId);
+      if (!visual) return;
+      visual.plate.position.y = (visual.plate.userData.restY as number) - 6;
+      const rimMaterial = visual.rim.material as THREE.MeshStandardMaterial;
+      rimMaterial.emissiveIntensity = 1.7;
+    },
+    resetWorld(): void {
+      actorState = null;
+      for (const group of visuals.keys.values()) {
+        group.visible = true;
+        group.scale.setScalar(1.6);
+        group.position.y = group.userData.baseY as number;
+      }
+      for (const visual of visuals.switches.values()) {
+        visual.plate.position.y = visual.plate.userData.restY as number;
+        (visual.rim.material as THREE.MeshStandardMaterial).emissiveIntensity = 0.65;
+      }
+      setDoorTargets();
+    },
+  };
+
   const actorContext: ActorContext = {
     scene,
     compiled,
@@ -632,6 +770,7 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel): SceneHan
     follow: (target) => {
       followTarget = target;
     },
+    world: worldEvents,
   };
 
   return {
