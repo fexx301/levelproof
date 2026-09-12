@@ -14,7 +14,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PromptPanel } from '../src/ui/prompt-panel';
 import { useApp } from '../src/state/store';
 
-afterEach(cleanup);
+// Captured before any test mutates the store: the spy test replaces
+// submitPrompt, and every test must leave the real action behind.
+const originalSubmitPrompt = useApp.getState().submitPrompt;
+
+afterEach(() => {
+  cleanup();
+  useApp.setState({ submitPrompt: originalSubmitPrompt });
+});
 
 beforeEach(() => {
   useApp.setState({
