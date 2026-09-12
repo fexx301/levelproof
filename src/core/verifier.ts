@@ -35,6 +35,13 @@ export interface CheckedResult extends CheckResult {
   witness?: Witness;
 }
 
+export interface RecoveryMap {
+  /** Modules holding at least one reachable state that can no longer win. */
+  stranded: string[];
+  /** Modules no reachable state ever visits. */
+  unreachable: string[];
+}
+
 export interface Report {
   valid: boolean;
   invalidReasons: string[];
@@ -45,6 +52,8 @@ export interface Report {
   complete: boolean;
   completionExplanation: string;
   exploredCount: number;
+  /** Per-module recovery analysis for visualization; only when complete. */
+  recoveryMap?: RecoveryMap;
   checks: {
     solution: CheckedResult;
     requirements: CheckedResult;
@@ -257,6 +266,7 @@ export function verify(level: Level, config: VerifierConfig = {}): Report {
   // Check 3 — Recovery (§7.2.3): reverse-search all stored edges from all
   // goal states; any reachable non-goal state outside that set is a dead end.
   let recoveryCheck: CheckedResult;
+  const canWinSet = new Set<string>();
   if (goalVisits.length === 0) {
     recoveryCheck = {
       status: 'fail',
@@ -272,26 +282,25 @@ export function verify(level: Level, config: VerifierConfig = {}): Report {
         else reverse.set(toKey, [fromKey]);
       }
     }
-    const canWin = new Set<string>();
     const stack: string[] = [];
     for (const g of goalVisits) {
       const key = stateKey(g.state);
-      if (!canWin.has(key)) {
-        canWin.add(key);
+      if (!canWinSet.has(key)) {
+        canWinSet.add(key);
         stack.push(key);
       }
     }
     while (stack.length > 0) {
       const key = stack.pop()!;
       for (const from of reverse.get(key) ?? []) {
-        if (!canWin.has(from)) {
-          canWin.add(from);
+        if (!canWinSet.has(from)) {
+          canWinSet.add(from);
           stack.push(from);
         }
       }
     }
     const dead = [...visited.values()]
-      .filter((v) => v.state.moduleId !== compiled.goal && !canWin.has(stateKey(v.state)))
+      .filter((v) => v.state.moduleId !== compiled.goal && !canWinSet.has(stateKey(v.state)))
       .sort((a, b) => a.order - b.order);
     if (dead.length > 0) {
       const first = dead[0]!;
@@ -318,6 +327,27 @@ export function verify(level: Level, config: VerifierConfig = {}): Report {
         explanation: 'Every reachable non-winning state can still reach the goal.',
       };
     }
+  }
+
+  // Per-module recovery analysis for the visualization layer (§7.2.3): a
+  // module is "stranded" if some reachable state there can no longer win;
+  // "unreachable" if no reachable state ever visits it. Only when complete —
+  // an incomplete map would be a silent lie.
+  let recoveryMap: RecoveryMap | undefined;
+  if (complete) {
+    const visitedModules = new Set<string>();
+    const strandedModules = new Set<string>();
+    for (const v of visited.values()) {
+      visitedModules.add(v.state.moduleId);
+      if (v.state.moduleId !== compiled.goal && !canWinSet.has(stateKey(v.state))) {
+        strandedModules.add(v.state.moduleId);
+      }
+    }
+    const unreachable = level.modules
+      .map((m) => m.id)
+      .filter((id) => !visitedModules.has(id))
+      .sort();
+    recoveryMap = { stranded: [...strandedModules].sort(), unreachable };
   }
 
   // Witness integrity (§7.3): a failed replay is an internal error that
@@ -351,6 +381,7 @@ export function verify(level: Level, config: VerifierConfig = {}): Report {
     completionExplanation,
     exploredCount: visited.size,
     checks: { solution: solutionCheck, requirements: requirementsCheck, recovery: recoveryCheck },
+    ...(recoveryMap !== undefined ? { recoveryMap } : {}),
     ...(internalError !== undefined ? { internalError } : {}),
     accepted,
   };

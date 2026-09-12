@@ -170,6 +170,16 @@ function Viewport({ level, mode, report }: { level: Level; mode: Mode; report: R
     };
   }, [level]);
 
+  // The engine's per-module recovery analysis renders as floor overlays —
+  // the author's view of every dead-end zone and unreachable span. Hidden
+  // while playing: it would spoil the trap.
+  useEffect(() => {
+    sceneRef.current?.setAnalysis(report.complete ? (report.recoveryMap ?? null) : null);
+  }, [report, level]);
+  useEffect(() => {
+    sceneRef.current?.setAnalysisVisible(mode !== 'playing');
+  }, [mode, level]);
+
   // Ghost: replays a verifier witness route — never a fabricated one.
   useEffect(() => {
     const scene = sceneRef.current;

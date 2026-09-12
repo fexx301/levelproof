@@ -1,4 +1,5 @@
 import { compileResultSchema, normalizeWirePayload, type CompileResult } from '../../shared/compile-result.js';
+import { applyOperations } from '../../src/core/level.js';
 import type { Level } from '../../shared/schema.js';
 import { revisionId } from '../../src/core/serialize.js';
 import { compileCache, compileCacheKey } from './cache.js';
@@ -35,7 +36,7 @@ export interface CompileInput {
 
 export interface AttemptRecord {
   model: string;
-  outcome: 'schema_valid' | 'schema_invalid' | 'error';
+  outcome: 'schema_valid' | 'schema_invalid' | 'rejected' | 'error';
   latencyMs: number;
   costUsd: number;
 }
@@ -98,7 +99,10 @@ export async function compile(
   const started = performance.now();
   let totalCostUsd = 0;
 
-  const attempt = async (model: string, messages: ChatMessage[]): Promise<CompileResult | null> => {
+  const attempt = async (
+    model: string,
+    messages: ChatMessage[],
+  ): Promise<{ parsed: CompileResult | null; rejection?: string[] }> => {
     const config: ProviderConfig = { ...primary, model };
     const t0 = performance.now();
     const response = await callModel(config, messages, {
@@ -110,14 +114,31 @@ export async function compile(
     totalCostUsd += costUsd;
     let outcome: AttemptRecord['outcome'];
     let parsed: CompileResult | null = null;
+    let rejection: string[] | undefined;
     if (!response.ok) {
       outcome = 'error';
     } else {
       parsed = tryParse(response.content);
-      outcome = parsed ? 'schema_valid' : 'schema_invalid';
+      if (parsed === null) {
+        outcome = 'schema_invalid';
+      } else if (parsed.type === 'patch' || parsed.type === 'rule_proposal') {
+        // Pre-apply with the same core the client uses: a patch the engine
+        // would reject never reaches the user — it gets one correction turn
+        // with the engine's exact reasons instead.
+        const applied = applyOperations(input.level, parsed.operations);
+        if (applied.ok) {
+          outcome = 'schema_valid';
+        } else {
+          outcome = 'rejected';
+          rejection = applied.errors;
+          parsed = null;
+        }
+      } else {
+        outcome = 'schema_valid';
+      }
     }
     attempts.push({ model, outcome, latencyMs, costUsd });
-    return parsed;
+    return { parsed, rejection };
   };
 
   const finish = (result: CompileResult): CompileOutcome => {
@@ -126,29 +147,36 @@ export async function compile(
   };
 
   // Attempt 1: the primary model.
-  let parsed = await attempt(primary.model, baseMessages);
-  if (parsed) return finish(parsed);
+  let outcome1 = await attempt(primary.model, baseMessages);
+  if (outcome1.parsed) return finish(outcome1.parsed);
 
-  // Attempt 2: at most one schema-correction retry on the primary. A
-  // provider-level failure skips straight to the fallback.
-  const firstOutcome = attempts[0]?.outcome;
-  if (firstOutcome === 'schema_invalid' && performance.now() - started < SERVICE_DEADLINE_MS) {
+  // Attempt 2: one correction retry on the primary — for malformed JSON the
+  // note is generic; for an engine-rejected patch it carries the exact
+  // rejection reasons so the model can fix its own placement. A provider
+  // failure skips straight to the fallback.
+  const first = attempts[0]?.outcome;
+  if (
+    (first === 'schema_invalid' || first === 'rejected') &&
+    performance.now() - started < SERVICE_DEADLINE_MS
+  ) {
     const correction: ChatMessage[] = [
       ...baseMessages,
       {
         role: 'user',
         content:
-          'Your previous response did not match the required JSON contract. Respond again with a single corrected JSON object.',
+          first === 'rejected'
+            ? `Your previous patch was rejected by the puzzle engine:\n${outcome1.rejection?.map((r) => `- ${r}`).join('\n')}\nCheck the scene's occupiedGrid and module list, then respond with a corrected patch that still satisfies the request.`
+ : 'Your previous response did not match the required JSON contract. Respond again with a single corrected JSON object.',
       },
     ];
-    parsed = await attempt(primary.model, correction);
-    if (parsed) return finish(parsed);
+    const outcome2 = await attempt(primary.model, correction);
+    if (outcome2.parsed) return finish(outcome2.parsed);
   }
 
   // Attempt 3: the evaluated fallback model, fresh messages.
   if (hasFallback && performance.now() - started < SERVICE_DEADLINE_MS) {
-    parsed = await attempt(fallbackModel!, baseMessages);
-    if (parsed) return finish(parsed);
+    const outcome3 = await attempt(fallbackModel!, baseMessages);
+    if (outcome3.parsed) return finish(outcome3.parsed);
   }
 
   return { result: null, cached: false, attempts, totalCostUsd, error: 'invalid_output' };

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { baselineLevel } from '../src/core/fixtures/baseline';
 import { trapLevel } from '../src/core/fixtures/trap';
 import { verify } from '../src/core/verifier';
+import { applyOperations } from '../src/core/level';
 
 describe('golden fixture: baseline (§8.1)', () => {
   it('validates and passes all three checks', () => {
@@ -125,5 +126,30 @@ describe('verification semantics (§7, §13.2)', () => {
       `[spike] verify: baseline ${baseline.exploredCount} states, trap ${trap.exploredCount} states, combined ${ms.toFixed(1)} ms`,
     );
     expect(ms).toBeLessThan(1000);
+  });
+});
+
+describe('recovery map (§7.2.3 visualization data)', () => {
+  it('marks exactly the trap zone on the trap fixture', () => {
+    const report = verify(trapLevel);
+    expect(report.recoveryMap).toEqual({
+      stranded: ['bridge-landing', 'vault-approach'],
+      unreachable: [],
+    });
+  });
+
+  it('is clean on the accepted baseline', () => {
+    const report = verify(baselineLevel);
+    expect(report.recoveryMap).toEqual({ stranded: [], unreachable: [] });
+  });
+
+  it('marks the start stranded and the far side unreachable when the ramp is removed', () => {
+    const cut = applyOperations(baselineLevel, [{ kind: 'removeModule', id: 'gallery-ramp' }]);
+    expect(cut.ok).toBe(true);
+    if (!cut.ok) return;
+    const report = verify(cut.level);
+    expect(report.recoveryMap?.stranded).toEqual(['entrance', 'lower-hall']);
+    expect(report.recoveryMap?.unreachable).toContain('gallery');
+    expect(report.recoveryMap?.unreachable).toContain('treasure-landing');
   });
 });

@@ -3,6 +3,7 @@ import { resetCache } from '../api/_lib/cache';
 import { compile, type CallModel } from '../api/_lib/compile-service';
 import type { ProviderResult } from '../api/_lib/provider';
 import { vaultEmptyLevel } from '../src/core/fixtures/vault-empty';
+import { applyOperations } from '../src/core/level';
 
 /** §10 three-attempt bound and §10.2 full-input cache, with an injected model. */
 
@@ -97,6 +98,67 @@ describe('three-attempt bound (§10)', () => {
     const { fn } = scriptedModel([ok(invalid), ok(invalid), ok(validPatch)]);
     const outcome = await compile(ENV, { level: vaultEmptyLevel, prompt: 'p6' }, { callModel: fn });
     expect(outcome.totalCostUsd).toBeCloseTo(0.003, 6);
+  });
+});
+
+describe('patch self-repair (§10: the engine rejects before the user sees)', () => {
+  // A patch that overlaps an existing module — the exact battery failure mode.
+  const overlapping = JSON.stringify({
+    type: 'patch',
+    rationale: 'add a bridge',
+    assumptions: [],
+    operations: [
+      {
+        kind: 'addModule',
+        module: { id: 'bad-bridge', template: 'bridge', x: 1, z: 2, h: 1, ports: ['W', 'E'] },
+      },
+    ],
+  });
+
+  const corrected = JSON.stringify({
+    type: 'patch',
+    rationale: 'add a bridge on a free cell',
+    assumptions: [],
+    operations: [
+      {
+        kind: 'addModule',
+        module: { id: 'good-bridge', template: 'bridge', x: 6, z: 5, h: 0, ports: ['W', 'E'] },
+      },
+    ],
+  });
+
+  it('marks an engine-rejected patch and retries with the exact reasons', async () => {
+    const { calls, fn } = scriptedModel([ok(overlapping), ok(corrected)]);
+    const outcome = await compile(ENV, { level: vaultEmptyLevel, prompt: 'p7' }, { callModel: fn });
+    expect(outcome.result?.type).toBe('patch');
+    expect(outcome.attempts.map((a) => a.outcome)).toEqual(['rejected', 'schema_valid']);
+    expect(calls).toEqual(['primary-model', 'primary-model']);
+    if (outcome.result?.type === 'patch') {
+      const applied = applyOperations(vaultEmptyLevel, outcome.result.operations);
+      expect(applied.ok).toBe(true);
+    }
+  });
+
+  it('fails closed when every retry is still rejected', async () => {
+    const { fn } = scriptedModel([ok(overlapping), ok(overlapping), ok(overlapping), ok(corrected)]);
+    const outcome = await compile(ENV, { level: vaultEmptyLevel, prompt: 'p8' }, { callModel: fn });
+    expect(outcome.result).toBeNull();
+    expect(outcome.error).toBe('invalid_output');
+    expect(outcome.attempts.map((a) => a.outcome)).toEqual(['rejected', 'rejected', 'rejected']);
+  });
+
+  it('pre-applies rule_proposal geometry too, so approval can never strand the author', async () => {
+    const badRule = JSON.stringify({
+      type: 'rule_proposal',
+      reason: 'move the goal',
+      oldRequirements: [],
+      newRequirements: [],
+      operations: [{ kind: 'moveGoal', moduleId: 'nowhere' }],
+    });
+    const { fn } = scriptedModel([ok(badRule), ok(invalid), ok(invalid)]);
+    const outcome = await compile(ENV, { level: vaultEmptyLevel, prompt: 'p9' }, { callModel: fn });
+    expect(outcome.result).toBeNull();
+    expect(outcome.attempts[0]?.outcome).toBe('rejected');
   });
 });
 

@@ -92,6 +92,17 @@ export function CheckStrip({ report, ms }: { report: Report; ms: number }) {
           {report.invalidReasons.length > 0 && ` · ${report.invalidReasons.join(' · ')}`}
         </p>
       </details>
+      {report.recoveryMap !== undefined &&
+        (report.recoveryMap.stranded.length > 0 || report.recoveryMap.unreachable.length > 0) && (
+          <p className="analysis-note">
+            {report.recoveryMap.stranded.length > 0 &&
+              `${report.recoveryMap.stranded.length} red floor${report.recoveryMap.stranded.length === 1 ? '' : 's'} can strand a player`}
+            {report.recoveryMap.stranded.length > 0 && report.recoveryMap.unreachable.length > 0 && ' · '}
+            {report.recoveryMap.unreachable.length > 0 &&
+              `${report.recoveryMap.unreachable.length} dimmed floor${report.recoveryMap.unreachable.length === 1 ? '' : 's'} unreachable`}
+            .
+          </p>
+        )}
       <p className="check-note">
         Exhaustive bounded exploration — one successful route never proves no bypasses or dead ends.
       </p>

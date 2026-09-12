@@ -108,6 +108,10 @@ export interface SceneHandle {
   spawnPlayer(callbacks: PlayerCallbacks): PlayerActor;
   /** Arrow-key orbiting is disabled while manual play owns the arrows. */
   setKeyboardOrbit(enabled: boolean): void;
+  /** Overlay the engine's per-module recovery analysis on the floors. */
+  setAnalysis(map: { stranded: string[]; unreachable: string[] } | null): void;
+  /** Analysis overlays are the author's view — never shown while playing. */
+  setAnalysisVisible(visible: boolean): void;
 }
 
 function layoutCenter(compiled: CompiledLevel): Vec3 {
@@ -570,6 +574,44 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel): SceneHan
   const observer = new ResizeObserver(resize);
   observer.observe(host);
 
+  // Recovery-analysis overlays (§7.2.3 viz): translucent floor decals.
+  // Unlit materials so the tint reads identically in light and shadow.
+  const analysisGroup = new THREE.Group();
+  analysisGroup.visible = false;
+  scene.add(analysisGroup);
+  const analysisMats = {
+    stranded: new THREE.MeshBasicMaterial({
+      color: 0xd57064,
+      transparent: true,
+      opacity: 0.24,
+      depthWrite: false,
+    }),
+    unreachable: new THREE.MeshBasicMaterial({
+      color: 0x101216,
+      transparent: true,
+      opacity: 0.55,
+      depthWrite: false,
+    }),
+  };
+  let analysisVisible = true;
+  const overlayFor = (moduleId: string, material: THREE.MeshBasicMaterial): THREE.Mesh | null => {
+    const m = compiled.moduleById.get(moduleId);
+    if (!m) return null;
+    const c = centerPoint(m);
+    const size = GEOMETRY.cellPitchCm - 16;
+    const quad = new THREE.Mesh(new THREE.PlaneGeometry(size, size), material);
+    quad.rotation.x = -Math.PI / 2;
+    if (m.template === 'ramp') {
+      const angle = Math.atan2(GEOMETRY.floorSpacingCm, GEOMETRY.cellPitchCm);
+      if (m.orientation === 'N') quad.rotation.x = -Math.PI / 2 + angle;
+      else if (m.orientation === 'S') quad.rotation.x = -Math.PI / 2 - angle;
+      else if (m.orientation === 'E') quad.rotation.z = -angle;
+      else quad.rotation.z = angle;
+    }
+    quad.position.set(c.x, c.y + 3, c.z);
+    return quad;
+  };
+
   const actorContext: ActorContext = {
     scene,
     compiled,
@@ -585,6 +627,29 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel): SceneHan
   return {
     spawnGhost(route, kind, missingKeys, callbacks) {
       return new GhostActor(actorContext, route, kind, missingKeys, callbacks);
+    },
+    setAnalysis(map) {
+      for (const child of [...analysisGroup.children]) {
+        analysisGroup.remove(child);
+        if (child instanceof THREE.Mesh) child.geometry.dispose();
+      }
+      if (map === null) {
+        analysisGroup.visible = false;
+        return;
+      }
+      for (const id of map.stranded) {
+        const quad = overlayFor(id, analysisMats.stranded);
+        if (quad) analysisGroup.add(quad);
+      }
+      for (const id of map.unreachable) {
+        const quad = overlayFor(id, analysisMats.unreachable);
+        if (quad) analysisGroup.add(quad);
+      }
+      analysisGroup.visible = analysisVisible && analysisGroup.children.length > 0;
+    },
+    setAnalysisVisible(visible) {
+      analysisVisible = visible;
+      analysisGroup.visible = visible && analysisGroup.children.length > 0;
     },
     spawnPlayer(callbacks) {
       return new PlayerActor(actorContext, callbacks);
@@ -615,6 +680,12 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel): SceneHan
       };
       disposeAll(world);
       disposeAll(stage);
+      for (const child of [...analysisGroup.children]) {
+        analysisGroup.remove(child);
+        if (child instanceof THREE.Mesh) child.geometry.dispose();
+      }
+      analysisMats.stranded.dispose();
+      analysisMats.unreachable.dispose();
       for (const material of shared) material.dispose();
       renderer.dispose();
       renderer.domElement.remove();

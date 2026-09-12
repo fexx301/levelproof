@@ -13,7 +13,7 @@ export type CompileRequest = z.infer<typeof compileRequestSchema>;
 
 export const attemptRecordSchema = z.strictObject({
   model: z.string(),
-  outcome: z.enum(['schema_valid', 'schema_invalid', 'error']),
+  outcome: z.enum(['schema_valid', 'schema_invalid', 'rejected', 'error']),
   latencyMs: z.number(),
   costUsd: z.number(),
 });
