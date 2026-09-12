@@ -136,6 +136,8 @@ export interface SceneHandle {
   onPick(handler: ((id: string | null) => void) | null): void;
   /** Brass rings on the currently selected entities. */
   setSelection(ids: string[]): void;
+  /** Cream outer rings on entities the creator marked "keep this" (§9). */
+  setProtected(ids: string[]): void;
   spawnPlayer(callbacks: PlayerCallbacks): PlayerActor;
   /** Arrow-key orbiting is disabled while manual play owns the arrows. */
   setKeyboardOrbit(enabled: boolean): void;
@@ -802,6 +804,21 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel): SceneHan
     opacity: 0.9,
     side: THREE.DoubleSide,
   });
+  const protectedGroup = new THREE.Group();
+  protectedGroup.visible = false;
+  scene.add(protectedGroup);
+  const protectedMat = new THREE.MeshBasicMaterial({
+    color: 0xf2eee4,
+    transparent: true,
+    opacity: 0.75,
+    side: THREE.DoubleSide,
+  });
+  const protectedRingAt = (x: number, y: number, z: number): void => {
+    const ring = new THREE.Mesh(new THREE.RingGeometry(74, 88, 32), protectedMat);
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.set(x, y + 5, z);
+    protectedGroup.add(ring);
+  };
   let pickHandler: ((id: string | null) => void) | null = null;
   const selectionRingAt = (x: number, y: number, z: number, scale = 1): void => {
     const ring = new THREE.Mesh(new THREE.RingGeometry(52, 68, 32), selectionMat);
@@ -995,6 +1012,17 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel): SceneHan
       }
       selectionGroup.visible = selectionGroup.children.length > 0;
     },
+    setProtected(ids) {
+      for (const child of [...protectedGroup.children]) {
+        protectedGroup.remove(child);
+        if (child instanceof THREE.Mesh) child.geometry.dispose();
+      }
+      for (const id of ids) {
+        const c = entityPosition(id);
+        if (c) protectedRingAt(c.x, c.y, c.z);
+      }
+      protectedGroup.visible = protectedGroup.children.length > 0;
+    },
     spawnPlayer(callbacks) {
       return new PlayerActor(actorContext, callbacks);
     },
@@ -1033,6 +1061,7 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel): SceneHan
       previewMats.old.dispose();
       previewMats.fresh.dispose();
       selectionMat.dispose();
+      protectedMat.dispose();
       renderer.domElement.removeEventListener('pointerdown', onPointerDown);
       renderer.domElement.removeEventListener('pointerup', onPointerUp);
       for (const material of shared) material.dispose();

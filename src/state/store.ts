@@ -7,10 +7,10 @@ import { vaultEmptyLevel } from '../core/fixtures/vault-empty.js';
 import { twinKeysLevel, overpassLevel, gauntletLevel } from '../core/fixtures/gallery.js';
 import { blankCanvasLevel } from '../core/fixtures/blank-canvas.js';
 import { applyOperations } from '../core/level.js';
-import { findRepairs, type RepairCandidate } from '../core/search.js';
+import { findRepairs, touchesProtected, type RepairCandidate } from '../core/search.js';
 import { verify, type Report } from '../core/verifier.js';
 import type { MoveRecord } from '../core/movement.js';
-import { revisionId } from '../core/serialize.js';
+import { decodeLevelShare, encodeLevelShare, revisionId } from '../core/serialize.js';
 
 /** Gallery scenes (§12): the seeded vault plus three verified showcase levels. */
 export const SCENES = [
@@ -22,6 +22,50 @@ export const SCENES = [
 ] as const;
 
 export type SceneId = (typeof SCENES)[number]['id'];
+
+interface SavedScene {
+  id: string;
+  name: string;
+  savedAt: number;
+  level: Level;
+}
+
+const SAVES_KEY = 'levelproof:saves';
+
+function loadSaves(): SavedScene[] {
+  if (typeof localStorage === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(SAVES_KEY);
+    if (raw === null) return [];
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (entry): entry is SavedScene =>
+        entry !== null && typeof entry === 'object' && 'id' in entry && 'name' in entry && 'level' in entry,
+    );
+  } catch {
+    return [];
+  }
+}
+
+function persistSaves(saves: SavedScene[]): void {
+  if (typeof localStorage === 'undefined') return;
+  try {
+    localStorage.setItem(SAVES_KEY, JSON.stringify(saves));
+  } catch {
+    // Storage full or unavailable: the in-session list still works.
+  }
+}
+
+/** One-time window state: a shared puzzle (?p=) opens directly in play
+ * mode (its "Back to editing" is the remix); otherwise the scene seed. */
+function initialWindowState(): { level: Level; mode: Mode; viaShare: boolean } {
+  if (typeof window !== 'undefined') {
+    const shared = decodeLevelShare(new URLSearchParams(window.location.search).get('p') ?? '');
+    if (shared !== null) return { level: shared, mode: 'playing', viaShare: true };
+  }
+  return { level: initialLevel(), mode: 'authoring', viaShare: false };
+}
 
 /**
  * Accepted/draft revision state (§11) plus the watch/play/repair modes
@@ -87,13 +131,22 @@ interface ExplainSlice {
 
 interface AppState {
   acceptedLevel: Level;
-  sceneId: SceneId;
+  /** Current scene: a static scene id or "saved:<id>" for a saved puzzle. */
+  sceneId: string;
   /** Repair preview: the candidate's operations rendered as scene markers. */
   previewOps: Operation[] | null;
   /** The failing witness route that existed before the applied repair. */
   repairReplay: MoveRecord[] | null;
   /** Entity ids selected in the scene (§12 "select, then describe"). */
   selection: string[];
+  /** Entities the creator marked "keep this" (§9): repairs that move or
+   * remove them are excluded from the search. */
+  protectedIds: string[];
+  savedScenes: SavedScene[];
+  /** True when the session started from a shared link (?p=). */
+  viaShare: boolean;
+  /** Transient header feedback (Saved ✓ / Link copied). */
+  headerNote: string | null;
   previousAccepted: Level | null;
   draft: DraftState | null;
   pendingRule: { proposal: RuleProposalResult; base: Level } | null;
@@ -114,7 +167,7 @@ interface AppState {
   discardDraft: () => void;
   undo: () => void;
   resetVault: () => void;
-  loadScene: (id: SceneId) => void;
+  loadScene: (id: string) => void;
   watchWitness: (kind: WitnessKind) => void;
   startPlay: () => void;
   exitToAuthoring: () => void;
@@ -125,6 +178,11 @@ interface AppState {
   watchReplay: () => void;
   toggleSelect: (id: string) => void;
   clearSelection: () => void;
+  keepSelected: () => void;
+  unkeep: (id: string) => void;
+  saveScene: () => void;
+  deleteSaved: (id: string) => void;
+  shareCurrent: () => void;
 }
 
 const GHOST_INITIAL: GhostSlice = {
@@ -203,12 +261,15 @@ function initialLevel(): Level {
   return vaultEmptyLevel;
 }
 
+const initialWindow = initialWindowState();
+
 export const useApp = create<AppState>()((set, get) => ({
-  acceptedLevel: initialLevel(),
+  acceptedLevel: initialWindow.level,
   sceneId: 'balcony-vault',
   previewOps: null,
   repairReplay: null,
   selection: [],
+  protectedIds: [],
   previousAccepted: null,
   draft: null,
   pendingRule: null,
@@ -217,7 +278,10 @@ export const useApp = create<AppState>()((set, get) => ({
   lastCompileMeta: null,
   busy: false,
   error: null,
-  mode: 'authoring',
+  mode: initialWindow.mode,
+  viaShare: initialWindow.viaShare,
+  headerNote: null,
+  savedScenes: loadSaves(),
   ghost: GHOST_INITIAL,
   play: PLAY_INITIAL,
   repair: REPAIR_INITIAL,
@@ -382,9 +446,10 @@ export const useApp = create<AppState>()((set, get) => ({
 
   loadScene: (id) => {
     const scene = SCENES.find((s) => s.id === id);
-    if (!scene) return;
+    const saved = id.startsWith('saved:') ? get().savedScenes.find((sv) => sv.id === id.slice('saved:'.length)) : undefined;
+    if (!scene && !saved) return;
     set({
-      acceptedLevel: scene.level,
+      acceptedLevel: scene ? scene.level : saved!.level,
       previousAccepted: null,
       draft: null,
       pendingRule: null,
@@ -420,7 +485,8 @@ export const useApp = create<AppState>()((set, get) => ({
     const { draft, acceptedLevel } = get();
     if (!draft) return;
     set({ repair: { ...REPAIR_INITIAL, status: 'running' } });
-    const result = findRepairs(acceptedLevel, draft.level, report);
+    const { protectedIds } = get();
+    const result = findRepairs(acceptedLevel, draft.level, report, protectedIds);
     set({
       repair: {
         status: 'done',
@@ -434,10 +500,19 @@ export const useApp = create<AppState>()((set, get) => ({
   },
 
   applyRepair: (index) => {
-    const { draft, repair, acceptedLevel } = get();
+    const { draft, repair, acceptedLevel, protectedIds } = get();
     if (!draft || repair.candidates.length === 0) return;
     const candidate = repair.candidates[index];
     if (!candidate) return;
+    if (protectedIds.length > 0 && touchesProtected(candidate.operations, new Set(protectedIds))) {
+      set({
+        repair: {
+          ...repair,
+          applyError: 'This repair moves or removes a kept entity — search again with your keep choices.',
+        },
+      });
+      return;
+    }
     const applied = applyOperations(draft.level, candidate.operations);
     if (!applied.ok) {
       set({ repair: { ...repair, applyError: `The repair was rejected: ${applied.errors[0]}` } });
@@ -478,5 +553,63 @@ export const useApp = create<AppState>()((set, get) => ({
   },
 
   clearSelection: () => set({ selection: [] }),
+
+  keepSelected: () => {
+    const { selection, protectedIds } = get();
+    if (selection.length === 0) return;
+    const merged = [...new Set([...protectedIds, ...selection])];
+    // Protections change what the search may offer: stale candidates and
+    // their preview markers are void until the creator searches again.
+    set({ protectedIds: merged, repair: REPAIR_INITIAL, previewOps: null });
+  },
+
+  unkeep: (id) => {
+    const { protectedIds } = get();
+    set({
+      protectedIds: protectedIds.filter((p) => p !== id),
+      repair: REPAIR_INITIAL,
+      previewOps: null,
+    });
+  },
+
+  saveScene: () => {
+    const { draft, acceptedLevel, savedScenes } = get();
+    const level = draft?.level ?? acceptedLevel;
+    const entry: SavedScene = {
+      id: `save-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      name: `Puzzle ${savedScenes.length + 1}`,
+      savedAt: Date.now(),
+      level,
+    };
+    const next = [entry, ...savedScenes].slice(0, 20);
+    persistSaves(next);
+    set({ savedScenes: next, headerNote: 'Saved ✓' });
+    window.setTimeout(() => {
+      if (get().headerNote === 'Saved ✓') set({ headerNote: null });
+    }, 2500);
+  },
+
+  deleteSaved: (id) => {
+    const next = get().savedScenes.filter((sv) => sv.id !== id);
+    persistSaves(next);
+    set({ savedScenes: next });
+  },
+
+  shareCurrent: () => {
+    const { draft, acceptedLevel } = get();
+    const level = draft?.level ?? acceptedLevel;
+    const url = `${window.location.origin}/?p=${encodeLevelShare(level)}`;
+    const done = (): void => {
+      set({ headerNote: 'Share link copied' });
+      window.setTimeout(() => {
+        if (get().headerNote === 'Share link copied') set({ headerNote: null });
+      }, 2500);
+    };
+    if (navigator.clipboard?.writeText !== undefined) {
+      void navigator.clipboard.writeText(url).then(done, () => set({ headerNote: url }));
+    } else {
+      set({ headerNote: url });
+    }
+  },
 }));
 

@@ -43,6 +43,8 @@ export function RepairPanel({ report }: { report: Report }) {
   const repairReplay = useApp((s) => s.repairReplay);
   const watchReplay = useApp((s) => s.watchReplay);
 
+  const protectedIds = useApp((s) => s.protectedIds);
+
   if (!draft || draft.report.accepted) {
     // A repair was applied and the level is green again: offer the replay of
     // the previously failing route on the repaired scene. repairReplay is set
@@ -83,6 +85,11 @@ export function RepairPanel({ report }: { report: Report }) {
             {repair.note} {repair.explored} candidate{repair.explored === 1 ? '' : 's'} checked in{' '}
             {repair.durationMs.toFixed(1)} ms.
           </p>
+          {protectedIds.length > 0 && (
+            <p className="panel-note">
+              Keeping {protectedIds.join(', ')} — repairs that move or remove them are excluded.
+            </p>
+          )}
           {repair.candidates.map((candidate, index) => {
             const isPreviewing =
               previewOps !== null &&

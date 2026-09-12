@@ -44,6 +44,11 @@ export function App() {
   const loadScene = useApp((s) => s.loadScene);
   const discardDraft = useApp((s) => s.discardDraft);
   const resetVault = useApp((s) => s.resetVault);
+  const saveScene = useApp((s) => s.saveScene);
+  const shareCurrent = useApp((s) => s.shareCurrent);
+  const savedScenes = useApp((s) => s.savedScenes);
+  const viaShare = useApp((s) => s.viaShare);
+  const headerNote = useApp((s) => s.headerNote);
   const startPlay = useApp((s) => s.startPlay);
   const exitToAuthoring = useApp((s) => s.exitToAuthoring);
   const [resetArmed, setResetArmed] = useState(false);
@@ -89,14 +94,25 @@ export function App() {
               <span className="visually-hidden">Scene</span>
               <select
                 className="scene-select"
-                value={sceneId}
-                onChange={(event) => loadScene(event.target.value as SceneId)}
+                value={savedScenes.some((sv) => `saved:${sv.id}` === sceneId) ? sceneId : undefined}
+                onChange={(event) => loadScene(event.target.value)}
               >
-                {SCENES.map((scene) => (
-                  <option key={scene.id} value={scene.id}>
-                    {scene.label}
-                  </option>
-                ))}
+                <optgroup label="Scenes">
+                  {SCENES.map((scene) => (
+                    <option key={scene.id} value={scene.id}>
+                      {scene.label}
+                    </option>
+                  ))}
+                </optgroup>
+                {savedScenes.length > 0 && (
+                  <optgroup label="My puzzles">
+                    {savedScenes.map((sv) => (
+                      <option key={sv.id} value={`saved:${sv.id}`}>
+                        {sv.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
               </select>
             </label>
           )}
@@ -105,6 +121,13 @@ export function App() {
               <button type="button" onClick={undo} disabled={!previousAccepted}>
                 Undo
               </button>
+              <button type="button" onClick={saveScene}>
+                Save
+              </button>
+              <button type="button" onClick={shareCurrent}>
+                Share
+              </button>
+              {headerNote !== null && <span className="control-status">{headerNote}</span>}
               {draft && (
                 <button type="button" onClick={discardDraft}>
                   Return to accepted
@@ -144,7 +167,7 @@ export function App() {
           )}
           {mode !== 'authoring' && (
             <button type="button" onClick={exitToAuthoring}>
-              Back to editing (Esc)
+              {viaShare ? 'Remix this puzzle (Esc)' : 'Back to editing (Esc)'}
             </button>
           )}
         </div>
@@ -219,6 +242,10 @@ function Viewport({ level, mode, report }: { level: Level; mode: Mode; report: R
   useEffect(() => {
     sceneRef.current?.setSelection(selection);
   }, [selection, level]);
+  const protectedIds = useApp((st) => st.protectedIds);
+  useEffect(() => {
+    sceneRef.current?.setProtected(protectedIds);
+  }, [protectedIds, level]);
 
   // Ghost: replays a verifier witness route — never a fabricated one.
   useEffect(() => {

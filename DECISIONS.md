@@ -2,6 +2,34 @@
 
 Build-window decisions and measured evidence, newest first. Dates are 2026.
 
+## Sep 12 (items 4 and 6 — preservation constraints; save, share, remix)
+
+- **"Keep this" preservation constraints shipped** (§9, user-approved
+  review item 4): select entities in the scene → **Keep these** → the
+  repair search excludes any candidate that moves, removes, or reconditions
+  them, and reports the count ("1 skipped to keep your choices"). Kept
+  entities wear cream outer rings and brass chips; the honest empty state
+  reads "No checked fix keeps those entities — try unkeeping one." Live
+  semantics: keep the seal-switch → only the door-removal repair remains;
+  keep both switch and door → zero candidates, reported honestly.
+  Interaction hardened after review: protections **void stale repair
+  results and previews**, and `applyRepair` independently refuses a
+  candidate that touches a kept entity — a candidate found before the
+  protection was set can never apply. Three interaction tests cover the
+  invalidation, the apply-time guard, and unkeep restoring the full set.
+- **Saving, sharing, and Remix shipped** (§12, user-approved amendment to
+  the §15 no-persistence non-goal: **local saving + URL sharing only, no
+  accounts, no database**): **Save** stores the current working level in
+  localStorage (up to 20, "My puzzles" group in the scene picker);
+  **Share** copies a `?p=<base64url>` link whose payload is canonical,
+  schema-exact JSON (no extra fields — strict validation would reject
+  them; round-trip and tamper tests cover the codec). A shared link opens
+  **directly in play mode** with the exit button relabeled **"Remix this
+  puzzle (Esc)"** — live-verified end to end: save → share → fresh open
+  lands playing → Remix returns to authoring with the level Accepted and
+  every check green. Truncated or tampered links fall back to the default
+  scene; they can never inject an invalid level.
+
 ## Sep 12 (review top-3 — visible mechanism state, repair comparison, selection)
 
 External review's three priorities, all shipped and live-verified:

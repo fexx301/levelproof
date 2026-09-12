@@ -13,6 +13,9 @@ export function PromptPanel() {
   const hasKey = useApp((s) => (s.draft?.level ?? s.acceptedLevel).keys.length > 0);
   const selection = useApp((s) => s.selection);
   const clearSelection = useApp((s) => s.clearSelection);
+  const protectedIds = useApp((s) => s.protectedIds);
+  const keepSelected = useApp((s) => s.keepSelected);
+  const unkeep = useApp((s) => s.unkeep);
 
   const submit = () => {
     void submitPrompt(text);
@@ -85,9 +88,22 @@ export function PromptPanel() {
               {id} ✕
             </button>
           ))}
+          <button type="button" className="example-chip" onClick={keepSelected}>
+            Keep these
+          </button>
           <button type="button" className="example-chip" onClick={clearSelection}>
             Clear
           </button>
+        </div>
+      )}
+      {protectedIds.length > 0 && (
+        <div className="selection-row" role="group" aria-label="Kept entities">
+          <span className="panel-note">Kept:</span>
+          {protectedIds.map((id) => (
+            <button key={id} type="button" className="example-chip example-chip--kept" onClick={() => unkeep(id)}>
+              {id} ✕
+            </button>
+          ))}
         </div>
       )}
       <div className="example-prompts" role="group" aria-label="Example prompts">

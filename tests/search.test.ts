@@ -81,3 +81,35 @@ describe('repair search (§9, §13.4)', () => {
     expect(result.note).toBe('No checked fix in this search.');
   });
 });
+
+describe('creator preservation constraints (§9 "keep this")', () => {
+  it('keeping the seal switch excludes relocation and removal — only the door removal remains', () => {
+    const report = verify(trapLevel);
+    const result = findRepairs(baselineLevel, trapLevel, report, ['seal-switch']);
+    expect(result.status).toBe('complete');
+    expect(result.candidates).toHaveLength(1);
+    expect(result.candidates[0]!.description).toContain('Remove the sealing door');
+    expect(result.skippedProtected).toBeGreaterThan(0);
+    expect(result.note).toContain('skipped to keep your choices');
+  });
+
+  it('keeping both the switch and the door leaves no checked fix — reported honestly', () => {
+    const report = verify(trapLevel);
+    const result = findRepairs(baselineLevel, trapLevel, report, ['seal-switch', 'gallery-door']);
+    expect(result.candidates).toHaveLength(0);
+    expect(result.note).toContain('No checked fix keeps those entities');
+  });
+
+  it('gating repairs (addDoor) are never blocked by protections', () => {
+    const report = verify(bypassLevel);
+    const result = findRepairs(trapRepairedLevel, bypassLevel, report, ['brass-key']);
+    expect(result.candidates.length).toBeGreaterThanOrEqual(1);
+    expect(result.candidates.some((c) => c.description.startsWith('Lock the entrance'))).toBe(true);
+  });
+
+  it('keeping the key excludes key-relocation but keeps gating', () => {
+    const report = verify(bypassLevel);
+    const result = findRepairs(trapRepairedLevel, bypassLevel, report, ['brass-key']);
+    expect(result.candidates.some((c) => c.description.startsWith('Move key'))).toBe(false);
+  });
+});

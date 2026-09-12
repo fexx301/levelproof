@@ -1,4 +1,4 @@
-import { CARDINALS, type Level, type LevelModule } from '../../shared/schema.js';
+import { CARDINALS, levelSchema, type Level, type LevelModule } from '../../shared/schema.js';
 import { CATALOG_VERSION } from './catalog.js';
 
 /**
@@ -60,4 +60,56 @@ export function fnv1a32(input: string): string {
 /** Stable revision identity for a level: canonical content + catalog version. */
 export function revisionId(level: Level): string {
   return `rev-${fnv1a32(canonicalJson(level))}`;
+}
+
+/**
+ * Share links (§12 saving/sharing): a level as schema-exact JSON (no
+ * catalogVersion — levelSchema is strict and rejects unknown fields),
+ * base64url-encoded for a URL parameter. The payload is schema-validated on
+ * decode, so a tampered or truncated link can never inject an invalid scene;
+ * it simply falls back to the default.
+ */
+export function encodeLevelShare(level: Level): string {
+  const json = JSON.stringify({
+    modules: [...level.modules].sort(byId).map(canonicalModule),
+    keys: [...level.keys].sort(byId).map((k) => ({ id: k.id, moduleId: k.moduleId })),
+    switches: [...level.switches].sort(byId).map((sw) => ({ id: sw.id, moduleId: sw.moduleId })),
+    spawn: level.spawn,
+    goal: level.goal,
+    doors: [...level.doors]
+      .sort(byId)
+      .map((d) => ({ id: d.id, a: d.a, b: d.b, ...(d.conditions !== undefined ? { conditions: d.conditions } : {}) })),
+    requirements: [...level.requirements]
+      .sort((a, b) => (a.keyId < b.keyId ? -1 : a.keyId > b.keyId ? 1 : 0))
+      .map((r) => ({ type: r.type, keyId: r.keyId })),
+  });
+  const b64 =
+    typeof btoa === 'function' ? b64UrlEncodeBrowser(json) : Buffer.from(json, 'utf8').toString('base64');
+  return b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function b64UrlEncodeBrowser(text: string): string {
+  const bytes = new TextEncoder().encode(text);
+  let binary = '';
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
+
+function b64UrlDecode(payload: string): string {
+  const padded = payload.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - (payload.length % 4)) % 4);
+  if (typeof atob !== 'function') return Buffer.from(padded, 'base64').toString('utf8');
+  const binary = atob(padded);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return new TextDecoder().decode(bytes);
+}
+
+export function decodeLevelShare(payload: string): Level | null {
+  if (payload.length === 0 || payload.length > 100_000) return null;
+  try {
+    const parsed = levelSchema.safeParse(JSON.parse(b64UrlDecode(payload)));
+    return parsed.success ? parsed.data : null;
+  } catch {
+    return null;
+  }
 }

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { baselineLevel } from '../src/core/fixtures/baseline';
 import { trapLevel } from '../src/core/fixtures/trap';
 import { verify } from '../src/core/verifier';
+import { encodeLevelShare, decodeLevelShare, revisionId } from '../src/core/serialize';
 import { applyOperations } from '../src/core/level';
 
 describe('golden fixture: baseline (§8.1)', () => {
@@ -151,5 +152,24 @@ describe('recovery map (§7.2.3 visualization data)', () => {
     expect(report.recoveryMap?.stranded).toEqual(['entrance', 'lower-hall']);
     expect(report.recoveryMap?.unreachable).toContain('gallery');
     expect(report.recoveryMap?.unreachable).toContain('treasure-landing');
+  });
+});
+
+describe('share codec round-trip (§12 saving/sharing)', () => {
+  it('encode → decode returns a schema-valid, content-identical level', () => {
+    for (const level of [baselineLevel, trapLevel]) {
+      const payload = encodeLevelShare(level);
+      expect(payload).not.toMatch(/[+/=]/); // URL-safe
+      const decoded = decodeLevelShare(payload);
+      expect(decoded).not.toBeNull();
+      expect(revisionId(decoded!)).toBe(revisionId(level));
+    }
+  });
+
+  it('rejects tampered and truncated payloads', () => {
+    const payload = encodeLevelShare(trapLevel);
+    expect(decodeLevelShare(`${payload}x`)).toBeNull();
+    expect(decodeLevelShare('not-a-payload')).toBeNull();
+    expect(decodeLevelShare('')).toBeNull();
   });
 });

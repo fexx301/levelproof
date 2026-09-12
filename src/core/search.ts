@@ -30,6 +30,9 @@ export interface RepairSearchResult {
   explored: number;
   durationMs: number;
   note: string;
+  /** How many candidates were skipped because they moved or removed an
+   * entity the creator marked "keep this" (§9 creator constraints). */
+  skippedProtected: number;
 }
 
 interface DraftCandidate {
@@ -220,8 +223,31 @@ function routeGatingCandidates(accepted: Level, draft: Level, report: Report): D
   return candidates;
 }
 
-export function findRepairs(accepted: Level, draft: Level, report: Report): RepairSearchResult {
+/** A candidate touches a protected entity if it moves, removes, or
+ * reconditions it — those repairs are excluded (§9 "keep this"). */
+/** Exported for the apply-time guard: a repair that moves or removes a
+ * protected entity must never apply, even if it was found before the
+ * protection was set (§9 "keep this"). */
+export function touchesProtected(operations: Operation[], protectedIds: Set<string>): boolean {
+  for (const op of operations) {
+    if (op.kind === 'moveItem' || op.kind === 'removeItem' || op.kind === 'removeModule' || op.kind === 'moveModule') {
+      if (protectedIds.has(op.id)) return true;
+    }
+    if (op.kind === 'setDoorConditions' || op.kind === 'removeDoor') {
+      if (protectedIds.has(op.id)) return true;
+    }
+  }
+  return false;
+}
+
+export function findRepairs(
+  accepted: Level,
+  draft: Level,
+  report: Report,
+  protectedIds: string[] = [],
+): RepairSearchResult {
   const t0 = performance.now();
+  const protectedSet = new Set(protectedIds);
   const pool = [
     ...routeGatingCandidates(accepted, draft, report),
     ...switchRelocationCandidates(draft, report),
@@ -231,9 +257,14 @@ export function findRepairs(accepted: Level, draft: Level, report: Report): Repa
   const seen = new Set<string>();
   const enumerated: DraftCandidate[] = [];
   let truncated = false;
+  let skippedProtected = 0;
   for (const candidate of pool) {
     if (seen.has(candidate.key)) continue;
     seen.add(candidate.key);
+    if (protectedSet.size > 0 && touchesProtected(candidate.operations, protectedSet)) {
+      skippedProtected += 1;
+      continue;
+    }
     if (enumerated.length >= MAX_CANDIDATES) {
       truncated = true;
       break;
@@ -267,17 +298,21 @@ export function findRepairs(accepted: Level, draft: Level, report: Report): Repa
   });
 
   const durationMs = performance.now() - t0;
+  const baseNote =
+    truncated
+      ? 'Repair search incomplete.'
+      : passing.length === 0
+        ? protectedSet.size > 0
+          ? 'No checked fix keeps those entities — try unkeeping one.'
+          : 'No checked fix in this search.'
+        : `${passing.length} checked fix${passing.length === 1 ? '' : 'es'} found.`;
   return {
     status: truncated ? 'incomplete' : 'complete',
     candidates: passing.slice(0, MAX_SHOWN),
     explored: enumerated.length,
     durationMs,
-    note:
-      truncated
-        ? 'Repair search incomplete.'
-        : passing.length === 0
-          ? 'No checked fix in this search.'
-          : `${passing.length} checked fix${passing.length === 1 ? '' : 'es'} found.`,
+    note: skippedProtected > 0 ? `${baseNote} ${skippedProtected} skipped to keep your choices.` : baseNote,
+    skippedProtected,
   };
 }
 

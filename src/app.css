@@ -596,6 +596,11 @@ details.inspector[open] summary .disclosure-glyph {
   color: var(--color-text);
 }
 
+.example-chip--kept {
+  border-color: var(--color-accent);
+  color: var(--color-accent-strong);
+}
+
 .selection-row {
   align-items: center;
   display: flex;
