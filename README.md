@@ -27,6 +27,12 @@ seals the gallery door behind themselves. Recovery turns red, and
 **The failure — a player gets stranded** replays the exact doomed route as a
 ghost. Approve the checked repair and the level turns green again.
 
+When a check fails, **Why did this fail?** asks the model to phrase the
+engine's causal story in plain language — the server recomputes the verdict
+from your scene before the model writes a word, and its output is checked
+against the scene's real ids before it is shown. The engine's verdict always
+stands on its own; the narration adds story, never authority.
+
 You can also play any scene yourself with the keyboard — the same movement
 engine the checker uses.
 

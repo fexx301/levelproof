@@ -1,6 +1,6 @@
-import { CARDINALS, type Cardinal } from '../../shared/schema';
-import { traversalSegments, type Vec3 } from './catalog';
-import { neighbor, type CompiledLevel } from './topology';
+import { CARDINALS, type Cardinal } from '../../shared/schema.js';
+import { traversalSegments, type Vec3 } from './catalog.js';
+import { neighbor, type CompiledLevel } from './topology.js';
 
 /**
  * Legal transitions, item effects, and door conditions (§6). Player, ghost,

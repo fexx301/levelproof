@@ -1,0 +1,51 @@
+import { explain } from './_lib/explain-service.js';
+import { explainRequestSchema } from '../shared/api.js';
+
+/**
+ * POST /api/explain — grounded failure narration (§10). The server recomputes
+ * the verdict from the submitted level with the shared core; the model only
+ * phrases the engine's facts, and its output is schema- and grounding-checked
+ * before it is returned. Server-side only, like /api/compile.
+ */
+export const maxDuration = 60;
+
+export async function POST(request: Request): Promise<Response> {
+  if (request.method !== 'POST') {
+    return Response.json({ error: 'method_not_allowed' }, { status: 405 });
+  }
+
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return Response.json({ error: 'invalid_json' }, { status: 400 });
+  }
+
+  const parsed = explainRequestSchema.safeParse(body);
+  if (!parsed.success) {
+    const issues = parsed.error.issues.map((issue) => `${issue.path.join('.') || '(root)'}: ${issue.message}`);
+    return Response.json({ error: 'invalid_request', issues }, { status: 400 });
+  }
+
+  const outcome = await explain(process.env, parsed.data);
+
+  if (outcome.explanation === null) {
+    const status =
+      outcome.error === 'check_not_failing' ? 422 : outcome.error === 'missing_provider_config' ? 503 : 502;
+    return Response.json(
+      {
+        error: outcome.error ?? 'explain_failed',
+        attempts: outcome.attempts,
+        totalCostUsd: outcome.totalCostUsd,
+      },
+      { status },
+    );
+  }
+
+  return Response.json({
+    explanation: outcome.explanation,
+    cached: outcome.cached,
+    attempts: outcome.attempts,
+    totalCostUsd: outcome.totalCostUsd,
+  });
+}

@@ -1,12 +1,13 @@
 import { create } from 'zustand';
-import type { RuleProposalResult, CompileResult } from '../../shared/compile-result';
-import { compileOkResponseSchema } from '../../shared/api';
-import type { Level } from '../../shared/schema';
-import { unfamiliarLevel } from '../core/fixtures/unfamiliar';
-import { vaultEmptyLevel } from '../core/fixtures/vault-empty';
-import { applyOperations } from '../core/level';
-import { findRepairs, type RepairCandidate } from '../core/search';
-import { verify, type Report } from '../core/verifier';
+import type { RuleProposalResult, CompileResult } from '../../shared/compile-result.js';
+import { compileOkResponseSchema, explainOkResponseSchema } from '../../shared/api.js';
+import type { Level } from '../../shared/schema.js';
+import { unfamiliarLevel } from '../core/fixtures/unfamiliar.js';
+import { vaultEmptyLevel } from '../core/fixtures/vault-empty.js';
+import { applyOperations } from '../core/level.js';
+import { findRepairs, type RepairCandidate } from '../core/search.js';
+import { verify, type Report } from '../core/verifier.js';
+import { revisionId } from '../core/serialize.js';
 
 /**
  * Accepted/draft revision state (§11) plus the watch/play/repair modes
@@ -62,6 +63,14 @@ interface RepairSlice {
   applyError: string | null;
 }
 
+export type CheckKind = 'solution' | 'requirements' | 'recovery';
+
+interface ExplainSlice {
+  byCheck: Partial<Record<CheckKind, { text: string; meta: CompileMeta }>>;
+  busy: boolean;
+  error: string | null;
+}
+
 interface AppState {
   acceptedLevel: Level;
   previousAccepted: Level | null;
@@ -76,6 +85,8 @@ interface AppState {
   ghost: GhostSlice;
   play: PlaySlice;
   repair: RepairSlice;
+  explain: ExplainSlice;
+  explainCheck: (kind: CheckKind) => Promise<void>;
   submitPrompt: (prompt: string, clarificationContext?: string) => Promise<void>;
   approveRule: () => void;
   declineRule: () => void;
@@ -118,6 +129,19 @@ const REPAIR_INITIAL: RepairSlice = {
   applyError: null,
 };
 
+const EXPLAIN_INITIAL: ExplainSlice = {
+  byCheck: {},
+  busy: false,
+  error: null,
+};
+
+function explainErrorText(body: unknown): string {
+  if (body !== null && typeof body === 'object' && 'error' in body) {
+    if (body.error === 'check_not_failing') return 'That check is not failing.';
+    if (body.error === 'provider_not_configured') return 'Explanation service is not configured.';
+  }
+  return 'Explanation unavailable — the engine verdict above stands.';
+}
 function extractError(body: unknown): string {
   if (body !== null && typeof body === 'object' && 'error' in body) {
     const record = body as { error: unknown; issues?: string[] };
@@ -135,7 +159,7 @@ function settleDraft(set: (partial: Partial<AppState>) => void, base: Level, lev
   } else {
     set({ draft: { level, report, viaRule } });
   }
-  set({ pendingRule: null, mode: 'authoring', ghost: GHOST_INITIAL, play: PLAY_INITIAL, repair: REPAIR_INITIAL });
+  set({ pendingRule: null, mode: 'authoring', ghost: GHOST_INITIAL, play: PLAY_INITIAL, repair: REPAIR_INITIAL, explain: EXPLAIN_INITIAL });
 }
 
 /** Seed scene: the empty vault, or the held-out unfamiliar layout via ?scene=unfamiliar (§8.4 gate). */
@@ -160,6 +184,46 @@ export const useApp = create<AppState>()((set, get) => ({
   ghost: GHOST_INITIAL,
   play: PLAY_INITIAL,
   repair: REPAIR_INITIAL,
+  explain: EXPLAIN_INITIAL,
+
+  explainCheck: async (kind) => {
+    const state = get();
+    if (state.explain.busy) return;
+    const level = state.draft?.level ?? state.acceptedLevel;
+    const boundRevision = revisionId(level);
+    set({ explain: { ...state.explain, busy: true, error: null } });
+    try {
+      const response = await fetch('/api/explain', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ level, check: kind }),
+      });
+      const body: unknown = await response.json();
+      // Stale results are ignored: the level moved on while we asked.
+      const stillCurrent = revisionId(get().draft?.level ?? get().acceptedLevel) === boundRevision;
+      if (!stillCurrent) return;
+      if (!response.ok) {
+        set({ explain: { ...get().explain, busy: false, error: explainErrorText(body) } });
+        return;
+      }
+      const parsed = explainOkResponseSchema.safeParse(body);
+      if (!parsed.success) {
+        set({ explain: { ...get().explain, busy: false, error: 'The explanation response failed validation.' } });
+        return;
+      }
+      const { explanation, cached, attempts, totalCostUsd } = parsed.data;
+      const model = attempts.length > 0 ? (attempts.at(-1)?.model ?? 'unknown') : 'cache';
+      set({
+        explain: {
+          byCheck: { ...get().explain.byCheck, [kind]: { text: explanation, meta: { cached, totalCostUsd, attempts: attempts.length, model } } },
+          busy: false,
+          error: null,
+        },
+      });
+    } catch {
+      set({ explain: { ...get().explain, busy: false, error: 'Explanation unavailable — the engine verdict above stands.' } });
+    }
+  },
 
   submitPrompt: async (prompt, clarificationContext) => {
     const state = get();

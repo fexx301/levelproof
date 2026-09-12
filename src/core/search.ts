@@ -1,7 +1,7 @@
-import type { Level, Operation } from '../../shared/schema';
-import { applyOperations } from './level';
-import { compileLevel, edgeKey } from './topology';
-import { verify, type Report } from './verifier';
+import type { Level, Operation } from '../../shared/schema.js';
+import { applyOperations } from './level.js';
+import { compileLevel, edgeKey } from './topology.js';
+import { verify, type Report } from './verifier.js';
 
 /**
  * Bounded repair search (§9), separate from verification. At most 24

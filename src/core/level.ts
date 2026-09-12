@@ -1,6 +1,6 @@
-import { BOUNDS, levelSchema, operationSchema, type Level, type LevelModule, type Operation } from '../../shared/schema';
-import { opposite } from './catalog';
-import { computeEdges, edgeKey, validateGeometry } from './topology';
+import { BOUNDS, levelSchema, operationSchema, type Level, type LevelModule, type Operation } from '../../shared/schema.js';
+import { opposite } from './catalog.js';
+import { computeEdges, edgeKey, validateGeometry } from './topology.js';
 
 /**
  * Semantic validation and atomic edit application (§3, §5). Every proposal is

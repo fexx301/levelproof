@@ -34,3 +34,19 @@ export const compileErrorResponseSchema = z.strictObject({
   totalCostUsd: z.number().optional(),
 });
 export type CompileErrorResponse = z.infer<typeof compileErrorResponseSchema>;
+
+/** Wire contract for POST /api/explain (§10): the engine recomputes the
+ * verdict server-side; the model only phrases it. */
+export const explainRequestSchema = z.strictObject({
+  level: levelSchema,
+  check: z.enum(['solution', 'requirements', 'recovery']),
+});
+export type ExplainRequest = z.infer<typeof explainRequestSchema>;
+
+export const explainOkResponseSchema = z.strictObject({
+  explanation: z.string(),
+  cached: z.boolean(),
+  attempts: z.array(attemptRecordSchema),
+  totalCostUsd: z.number(),
+});
+export type ExplainOkResponse = z.infer<typeof explainOkResponseSchema>;

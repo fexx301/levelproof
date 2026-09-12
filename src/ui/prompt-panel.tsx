@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { DisclosureGlyph } from './check-strip';
-import { EXAMPLE_PROMPTS } from './example-prompts';
-import { useApp } from '../state/store';
+import { DisclosureGlyph } from './check-strip.js';
+import { EXAMPLE_PROMPTS } from './example-prompts.js';
+import { useApp } from '../state/store.js';
 
 /** The prompt panel (§12): describe a change, watch it compile. */
 export function PromptPanel() {

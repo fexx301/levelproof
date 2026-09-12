@@ -1,8 +1,8 @@
 import * as THREE from 'three';
-import type { Cardinal } from '../../shared/schema';
-import { centerPoint } from '../core/catalog';
-import { initialState, step, transitions, type GameState, type MoveRecord } from '../core/movement';
-import type { CompiledLevel } from '../core/topology';
+import type { Cardinal } from '../../shared/schema.js';
+import { centerPoint } from '../core/catalog.js';
+import { initialState, step, transitions, type GameState, type MoveRecord } from '../core/movement.js';
+import type { CompiledLevel } from '../core/topology.js';
 
 /**
  * Actors walk catalog-owned polylines at a constant speed (§12). Rendering

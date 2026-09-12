@@ -1,7 +1,7 @@
-import { actorBridge } from '../render/bridge';
-import { useApp } from '../state/store';
-import type { Report } from '../core/verifier';
-import type { MoveRecord } from '../core/movement';
+import { actorBridge } from '../render/bridge.js';
+import { useApp } from '../state/store.js';
+import type { Report } from '../core/verifier.js';
+import type { MoveRecord } from '../core/movement.js';
 
 /**
  * Watch playtester (§12): replay a verifier witness as a ghost. The ghost

@@ -1,4 +1,4 @@
-import type { GhostActor, PlayerActor } from './actors';
+import type { GhostActor, PlayerActor } from './actors.js';
 
 /**
  * Minimal imperative bridge between React panels and live scene actors.

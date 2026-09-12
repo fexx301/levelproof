@@ -2,6 +2,39 @@
 
 Build-window decisions and measured evidence, newest first. Dates are 2026.
 
+## Sep 12 (Phase 2a — api/explain, grounded failure narration)
+
+- **Shipped and verified live**: `POST /api/explain` + "Why did this fail?"
+  button on every failed check. The server **recomputes the verdict with the
+  shared core** from the submitted level (the client never supplies one;
+  non-failing checks are refused with 422), builds an authoritative fact
+  sheet (engine explanation, requirements, witness route with per-move
+  events, missing keys), and the model's only job is to phrase it — one
+  paragraph, 2–4 sentences, ≤ 70 words, second person. Output is
+  schema-validated **and grounding-checked**: any hyphenated token that is
+  neither a real id nor a hyphenated form of a known module label invalidates
+  the attempt (labels accepted because "upper-foyer" is a scene fact).
+  ≤ 3 attempts like compiles; exact-match cached; costs disclosed in the UI
+  ("Fresh explanation · model · $0.00016 · 1 attempt").
+- **Live sample (production, trap fixture)**: "On the witness route, you
+  reach 'vault-approach' and activate the 'seal-switch'. This closes the
+  'gallery-door' behind you. Since you are at 'vault-approach' without the
+  'brass-key', you cannot open the 'vault-door' to reach the
+  'treasure-landing', leaving you stranded." — accurate, fully grounded.
+- **Two en-route bugs fixed**: (1) core files imported siblings without
+  `.js` extensions — fine under Vite/vitest but `ERR_MODULE_NOT_FOUND` in
+  the Node-ESM serverless bundle once /api/explain pulled `verifier.ts` in
+  (the compile path had only ever imported the extension-clean
+  `serialize.ts`). All core/state/ui/render relative imports now carry
+  explicit `.js` (TS-mapped), making the core genuinely portable into any
+  Node-ESM context. (2) The primary model wraps JSON in a markdown fence —
+  reusing `normalizeWirePayload` from the compile path fixed it; explain now
+  succeeds on the primary in one attempt at **$0.00016** (was $0.0045 via
+  the fallback before the fix).
+- **Tests**: 7 new (grounding accept/reject, engine-refuses-non-failing,
+  grounding-retry-then-correct, fail-closed on outages, exact-match cache,
+  per-check cache separation) — suite at 51.
+
 ## Sep 12 (Phase 1 — judge experience + scale evidence)
 
 - **Example chips shipped** (deployed `index-BttU0Z2F`): three one-click

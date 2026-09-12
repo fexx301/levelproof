@@ -1,5 +1,5 @@
-import type { CompileResult } from '../../shared/compile-result';
-import { useApp } from '../state/store';
+import type { CompileResult } from '../../shared/compile-result.js';
+import { useApp } from '../state/store.js';
 
 /**
  * Result cards (§12): rule review with explicit approval, clarification

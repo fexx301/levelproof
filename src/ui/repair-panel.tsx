@@ -1,5 +1,5 @@
-import { useApp } from '../state/store';
-import type { Report } from '../core/verifier';
+import { useApp } from '../state/store.js';
+import type { Report } from '../core/verifier.js';
 
 /**
  * Checked repairs (§9, §12): only fully checked candidates are shown; a

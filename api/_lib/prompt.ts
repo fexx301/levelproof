@@ -6,7 +6,7 @@ import { BOUNDS, type Level } from '../../shared/schema.js';
  * invents traversal rules, verdicts, or raw level JSON.
  */
 
-function sceneSummary(level: Level): string {
+export function sceneSummary(level: Level): string {
   return JSON.stringify(
     {
       modules: [...level.modules]

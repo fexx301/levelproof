@@ -1,9 +1,9 @@
 import { useMemo } from 'react';
-import { actorBridge } from '../render/bridge';
-import { compileLevel } from '../core/topology';
-import type { Report } from '../core/verifier';
-import type { Level } from '../../shared/schema';
-import { useApp } from '../state/store';
+import { actorBridge } from '../render/bridge.js';
+import { compileLevel } from '../core/topology.js';
+import type { Report } from '../core/verifier.js';
+import type { Level } from '../../shared/schema.js';
+import { useApp } from '../state/store.js';
 
 /**
  * Manual play (§12): WASD or arrows in fixed world-cardinal directions,

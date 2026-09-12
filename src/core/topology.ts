@@ -1,6 +1,6 @@
-import { BOUNDS, CARDINALS, type Cardinal, type Door, type Level, type LevelModule } from '../../shared/schema';
-import { CATALOG_VERSION, GEOMETRY, dirDelta, opposite, portElevation, verticalSpan } from './catalog';
-import { revisionId } from './serialize';
+import { BOUNDS, CARDINALS, type Cardinal, type Door, type Level, type LevelModule } from '../../shared/schema.js';
+import { CATALOG_VERSION, GEOMETRY, dirDelta, opposite, portElevation, verticalSpan } from './catalog.js';
+import { revisionId } from './serialize.js';
 
 /**
  * Geometry-derived connectivity and edge obstacles (§3, §4.2). Two modules

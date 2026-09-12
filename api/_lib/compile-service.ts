@@ -1,7 +1,7 @@
 import { compileResultSchema, normalizeWirePayload, type CompileResult } from '../../shared/compile-result.js';
 import type { Level } from '../../shared/schema.js';
 import { revisionId } from '../../src/core/serialize.js';
-import { cacheGet, cacheKey, cacheSet } from './cache.js';
+import { compileCache, compileCacheKey } from './cache.js';
 import { buildSystemPrompt, PROMPT_VERSION } from './prompt.js';
 import { callOptionsFor } from './model-options.js';
 import {
@@ -72,14 +72,14 @@ export async function compile(
   const fallbackModel = env.LLM_FALLBACK_MODEL;
   const hasFallback = fallbackModel !== undefined && fallbackModel !== primary.model;
 
-  const key = cacheKey({
+  const key = compileCacheKey({
     level: input.level,
     prompt: input.prompt,
     clarificationContext: input.clarificationContext,
     models: hasFallback ? `${primary.model},${fallbackModel}` : primary.model,
     promptVersion: PROMPT_VERSION,
   });
-  const hit = cacheGet(key);
+  const hit = compileCache.get(key);
   if (hit !== null) {
     return { result: hit, cached: true, attempts: [], totalCostUsd: 0 };
   }
@@ -121,7 +121,7 @@ export async function compile(
   };
 
   const finish = (result: CompileResult): CompileOutcome => {
-    cacheSet(key, result);
+    compileCache.set(key, result);
     return { result, cached: false, attempts, totalCostUsd };
   };
 

@@ -1,9 +1,9 @@
-import type { Level, Requirement } from '../../shared/schema';
-import { CATALOG_VERSION } from './catalog';
-import { validateLevel } from './level';
-import { initialState, stateKey, step, transitions, type GameState, type MoveRecord } from './movement';
-import { compileLevel, type CompiledLevel } from './topology';
-import { revisionId } from './serialize';
+import type { Level, Requirement } from '../../shared/schema.js';
+import { CATALOG_VERSION } from './catalog.js';
+import { validateLevel } from './level.js';
+import { initialState, stateKey, step, transitions, type GameState, type MoveRecord } from './movement.js';
+import { compileLevel, type CompiledLevel } from './topology.js';
+import { revisionId } from './serialize.js';
 
 /**
  * Bounded exploration and the three separate checks (§7). Pure: no DOM, no

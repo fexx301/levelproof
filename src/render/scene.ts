@@ -1,9 +1,9 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import type { MoveRecord } from '../core/movement';
-import { CARDINALS, type Cardinal, type Door, type LevelModule } from '../../shared/schema';
-import { GEOMETRY, centerPoint, dirDelta, portPoint, type Vec3 } from '../core/catalog';
-import { neighbor, type CompiledLevel } from '../core/topology';
+import type { MoveRecord } from '../core/movement.js';
+import { CARDINALS, type Cardinal, type Door, type LevelModule } from '../../shared/schema.js';
+import { GEOMETRY, centerPoint, dirDelta, portPoint, type Vec3 } from '../core/catalog.js';
+import { neighbor, type CompiledLevel } from '../core/topology.js';
 import {
   GhostActor,
   PlayerActor,
@@ -11,7 +11,7 @@ import {
   type ActorContext,
   type GhostCallbacks,
   type PlayerCallbacks,
-} from './actors';
+} from './actors.js';
 
 /**
  * Imperative Three.js diorama built from the compiled level (§3, §12).
