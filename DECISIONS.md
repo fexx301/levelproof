@@ -2,6 +2,42 @@
 
 Build-window decisions and measured evidence, newest first. Dates are 2026.
 
+## Sep 12 (competitive depth — self-repair, verification viz, gallery)
+
+- **Patch self-repair shipped** (`b3f0238`): the compile service now
+  pre-applies every patch and rule_proposal with the same core the client
+  uses; an engine-rejected patch never reaches the user — it gets one
+  correction turn carrying the engine's exact reasons ("overlaps at
+  (2,1); check the occupiedGrid"), then the fallback. New attempt outcome
+  `rejected` in the wire contract; rule_proposal geometry is pre-validated
+  too, so an approval can never strand the author with a broken level.
+  Battery + retries: **28/34 (82%) effective**, zero client-side
+  rejections; the loop itself verified live (one rejected→corrected→trap
+  conversion). Five persistent failures were provider `schema_invalid`
+  during a degraded window (12–14s latencies) — re-runnable for $0.16.
+- **Verification visualization shipped**: the Report now carries a
+  per-module `recoveryMap` (stranded/unreachable, computed only when
+  exploration is complete — an incomplete map would be a silent lie). The
+  renderer draws translucent floor decals: **red tiles can strand a player,
+  dimmed tiles are unreachable** — the exhaustive search made visible.
+  Pixel-verified on the trap fixture (1,419 red-tinted pixels over exactly
+  bridge-landing + vault-approach; 0 in play mode — overlays are the
+  author's view and never spoil the puzzle). A legend line appears in the
+  checks strip only when there is something to say. Trap map:
+  `[bridge-landing, vault-approach]`; ramp-removed: start stranded, the
+  whole upper floor dimmed.
+- **Gallery shipped** (`7613267`): a scene picker with three hand-authored,
+  engine-verified showcase levels — **The Twin Keys** (2 keys, 2 rules, 2
+  keyed doors, 35 states), **The Overpass** (a sky bridge crossing directly
+  over a lower corridor — true floor-over-floor, confirmed legal by the kit
+  and rendered 3× the steel-blue pixel count of bridge-less scenes), and
+  **The Gauntlet** (a winding climb with a bonus-room sealing door the
+  checker proves can never strand anyone — recovery clean by construction).
+  All three accepted with clean recovery maps, live-verified on production.
+  Hand-authored for determinism (the degraded provider made same-day API
+  authoring impractical); API-authoring the gallery remains a future
+  reliability exhibit when the provider is healthy.
+
 ## Sep 12 (reliability battery — model decision by measurement)
 
 - **Eval allowance raised to ~$1** (user-approved ~$10 total budget) for one
