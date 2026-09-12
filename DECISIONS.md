@@ -2,6 +2,34 @@
 
 Build-window decisions and measured evidence, newest first. Dates are 2026.
 
+## Sep 12 (prompt-4 — trap reliability, measured)
+
+- **The signature trap was unreachable by prose**: a 4-phrasing experiment
+  on production (fresh load → prompt 1 → rule approve → prompt 2, each
+  ~$0.0004) returned **0/4 traps**, with the failure mode exposed in the
+  rejections: the model invented new *modules* for doors/switches
+  (`gallery-door-module`, `seal-switch-module`, `gallery-ramp-top`) that
+  overlapped existing cells. Core validation correctly rejected every one —
+  the guardrails work; the model just didn't grasp doors-as-edges.
+- **System-prompt fix (prompt-4, commit below)**: three added KIT RULES —
+  doors/switches/keys never require new geometry (addDoor takes existing
+  ids; addItem takes an existing moduleId); a closesAfterSwitch door
+  starts open and seals when the switch activates; the stranded-player
+  outcome is named as the intended pattern. PROMPT_VERSION bumped to
+  `prompt-4` (cache key per §10.2, so stale prompt-3 entries are not
+  reused).
+- **Re-test after the fix: 3/4 phrasings trap** (Recovery=fail with the
+  stranded witness); the one miss compiled cleanly (semantic placement,
+  not a crash). Total experiment cost: ~$0.003 against the $0.25 eval cap.
+- **Canonical demo phrasing locked and verified deterministic**: "Add a
+  switch named seal-switch on the vault approach, and a door named
+  gallery-door between the gallery and the bridge landing that closes
+  permanently after the seal-switch activates." Two consecutive full runs
+  (fresh load → prompt 1 → prompt 2) both returned **Cached compile with
+  Recovery=fail** — the §10.2 exact-match cache makes the video's 20–35s
+  money shot reproducible and free on demo day. Prompt 1 is likewise
+  cached. The video script should use these exact strings.
+
 ## Sep 12 (diorama overhaul — §3/§12 renderer)
 
 - **Vision-model critique of five diorama states scored 3.7/10** (default,

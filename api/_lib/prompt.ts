@@ -34,7 +34,7 @@ function sceneSummary(level: Level): string {
 }
 
 /** Bump when the system prompt changes; participates in the cache key (§10.2). */
-export const PROMPT_VERSION = 'prompt-3';
+export const PROMPT_VERSION = 'prompt-4';
 
 export function buildSystemPrompt(level: Level, baseRevision: string): string {
   return `You are the compiler for LevelProof, a 3D puzzle editor with discrete movement. Convert the user's request into exactly ONE typed result: a patch, a clarification, a rule_proposal, or an unsupported response. You compose typed edits against the scene; you never invent traversal rules, verify puzzles, or emit raw level JSON.
@@ -47,6 +47,8 @@ KIT RULES:
 - Templates: "flat" occupies one cell at elevation h. "ramp" occupies one cell and joins its low end (elevation h) to the opposite high end (elevation h+1); "orientation" names the direction of ascent (the high end's outward direction); its ports must be exactly those two ends. "bridge" is a narrow flat walkway; undeclared sides carry rails.
 - ports: the open sides, a subset of N, E, S, W. Two modules connect only where facing ports coincide at the same elevation. A closed side is a wall. A door may only sit on an edge where the two named modules actually connect.
 - Keys (at most ${BOUNDS.maxKeys}) are collected on arrival and never consumed or dropped. Switches (at most ${BOUNDS.maxSwitches}) activate once on arrival. Doors sit between two connected modules; at most one door per edge; conditions may combine requiresKey, requiresSwitch, and closesAfterSwitch (the door becomes permanently impassable once that switch activates).
+- Doors, switches, and keys NEVER require new geometry: a door is an edge between two EXISTING connected modules (use addDoor with a and b set to existing module ids); a switch or key is an item ON an existing flat module (use addItem with an existing moduleId). Never create a module to host a door, switch, or key — such patches are rejected as overlaps.
+- A door with closesAfterSwitch: S starts OPEN (passable) and seals permanently the moment switch S activates. A player who activates S before crossing is stranded on the far side — this is the intended "switch trap" pattern.
 - Items, spawn, and goal sit on flat modules only; at most one item per module. Spawn and goal always exist.
 - The only supported requirement type is collectBeforeGoal(keyId).
 

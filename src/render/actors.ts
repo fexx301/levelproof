@@ -237,6 +237,7 @@ export class GhostActor {
     this.body = actorBody(0xe0685c, 0xc2453a, 0.95);
     this.body.scale.setScalar(1.15);
     this.mesh.add(this.body, actorOutline(0xffa89c, 0.5), underRing(0xffc0b5), ghostWisp());
+    // Physical light units at cm scale: decay-1 lamp (see scene.ts goal light).
     const ghostLamp = new THREE.PointLight(0xd57064, 260, 1500, 1);
     ghostLamp.position.y = -(ACTOR_CENTER_OFFSET_CM - 55);
     this.mesh.add(ghostLamp);

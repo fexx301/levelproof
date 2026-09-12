@@ -333,6 +333,8 @@ function addItems(
     beacon.add(gem, halo);
     const baseY = c.y + 130;
     beacon.position.set(c.x, baseY, c.z);
+    // Three.js >= r155 uses physical light units; at cm scale, decay-1 with
+    // intensity ~= desired illuminance at 1 unit keeps pools readable.
     beacon.add(new THREE.PointLight(COLORS.goal, 320, 1700, 1));
     world.add(beacon);
     decorUpdates.push((dt, elapsed) => {
