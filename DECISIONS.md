@@ -2,6 +2,41 @@
 
 Build-window decisions and measured evidence, newest first. Dates are 2026.
 
+## Sep 12 (review top-3 — visible mechanism state, repair comparison, selection)
+
+External review's three priorities, all shipped and live-verified:
+
+- **Visible mechanism state** (`abbad94`): doors are no longer static
+  frames — every keyed/sealing door carries a **portcullis slab** whose
+  openness is decided by `doorPassable()` against the live actor state.
+  Keyed doors rest locked and swing open when the key is held; sealing
+  doors rest open and **slam** the moment their switch fires. Keys vanish
+  into inventory on collection; switch plates depress and rims light.
+  Actors report state; the engine decides. Verified through the full trap
+  arc (6 state transitions to stranded) and the play arc — where the
+  player collecting the key first, then pressing the switch, walks
+  through the open vault door and wins: the trap's lesson, self-demonstrating.
+- **Repair before/after** (`3820e1e`): repair cards **Preview** in the
+  scene first — old positions ringed fail-red, proposed positions
+  pass-green — with a template-derived consequence sentence ("The sealing
+  door stays exactly as you built it — only the trigger moves."). Apply
+  then offers **Replay the failing route**: the exact witness moves that
+  failed, replayed on the repaired scene, ending "Route complete — the
+  same moves no longer strand the player." (engine-guaranteed honest: the
+  repaired level passed full verification, so no route can strand).
+- **Selection-based prompting** (`9a5f981`): click any floor, key, switch,
+  door, spawn, or goal in the scene (click-not-drag vs orbit) — brass
+  selection rings, chips in the prompt panel, and the ids ride the compile
+  request so "this door" / "here" resolve deterministically. Live proof:
+  select lower-hall, type "Put a switch here." → model places the switch
+  on lower-hall. Selection participates in the cache key.
+- **Honest regression note**: the selection deploy briefly shipped a
+  dead prompt textarea (an edit dropped the controlled input's onChange,
+  so typing never reached React state and Compile resubmitted the last
+  chip text). Caught during verification, fixed and redeployed same hour.
+  Lesson recorded: every deploy that touches the prompt panel needs a
+  type-into-the-box check, not just chip clicks.
+
 ## Sep 12 (review hardening — six implementation gaps, all fixed)
 
 External review found six gaps; all verified real, all fixed
