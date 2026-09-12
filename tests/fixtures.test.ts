@@ -5,6 +5,7 @@ import { unfamiliarLevel } from '../src/core/fixtures/unfamiliar';
 import { trapLevel } from '../src/core/fixtures/trap';
 import { vaultEmptyLevel } from '../src/core/fixtures/vault-empty';
 import { verify } from '../src/core/verifier';
+import { twinKeysLevel, overpassLevel, gauntletLevel } from '../src/core/fixtures/gallery';
 
 describe('golden fixture expectations (§8)', () => {
   it('the empty vault: geometry, spawn, and goal only — accepted', () => {
@@ -40,5 +41,33 @@ describe('golden fixture expectations (§8)', () => {
 
   it('baseline stays accepted (regression guard for fixture edits)', () => {
     expect(verify(baselineLevel).accepted).toBe(true);
+  });
+});
+
+describe('gallery scenes (§12 showcase levels)', () => {
+  it('twin keys: two keys, two rules, two keyed doors — all green', () => {
+    const report = verify(twinKeysLevel);
+    expect(report.valid).toBe(true);
+    expect(report.accepted).toBe(true);
+    expect(report.recoveryMap).toEqual({ stranded: [], unreachable: [] });
+  });
+
+  it('overpass: a bridge crossing directly over a lower corridor — all green', () => {
+    const report = verify(overpassLevel);
+    expect(report.accepted).toBe(true);
+    const bridge = overpassLevel.modules.find((m) => m.id === 'bridge-c')!;
+    const under = overpassLevel.modules.find((m) => m.id === 'under-passage')!;
+    expect(bridge.x).toBe(under.x);
+    expect(bridge.z).toBe(under.z);
+    expect(bridge.h).toBeGreaterThan(under.h);
+    expect(report.recoveryMap).toEqual({ stranded: [], unreachable: [] });
+  });
+
+  it('gauntlet: the sealing bonus door is provably safe — no stranded floors', () => {
+    const report = verify(gauntletLevel);
+    expect(report.accepted).toBe(true);
+    expect(report.recoveryMap?.stranded).toEqual([]);
+    // The trap exists: a door that seals, and a switch that seals it.
+    expect(gauntletLevel.doors.some((d) => d.conditions?.closesAfterSwitch === 'vault-seal')).toBe(true);
   });
 });

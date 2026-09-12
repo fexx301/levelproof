@@ -4,10 +4,21 @@ import { compileOkResponseSchema, explainOkResponseSchema } from '../../shared/a
 import type { Level } from '../../shared/schema.js';
 import { unfamiliarLevel } from '../core/fixtures/unfamiliar.js';
 import { vaultEmptyLevel } from '../core/fixtures/vault-empty.js';
+import { twinKeysLevel, overpassLevel, gauntletLevel } from '../core/fixtures/gallery.js';
 import { applyOperations } from '../core/level.js';
 import { findRepairs, type RepairCandidate } from '../core/search.js';
 import { verify, type Report } from '../core/verifier.js';
 import { revisionId } from '../core/serialize.js';
+
+/** Gallery scenes (§12): the seeded vault plus three verified showcase levels. */
+export const SCENES = [
+  { id: 'balcony-vault', label: 'The Balcony Vault', level: vaultEmptyLevel },
+  { id: 'twin-keys', label: 'The Twin Keys', level: twinKeysLevel },
+  { id: 'overpass', label: 'The Overpass', level: overpassLevel },
+  { id: 'gauntlet', label: 'The Gauntlet', level: gauntletLevel },
+] as const;
+
+export type SceneId = (typeof SCENES)[number]['id'];
 
 /**
  * Accepted/draft revision state (§11) plus the watch/play/repair modes
@@ -73,6 +84,7 @@ interface ExplainSlice {
 
 interface AppState {
   acceptedLevel: Level;
+  sceneId: SceneId;
   previousAccepted: Level | null;
   draft: DraftState | null;
   pendingRule: { proposal: RuleProposalResult; base: Level } | null;
@@ -93,6 +105,7 @@ interface AppState {
   discardDraft: () => void;
   undo: () => void;
   resetVault: () => void;
+  loadScene: (id: SceneId) => void;
   watchWitness: (kind: WitnessKind) => void;
   startPlay: () => void;
   exitToAuthoring: () => void;
@@ -172,6 +185,7 @@ function initialLevel(): Level {
 
 export const useApp = create<AppState>()((set, get) => ({
   acceptedLevel: initialLevel(),
+  sceneId: 'balcony-vault',
   previousAccepted: null,
   draft: null,
   pendingRule: null,
@@ -317,7 +331,30 @@ export const useApp = create<AppState>()((set, get) => ({
       ghost: GHOST_INITIAL,
       play: PLAY_INITIAL,
       repair: REPAIR_INITIAL,
+      explain: EXPLAIN_INITIAL,
+      sceneId: 'balcony-vault',
     }),
+
+  loadScene: (id) => {
+    const scene = SCENES.find((s) => s.id === id);
+    if (!scene) return;
+    set({
+      acceptedLevel: scene.level,
+      previousAccepted: null,
+      draft: null,
+      pendingRule: null,
+      lastResult: null,
+      lastPrompt: null,
+      lastCompileMeta: null,
+      error: null,
+      mode: 'authoring',
+      ghost: GHOST_INITIAL,
+      play: PLAY_INITIAL,
+      repair: REPAIR_INITIAL,
+      explain: EXPLAIN_INITIAL,
+      sceneId: id,
+    });
+  },
 
   watchWitness: (kind) =>
     set({

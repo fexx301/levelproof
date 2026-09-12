@@ -4,7 +4,7 @@ import { verify, type Report } from './core/verifier';
 import { compileLevel } from './core/topology';
 import { actorBridge } from './render/bridge';
 import { mountScene, type SceneHandle } from './render/scene';
-import { useApp } from './state/store';
+import { SCENES, useApp, type SceneId } from './state/store';
 import { CheckStrip, RuleChips } from './ui/check-strip';
 import { PlayPanel } from './ui/play-panel';
 import { PlaytesterPanel, witnessOptions } from './ui/playtester';
@@ -40,6 +40,8 @@ export function App() {
   const mode = useApp((s) => s.mode);
   const previousAccepted = useApp((s) => s.previousAccepted);
   const undo = useApp((s) => s.undo);
+  const sceneId = useApp((s) => s.sceneId);
+  const loadScene = useApp((s) => s.loadScene);
   const discardDraft = useApp((s) => s.discardDraft);
   const resetVault = useApp((s) => s.resetVault);
   const startPlay = useApp((s) => s.startPlay);
@@ -82,6 +84,22 @@ export function App() {
         <p className="app-sub">An AI puzzle creator with automatic playtesting</p>
         <div className="header-actions">
           {mode === 'authoring' && draft && <span className="draft-badge">Draft — not accepted</span>}
+          {mode === 'authoring' && (
+            <label className="scene-select-label">
+              <span className="visually-hidden">Scene</span>
+              <select
+                className="scene-select"
+                value={sceneId}
+                onChange={(event) => loadScene(event.target.value as SceneId)}
+              >
+                {SCENES.map((scene) => (
+                  <option key={scene.id} value={scene.id}>
+                    {scene.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           {mode === 'authoring' && (
             <>
               <button type="button" onClick={undo} disabled={!previousAccepted}>

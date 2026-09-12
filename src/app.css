@@ -554,6 +554,48 @@ details.inspector[open] summary .disclosure-glyph {
   font-size: var(--text-xs);
 }
 
+.visually-hidden {
+  clip-path: inset(50%);
+  height: 1px;
+  overflow: hidden;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
+}
+
+.scene-select-label {
+  display: inline-flex;
+}
+
+.scene-select {
+  background: none;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-sm);
+  color: var(--color-muted);
+  cursor: pointer;
+  font-family: var(--font-data);
+  font-size: var(--text-xs);
+  min-height: 28px;
+  padding: var(--space-05) var(--space-2);
+}
+
+.scene-select:hover {
+  border-color: var(--color-text);
+  color: var(--color-text);
+}
+
+.scene-select:focus-visible {
+  border-color: var(--color-text);
+  color: var(--color-text);
+  outline: 1px solid var(--color-text);
+  outline-offset: 2px;
+}
+
+.scene-select option {
+  background: var(--color-panel);
+  color: var(--color-text);
+}
+
 .example-prompts {
   align-items: center;
   display: flex;

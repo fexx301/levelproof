@@ -33,6 +33,14 @@ from your scene before the model writes a word, and its output is checked
 against the scene's real ids before it is shown. The engine's verdict always
 stands on its own; the narration adds story, never authority.
 
+The header's scene picker also offers three verified showcase levels — **The
+Twin Keys** (two keys, two rules), **The Overpass** (a bridge crossing
+directly over a lower corridor — true floor-over-floor), and **The Gauntlet**
+(a winding climb with a sealing door the checker proves can never strand
+you). In every scene the checker's analysis is drawn on the floors: red
+tiles can strand a player, dimmed tiles are unreachable — the exhaustive
+search made visible (hidden while you play, so it never spoils the puzzle).
+
 You can also play any scene yourself with the keyboard — the same movement
 engine the checker uses.
 
