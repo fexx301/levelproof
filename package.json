@@ -11,7 +11,8 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
-    "deploy": "vercel --prod --yes --name levelproof"
+    "deploy": "vercel --prod --yes --name levelproof",
+    "eval": "tsx scripts/eval.ts"
   },
   "dependencies": {
     "react": "^19.3.0",

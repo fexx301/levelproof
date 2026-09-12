@@ -2,6 +2,30 @@
 
 Build-window decisions and measured evidence, newest first. Dates are 2026.
 
+## Sep 12 (model selection)
+
+- **§10.1 evaluation complete; no model meets the full bar.** Six models
+  evaluated through the real gateway (12 fixtures × 2 uncached runs each,
+  deterministic grading through `applyOperations` + `verify`). Best
+  first-try semantic correctness is 50% against the 90% bar; best final is
+  67%. Recorded in `docs/model-eval.md` rather than forced — invalid
+  output is never accepted to hit a target.
+- **Chosen configuration: `google/gemini-2.5-flash-lite` primary,
+  `google/gemini-3.7-flash` fallback** (the evaluated fallback of §10's
+  three-attempt bound). Flash-lite is the only model passing both absolute
+  safety gates (4/4 ambiguity, 2/2 rule-protection) at 1.5 s median and
+  ~$0.0003/call; its failure classes (spatial placement, placeholder ids)
+  are the fallback's strengths. Rejected: deepseek models (quality and
+  55 s latency), gpt-oss-120b (2/4 ambiguity), qwen-plus (3/4 ambiguity
+  after the final prompt iteration).
+- **Wire contract:** Gemini models reject strict structured output for our
+  vocabulary ("too many states") and run fence-stripped plain JSON with
+  strict Zod validation; the OpenAI-compatible models use a per-type anyOf
+  strict envelope. Reasoning effort low everywhere it applies.
+- **Evaluation spend: $0.225 of the $0.25 cap**, including two
+  defective-configuration runs and diagnostics, all disclosed in the eval
+  doc.
+
 ## Sep 11 (minimal scene deployed)
 
 - **Minimal deployed scene live at `https://levelproof.vercel.app`**
