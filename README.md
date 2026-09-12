@@ -72,9 +72,11 @@ through that same engine from the real initial state.
 ## Checked repairs
 
 When an edit breaks a rule, the repair search enumerates deterministic
-candidates (≤ 24, ≤ 4 operations, no recursion) — gate the bypass with a keyed
-door, or relocate the trapping switch — fully re-verifies each against every
-active rule, and ranks them by a versioned preference for fewer changes.
+candidates (≤ 24, ≤ 4 operations, no recursion) from four template families —
+gate the bypass with a keyed door, relocate the trapping switch, move the
+required key onto the shortcut, or dissolve the trap — fully re-verifies each
+against every active rule, and ranks them by a versioned preference that
+keeps every entity ahead of destructive fixes and favors fewer changes.
 Repairs can never weaken a rule, move the goal, or grant inventory; relaxing
 a rule is a separate, explicitly approved diff.
 

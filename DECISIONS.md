@@ -2,6 +2,27 @@
 
 Build-window decisions and measured evidence, newest first. Dates are 2026.
 
+## Sep 12 (Phase 2b — repair template breadth, §9)
+
+- **Two new repair families shipped** (allowed now that the §8.4
+  unfamiliar-layout gate has passed): **trap dissolution** (drop the sealing
+  condition and switch, or remove the sealing door outright) and **key
+  relocation** (move the required key onto the bypass route — keys are
+  collected on arrival, so the shortcut can no longer skip it; full
+  re-verification proves every winning route then honors the rule).
+- **Ranking extended with a removals dimension**: repairs that keep every
+  entity now outrank destructive ones, ahead of the existing
+  fewer-changed/fewer-ops/canonical tuple. The §8.2 canonical relocation
+  still ranks first for the trap; the removal variants follow.
+- **Measured** (tests/search.test.ts spike logs): trap — 7 candidates
+  enumerated, **3 checked fixes** (relocation, remove door, remove switch),
+  4.9 ms; bypass — 5 enumerated, **3 fixes** (two gates + move-key onto
+  bridge-landing), 2.9 ms. All inside the ≤24/≤4 bounds; live-verified on
+  production ("3 checked fixes found. 7 candidates checked in 4.8 ms").
+- Suite at 51 (trap test updated from "exactly one fix" to the ranking
+  contract: relocation first, every later candidate destructive but
+  fully re-verified).
+
 ## Sep 12 (Phase 2a — api/explain, grounded failure narration)
 
 - **Shipped and verified live**: `POST /api/explain` + "Why did this fail?"

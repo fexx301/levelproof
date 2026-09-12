@@ -9,26 +9,35 @@ import { revisionId } from '../src/core/serialize';
 import { verify } from '../src/core/verifier';
 
 describe('repair search (§9, §13.4)', () => {
-  it('the trap has exactly one checked fix: relocate the seal switch behind the vault door', () => {
+  it('the trap ranks the preserving relocation above destructive removals', () => {
     const report = verify(trapLevel);
     expect(report.checks.recovery.status).toBe('fail');
     const result = findRepairs(baselineLevel, trapLevel, report);
     expect(result.status).toBe('complete');
-    expect(result.candidates).toHaveLength(1);
-    const candidate = result.candidates[0]!;
-    expect(candidate.operations).toEqual([
+    expect(result.candidates.length).toBeGreaterThanOrEqual(1);
+    // §9 ranking: repairs that keep every entity outrank removals, so the
+    // canonical §8.2 relocation is always first.
+    const first = result.candidates[0]!;
+    expect(first.operations).toEqual([
       { kind: 'moveItem', id: 'seal-switch', moduleId: 'vault-entry' },
     ]);
-    // The applied repair is content-identical to the §8.2 repaired fixture.
-    const applied = applyOperations(trapLevel, candidate.operations);
+    // The applied first repair is content-identical to the §8.2 repaired fixture.
+    const applied = applyOperations(trapLevel, first.operations);
     expect(applied.ok).toBe(true);
     if (applied.ok) {
       expect(revisionId(applied.level)).toBe(revisionId(trapRepairedLevel));
       expect(applied.level.requirements).toEqual(trapLevel.requirements);
     }
+    // Destructive variants (drop the switch, drop the door) are honest
+    // candidates too, but never outrank the relocation.
+    for (const candidate of result.candidates.slice(1)) {
+      const removes = candidate.operations.some((op) => op.kind === 'removeItem' || op.kind === 'removeDoor');
+      expect(removes).toBe(true);
+      expect(candidate.report.accepted).toBe(true);
+    }
     // Search stays inside its bounds and is fast enough to measure.
     expect(result.explored).toBeLessThanOrEqual(24);
-    console.log(`[spike] repair search (trap): ${result.explored} candidates, ${result.durationMs.toFixed(1)} ms`);
+    console.log(`[spike] repair search (trap): ${result.explored} candidates, ${result.candidates.length} passing, ${result.durationMs.toFixed(1)} ms`);
   });
 
   it('the bridge bypass is repaired by gating a new-route entrance with the missing key', () => {

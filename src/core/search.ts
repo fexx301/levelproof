@@ -37,6 +37,8 @@ interface DraftCandidate {
   description: string;
   operations: Operation[];
   changedExisting: number;
+  /** Removals rank last: repairs that keep every entity outrank destructive ones. */
+  removals: number;
 }
 
 function canonicalKey(operations: Operation[]): string {
@@ -82,6 +84,88 @@ function switchRelocationCandidates(draft: Level, report: Report): DraftCandidat
         description: `Move switch “${switchId}” to “${moduleId}”`,
         operations: [{ kind: 'moveItem', id: switchId, moduleId }],
         changedExisting: 1,
+        removals: 0,
+      });
+    }
+  }
+  return candidates;
+}
+
+/**
+ * Template 3 (§9 breadth): dissolve the trap instead of relocating it —
+ * either drop the sealing condition (door stays, switch goes) or remove the
+ * sealing door outright. Both discard the trap mechanic; full re-verification
+ * decides whether anything else breaks.
+ */
+function trapRemovalCandidates(draft: Level, report: Report): DraftCandidate[] {
+  const recovery = report.checks.recovery;
+  if (recovery.status !== 'fail' || recovery.witness?.kind !== 'dead_end') return [];
+  const switchIds = new Set(draft.switches.map((s) => s.id));
+  const candidates: DraftCandidate[] = [];
+  for (const door of draft.doors) {
+    const sealId = door.conditions?.closesAfterSwitch;
+    if (sealId === undefined || !switchIds.has(sealId)) continue;
+    candidates.push({
+      key: canonicalKey([
+        { kind: 'setDoorConditions', id: door.id, conditions: {} },
+        { kind: 'removeItem', id: sealId },
+      ]),
+      description: `Remove switch “${sealId}” and leave “${door.id}” open`,
+      operations: [
+        { kind: 'setDoorConditions', id: door.id, conditions: {} },
+        { kind: 'removeItem', id: sealId },
+      ],
+      changedExisting: 0,
+      removals: 1,
+    });
+    candidates.push({
+      key: canonicalKey([{ kind: 'removeDoor', id: door.id }]),
+      description: `Remove the sealing door “${door.id}”`,
+      operations: [{ kind: 'removeDoor', id: door.id }],
+      changedExisting: 0,
+      removals: 1,
+    });
+  }
+  return candidates;
+}
+
+/**
+ * Template 4 (§9 breadth): a bypass skipped the required key — move the key
+ * onto the bypass route so the shortcut collects it too. Keys are collected
+ * on arrival, so placement on the route is enough; full re-verification
+ * proves every winning route now honors the requirement.
+ */
+function keyRelocationCandidates(draft: Level, report: Report): DraftCandidate[] {
+  const requirements = report.checks.requirements;
+  const witness = requirements.witness;
+  if (requirements.status !== 'fail' || witness?.kind !== 'bypass') return [];
+  const missingKeys = witness.missingKeys ?? [];
+  if (missingKeys.length === 0) return [];
+  const occupied = new Set<string>([
+    ...draft.keys.map((k) => k.moduleId),
+    ...draft.switches.map((s) => s.moduleId),
+    draft.spawn,
+    draft.goal,
+  ]);
+  const flatIds = new Set(draft.modules.filter((m) => m.template === 'flat').map((m) => m.id));
+  const routeModules = new Set<string>();
+  for (const move of witness.route) {
+    if (flatIds.has(move.source)) routeModules.add(move.source);
+    if (flatIds.has(move.destination)) routeModules.add(move.destination);
+  }
+  const candidates: DraftCandidate[] = [];
+  for (const keyId of missingKeys) {
+    const key = draft.keys.find((k) => k.id === keyId);
+    if (!key) continue;
+    for (const moduleId of [...routeModules].sort()) {
+      if (moduleId === key.moduleId || occupied.has(moduleId)) continue;
+      const operations: Operation[] = [{ kind: 'moveItem', id: keyId, moduleId }];
+      candidates.push({
+        key: canonicalKey(operations),
+        description: `Move key “${keyId}” onto the shortcut at “${moduleId}”`,
+        operations,
+        changedExisting: 0,
+        removals: 0,
       });
     }
   }
@@ -129,6 +213,7 @@ function routeGatingCandidates(accepted: Level, draft: Level, report: Report): D
         description: `Lock the entrance at “${a}”–“${b}” with key “${keyId}”`,
         operations,
         changedExisting: 0,
+        removals: 0,
       });
     }
   }
@@ -140,6 +225,8 @@ export function findRepairs(accepted: Level, draft: Level, report: Report): Repa
   const pool = [
     ...routeGatingCandidates(accepted, draft, report),
     ...switchRelocationCandidates(draft, report),
+    ...trapRemovalCandidates(draft, report),
+    ...keyRelocationCandidates(draft, report),
   ];
   const seen = new Set<string>();
   const enumerated: DraftCandidate[] = [];
@@ -170,6 +257,8 @@ export function findRepairs(accepted: Level, draft: Level, report: Report): Repa
   }
 
   passing.sort((x, y) => {
+    const byRemovals = removalCount(x) - removalCount(y);
+    if (byRemovals !== 0) return byRemovals;
     const byChanged = countChanged(accepted, x) - countChanged(accepted, y);
     if (byChanged !== 0) return byChanged;
     const byOps = x.operations.length - y.operations.length;
@@ -190,6 +279,10 @@ export function findRepairs(accepted: Level, draft: Level, report: Report): Repa
           ? 'No checked fix in this search.'
           : `${passing.length} checked fix${passing.length === 1 ? '' : 'es'} found.`,
   };
+}
+
+function removalCount(candidate: RepairCandidate): number {
+  return candidate.operations.filter((op) => op.kind === 'removeItem' || op.kind === 'removeDoor').length;
 }
 
 function countChanged(accepted: Level, candidate: RepairCandidate): number {
