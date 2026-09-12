@@ -74,3 +74,19 @@ ever risking scene corruption; the retry path measurably works (flash-lite:
 **Budget:** total live-evaluation spend **$0.225 of the $0.25 cap**,
 including both defective-configuration runs and all diagnostics recorded
 above.
+
+## Sep 12 update — reliability battery and model flip
+
+A 30–34-phrasing battery run through the deployed API (`scripts/reliability.ts`,
+engine-graded) replaced the earlier slate's snapshot judgment:
+
+- `google/gemini-2.5-flash-lite` (then-primary, prompt-4/5/6 incl. occupancy
+  grid): trap ~4/11 fresh, bypass 0/5 across three runs — bridges on occupied
+  cells and label-derived ids are capability failures, not prompt failures.
+- `google/gemini-3.7-flash` (new primary): trap 10/11, bypass 3/4 real
+  responses, compound 2/2, edits/unsupported/rule-weakening clean — **~93%
+  valid on non-outage responses** at ~$0.005 per fresh compile.
+
+Decision: **3.7-flash primary, 2.5-flash-lite fallback** (config live since
+Sep 12). Canonical demo strings re-verified fresh under the new model.
+Battery spend $0.249 total (raised eval allowance, user-approved).
