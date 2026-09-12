@@ -1,18 +1,23 @@
 import { create } from 'zustand';
-import type { CompileResult, RuleProposalResult } from '../../shared/compile-result';
+import type { RuleProposalResult, CompileResult } from '../../shared/compile-result';
 import { compileOkResponseSchema } from '../../shared/api';
 import type { Level } from '../../shared/schema';
 import { vaultEmptyLevel } from '../core/fixtures/vault-empty';
 import { applyOperations } from '../core/level';
+import { findRepairs, type RepairCandidate } from '../core/search';
 import { verify, type Report } from '../core/verifier';
 
 /**
- * Accepted/draft revision state (§11). One accepted checkpoint, at most one
- * structurally valid editable draft, one-step undo. A complete passing edit
- * becomes accepted; a failing or incomplete draft stays visible and labeled
- * with **Return to accepted** always available. Every compile refers to its
- * base revision; stale results are simply replaced.
+ * Accepted/draft revision state (§11) plus the watch/play/repair modes
+ * (§12). One accepted checkpoint, at most one structurally valid editable
+ * draft, one-step undo. A complete passing edit becomes accepted; a failing
+ * or incomplete draft stays visible and labeled with **Return to accepted**
+ * always available. The ghost replays verifier witnesses only; manual play
+ * uses the same core `step` as the checker.
  */
+
+type Mode = 'authoring' | 'watching' | 'playing';
+type WitnessKind = 'solution' | 'dead_end' | 'bypass';
 
 interface DraftState {
   level: Level;
@@ -27,6 +32,34 @@ interface CompileMeta {
   model: string;
 }
 
+interface GhostSlice {
+  witnessKind: WitnessKind | null;
+  playing: boolean;
+  finished: boolean;
+  moveIndex: number;
+  totalMoves: number;
+  keys: string[];
+  switches: string[];
+  endNote: string | null;
+}
+
+interface PlaySlice {
+  at: string;
+  keys: string[];
+  switches: string[];
+  trapped: boolean;
+  atGoal: boolean;
+  goalViolated: boolean;
+}
+
+interface RepairSlice {
+  status: 'idle' | 'done';
+  candidates: RepairCandidate[];
+  explored: number;
+  durationMs: number;
+  note: string | null;
+}
+
 interface AppState {
   acceptedLevel: Level;
   previousAccepted: Level | null;
@@ -37,13 +70,50 @@ interface AppState {
   lastCompileMeta: CompileMeta | null;
   busy: boolean;
   error: string | null;
+  mode: Mode;
+  ghost: GhostSlice;
+  play: PlaySlice;
+  repair: RepairSlice;
   submitPrompt: (prompt: string, clarificationContext?: string) => Promise<void>;
   approveRule: () => void;
   declineRule: () => void;
   discardDraft: () => void;
   undo: () => void;
   resetVault: () => void;
+  watchWitness: (kind: WitnessKind) => void;
+  startPlay: () => void;
+  exitToAuthoring: () => void;
+  runRepairs: (report: Report) => void;
+  applyRepair: (index: number) => void;
 }
+
+const GHOST_INITIAL: GhostSlice = {
+  witnessKind: null,
+  playing: false,
+  finished: false,
+  moveIndex: 0,
+  totalMoves: 0,
+  keys: [],
+  switches: [],
+  endNote: null,
+};
+
+const PLAY_INITIAL: PlaySlice = {
+  at: '',
+  keys: [],
+  switches: [],
+  trapped: false,
+  atGoal: false,
+  goalViolated: false,
+};
+
+const REPAIR_INITIAL: RepairSlice = {
+  status: 'idle',
+  candidates: [],
+  explored: 0,
+  durationMs: 0,
+  note: null,
+};
 
 function extractError(body: unknown): string {
   if (body !== null && typeof body === 'object' && 'error' in body) {
@@ -62,6 +132,7 @@ function settleDraft(set: (partial: Partial<AppState>) => void, base: Level, lev
   } else {
     set({ draft: { level, report, viaRule } });
   }
+  set({ mode: 'authoring', ghost: GHOST_INITIAL, play: PLAY_INITIAL, repair: REPAIR_INITIAL });
 }
 
 export const useApp = create<AppState>()((set, get) => ({
@@ -74,6 +145,10 @@ export const useApp = create<AppState>()((set, get) => ({
   lastCompileMeta: null,
   busy: false,
   error: null,
+  mode: 'authoring',
+  ghost: GHOST_INITIAL,
+  play: PLAY_INITIAL,
+  repair: REPAIR_INITIAL,
 
   submitPrompt: async (prompt, clarificationContext) => {
     const state = get();
@@ -136,12 +211,21 @@ export const useApp = create<AppState>()((set, get) => ({
 
   declineRule: () => set({ pendingRule: null }),
 
-  discardDraft: () => set({ draft: null }),
+  discardDraft: () => set({ draft: null, repair: REPAIR_INITIAL }),
 
   undo: () => {
     const { previousAccepted } = get();
     if (!previousAccepted) return;
-    set({ acceptedLevel: previousAccepted, previousAccepted: null, draft: null, pendingRule: null });
+    set({
+      acceptedLevel: previousAccepted,
+      previousAccepted: null,
+      draft: null,
+      pendingRule: null,
+      mode: 'authoring',
+      ghost: GHOST_INITIAL,
+      play: PLAY_INITIAL,
+      repair: REPAIR_INITIAL,
+    });
   },
 
   resetVault: () =>
@@ -154,5 +238,51 @@ export const useApp = create<AppState>()((set, get) => ({
       lastPrompt: null,
       lastCompileMeta: null,
       error: null,
+      mode: 'authoring',
+      ghost: GHOST_INITIAL,
+      play: PLAY_INITIAL,
+      repair: REPAIR_INITIAL,
     }),
+
+  watchWitness: (kind) =>
+    set({
+      mode: 'watching',
+      ghost: { ...GHOST_INITIAL, witnessKind: kind },
+      play: PLAY_INITIAL,
+    }),
+
+
+  startPlay: () => set({ mode: 'playing', ghost: GHOST_INITIAL, play: PLAY_INITIAL, repair: REPAIR_INITIAL }),
+
+  exitToAuthoring: () => set({ mode: 'authoring', ghost: GHOST_INITIAL, play: PLAY_INITIAL }),
+
+
+  runRepairs: (report) => {
+    const { draft, acceptedLevel } = get();
+    if (!draft) return;
+    const result = findRepairs(acceptedLevel, draft.level, report);
+    set({
+      repair: {
+        status: 'done',
+        candidates: result.candidates,
+        explored: result.explored,
+        durationMs: result.durationMs,
+        note: result.note,
+      },
+    });
+  },
+
+  applyRepair: (index) => {
+    const { draft, repair, acceptedLevel } = get();
+    if (!draft || repair.candidates.length === 0) return;
+    const candidate = repair.candidates[index];
+    if (!candidate) return;
+    const applied = applyOperations(draft.level, candidate.operations);
+    if (!applied.ok) {
+      set({ error: `The repair was rejected: ${applied.errors[0]}` });
+      return;
+    }
+    settleDraft(set, acceptedLevel, applied.level, false);
+  },
 }));
+

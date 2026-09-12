@@ -1,8 +1,16 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import type { MoveRecord } from '../core/movement';
 import { CARDINALS, type Cardinal, type Door, type LevelModule } from '../../shared/schema';
 import { GEOMETRY, centerPoint, dirDelta, portPoint, type Vec3 } from '../core/catalog';
 import { neighbor, type CompiledLevel } from '../core/topology';
+import {
+  GhostActor,
+  PlayerActor,
+  type ActorContext,
+  type GhostCallbacks,
+  type PlayerCallbacks,
+} from './actors';
 
 /**
  * Imperative Three.js diorama built from the compiled level (§3, §12).
@@ -70,6 +78,13 @@ function buildMats(): Mats {
 
 export interface SceneHandle {
   dispose(): void;
+  spawnGhost(
+    route: MoveRecord[],
+    kind: 'solution' | 'bypass' | 'dead_end',
+    missingKeys: string[],
+    callbacks: GhostCallbacks,
+  ): GhostActor;
+  spawnPlayer(callbacks: PlayerCallbacks): PlayerActor;
 }
 
 function layoutCenter(compiled: CompiledLevel): Vec3 {
@@ -274,8 +289,18 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel): SceneHan
   sun.position.set(center.x - 2200, 5200, center.z + 1600);
   scene.add(sun);
 
+  const actorUpdates = new Set<(dt: number, elapsed: number) => void>();
+  let followTarget: THREE.Object3D | null = null;
+  let lastTime = performance.now();
   let frame = 0;
   const tick = () => {
+    const now = performance.now();
+    const dt = Math.min((now - lastTime) / 1000, 0.1);
+    lastTime = now;
+    for (const update of actorUpdates) update(dt, now);
+    if (followTarget !== null) {
+      controls.target.lerp(followTarget.position, 0.08);
+    }
     controls.update();
     renderer.render(scene, camera);
     frame = requestAnimationFrame(tick);
@@ -293,7 +318,25 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel): SceneHan
   const observer = new ResizeObserver(resize);
   observer.observe(host);
 
+  const actorContext: ActorContext = {
+    scene,
+    compiled,
+    register: (update) => {
+      actorUpdates.add(update);
+      return () => actorUpdates.delete(update);
+    },
+    follow: (target) => {
+      followTarget = target;
+    },
+  };
+
   return {
+    spawnGhost(route, kind, missingKeys, callbacks) {
+      return new GhostActor(actorContext, route, kind, missingKeys, callbacks);
+    },
+    spawnPlayer(callbacks) {
+      return new PlayerActor(actorContext, callbacks);
+    },
     dispose() {
       cancelAnimationFrame(frame);
       observer.disconnect();

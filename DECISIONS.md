@@ -2,6 +2,31 @@
 
 Build-window decisions and measured evidence, newest first. Dates are 2026.
 
+## Sep 12 (ghost, play, repair — §14 Sep 13 gate)
+
+- **The signature moment is live on the deployed URL.** The ghost walks
+  verifier witness routes along catalog polylines at constant speed
+  (300 cm/s), inventory appears as it happens, the camera follows, and it
+  holds at the trapped state pulsing. Restart / pause / step verified in a
+  real browser. Manual play (WASD/arrows, R, Escape, on-screen d-pad) walks
+  the same core `step` — one transition per input — and calls out
+  "You reproduced the failure" when the player's exact state matches the
+  dead-end witness state.
+- **§9 repair search landed early.** Both first-slice templates
+  (gate-the-new-route, relocate-the-trapping-switch), ≤24 candidates, ≤4
+  ops each, full recheck per candidate, deterministic ranking. On the trap
+  it finds exactly one checked fix — move the seal switch behind the vault
+  door — content-identical to the §8.2 repaired fixture. Applied live: the
+  draft went from recovery-fail to all three checks green with the rule
+  preserved.
+- **Measured (§14 Sep 13 evidence):** verification 0.6 ms (golden
+  fixtures); repair search 2.1 ms (trap, 5 candidates) and 0.9 ms (bypass,
+  2 candidates) in tests, 4.1 ms live on the serverless instance. Golden
+  timings are not worst-case; stress layouts remain front-loaded.
+- **Bug found and fixed in verification:** the ghost's progress note
+  emitted the move index before incrementing (one-move lag) — caught by
+  browser-driving the controls, fixed, redeployed.
+
 ## Sep 12 (live compile flow)
 
 - **The §14 Sep 14–15 gate is live early on the deployed URL.** `POST
