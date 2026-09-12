@@ -15,9 +15,9 @@ findings.
 
 ## The script
 
-**1. Warm-up (2 min).** "This is a tool for making small 3D puzzles with AI.
-Don't explain it further — watch what they understand from the page alone.
-Note anything they ask that the UI should have answered.
+**1. Warm-up (2 min).** Say only: "This is a tool for making small 3D
+puzzles with AI." Don't explain further — watch what they understand from
+the page alone. Note anything they ask that the UI should have answered.
 
 **2. Free build (10 min).** "Make any small puzzle you like. You can type
 what you want, or click things in the scene and describe the change." Let
