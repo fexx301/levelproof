@@ -2,6 +2,52 @@
 
 Build-window decisions and measured evidence, newest first. Dates are 2026.
 
+## Sep 12 (diorama overhaul — §3/§12 renderer)
+
+- **Vision-model critique of five diorama states scored 3.7/10** (default,
+  baseline, trap, ghost playback, play mode) against an AAA-calibrated
+  rubric, versus ~9.5 for the shell. Root causes, all source-grounded: no
+  shadow maps at all; a fixed far camera ignoring level bounds; the ghost
+  a translucent capsule with no trail; three near-identical golds
+  (key/keyed-door/goal) and three competing reds (seal-door/switch/ghost);
+  flat-disc goal and unreadable switch silhouettes.
+- **Overhaul landed and deployed** (commit `6c5669c`): PCF soft shadow maps
+  with a 2048px sun + hemisphere fill; ACES tone mapping; a dark stage disc
+  that catches the level's shadow; **geometry-aware camera fit** (binary
+  search over every module footprint's projected screen extent — the vault
+  is L-shaped, so a bounding-box fit wasted its corners, measured 52% fill
+  vs 71%+ after); follow-with-zoom during ghost playback (≈0.3× fit
+  distance) that glides home and releases control; ghost presence =
+  emissive body + back-face outline + wisp tail + under-ring + a decay-1
+  red point light + a deep-red route tube ending in a ring and vertical
+  destination beam; semantic palette split (goal = shell pass-green with a
+  real light, brass shared by key + keyed door, one dark-crimson danger
+  family for seal door + switch); authored silhouettes (floating key with
+  bow/shaft/teeth, pressure-plate switch with rim, goal pedestal + rotating
+  gem + halo, door type telegraphs); proper disposal of all created
+  geometry/materials.
+- **Reduced-motion contract preserved**: decor spin/bob, camera spring, and
+  ghost pulse all gate on the live media query; stepped ghost and instant
+  camera snap unchanged.
+- **Two engineering findings en route**: three.js ≥r155 uses physical light
+  units, so cm-scale scenes need candela-scale point-light intensities
+  (intensity ≈ illuminance × distance²; decay-1 lamps chosen for readable
+  pools); `page.evaluate` in this harness runs in an isolated world —
+  window globals set by app modules are invisible to it, DOM datasets are
+  the shared channel.
+- **Post-overhaul critique plateaus at ~5.5–6.5** on the AAA rubric: the
+  remaining deductions (bevels, textures, AO, character rigs) are outside
+  §15's design contract — the kit is three primitive templates by
+  specification. On the product's own bar the transformation is complete:
+  ghost 2.5 → dominant focal point with route narrative; measured fill
+  52% → 71%+; zero shadows → staged, grounded scene; colliding palette →
+  semantic families matching the shell tokens.
+- **Also observed (pre-existing, unchanged): the trap is hard to reach by
+  free-form prose** — two natural-language phrasings of prompt 2 compiled
+  successfully but produced non-trapping door conditions (recovery stayed
+  green). The demo needs a rehearsed canonical phrasing or prompt-2
+  reliability work before the video.
+
 ## Sep 12 (design-critic loop — §12 shell)
 
 - **Ten independent design-critic rounds run against the deployed shell**,
