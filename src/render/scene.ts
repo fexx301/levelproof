@@ -25,15 +25,21 @@ const COLORS = {
   floor: 0x8d8577,
   bridge: 0x7c8a94,
   ramp: 0x9a8f7d,
-  wall: 0x5c574d,
+  wall: 0x6a655a,
   rail: 0x47433c,
+  // Brass family: the key and the door it opens share the accent (§12).
   doorKey: 0xc9a227,
-  doorSeal: 0x8a3b3b,
-  doorPlain: 0x6f6a60,
   key: 0xd4af37,
+  // Danger family: the sealing door and its switch are one mechanism.
+  doorSeal: 0x74302f,
   switchPad: 0xb0533a,
+  // Ghost/player families mirror the shell's fail and text tokens.
+  ghost: 0xd57064,
+  player: 0xd7d2c4,
+  doorPlain: 0x6f6a60,
   spawn: 0xd7d2c4,
-  goal: 0xc9a227,
+  // The goal mirrors the shell's --color-pass: reaching it is the pass state.
+  goal: 0x3fa66a,
 } as const;
 
 const WALL_HEIGHT_CM = 120;
@@ -52,12 +58,24 @@ interface Mats {
   doorPlain: THREE.MeshStandardMaterial;
   key: THREE.MeshStandardMaterial;
   switchPad: THREE.MeshStandardMaterial;
+  switchRim: THREE.MeshStandardMaterial;
   spawn: THREE.MeshStandardMaterial;
   goal: THREE.MeshStandardMaterial;
+  goalHalo: THREE.MeshStandardMaterial;
 }
 
 function standard(color: number, metalness = 0): THREE.MeshStandardMaterial {
   return new THREE.MeshStandardMaterial({ color, metalness, roughness: 0.85 });
+}
+
+function lit(color: number, emissive: number, intensity: number, metalness = 0): THREE.MeshStandardMaterial {
+  return new THREE.MeshStandardMaterial({
+    color,
+    emissive,
+    emissiveIntensity: intensity,
+    metalness,
+    roughness: 0.7,
+  });
 }
 
 function buildMats(): Mats {
@@ -67,13 +85,15 @@ function buildMats(): Mats {
     ramp: standard(COLORS.ramp),
     wall: standard(COLORS.wall),
     rail: standard(COLORS.rail),
-    doorKey: standard(COLORS.doorKey, 0.55),
-    doorSeal: standard(COLORS.doorSeal),
+    doorKey: lit(COLORS.doorKey, 0x6b5312, 0.45, 0.55),
+    doorSeal: lit(COLORS.doorSeal, 0x3a100e, 0.55),
     doorPlain: standard(COLORS.doorPlain),
-    key: standard(COLORS.key, 0.65),
-    switchPad: standard(COLORS.switchPad),
-    spawn: standard(COLORS.spawn),
-    goal: standard(COLORS.goal, 0.5),
+    key: lit(COLORS.key, 0x8a6d1c, 0.75, 0.65),
+    switchPad: lit(COLORS.switchPad, 0x7a2a1c, 0.9),
+    switchRim: lit(COLORS.doorSeal, 0x3a100e, 0.65),
+    spawn: lit(COLORS.spawn, 0x55504a, 0.25),
+    goal: lit(COLORS.goal, 0x2c8a52, 1.3, 0.2),
+    goalHalo: lit(COLORS.goal, 0x2c8a52, 1.0),
   };
 }
 
@@ -217,28 +237,81 @@ function addDoorFrames(world: THREE.Group, mats: Mats, compiled: CompiledLevel):
       );
       sill.position.set(p.x, p.y + 5, p.z);
       world.add(sill);
+      // Type telegraph: a keyhole gem on keyed doors, a warning bar on seals.
+      const conditions = door.conditions;
+      if (conditions?.requiresKey !== undefined) {
+        const gem = new THREE.Mesh(
+          new THREE.OctahedronGeometry(12),
+          new THREE.MeshBasicMaterial({ color: 0xe8c65a, transparent: true, opacity: 0.6 }),
+        );
+        gem.position.set(p.x, p.y + DOOR_POST_HEIGHT_CM + 24, p.z);
+        world.add(gem);
+      } else if (conditions?.closesAfterSwitch !== undefined) {
+        const bar = new THREE.Mesh(
+          new THREE.BoxGeometry(alongX ? span * 0.72 : 14, 10, alongX ? 14 : span * 0.72),
+          new THREE.MeshBasicMaterial({ color: 0x9e3d35, transparent: true, opacity: 0.85 }),
+        );
+        bar.position.set(p.x, p.y + DOOR_POST_HEIGHT_CM + 22, p.z);
+        world.add(bar);
+      }
       break; // exactly one direction joins the two endpoints
     }
   }
 }
 
-function addItems(world: THREE.Group, mats: Mats, compiled: CompiledLevel): void {
+type DecorUpdate = (dt: number, elapsed: number) => void;
+
+/**
+ * Items get authored silhouettes (§12): a floating key that reads as a key, a
+ * pressure-plate switch with a danger rim, and a pass-green goal beacon.
+ * Idle spin/bob is disabled under reduced motion.
+ */
+function addItems(
+  world: THREE.Group,
+  mats: Mats,
+  compiled: CompiledLevel,
+  decorUpdates: DecorUpdate[],
+): void {
   for (const key of compiled.level.keys) {
     const m = compiled.moduleById.get(key.moduleId);
     if (!m) continue;
     const c = centerPoint(m);
-    const mesh = new THREE.Mesh(new THREE.OctahedronGeometry(46), mats.key);
-    mesh.position.set(c.x, c.y + 90, c.z);
-    mesh.rotation.y = Math.PI / 5;
-    world.add(mesh);
+    const group = new THREE.Group();
+    const bow = new THREE.Mesh(new THREE.TorusGeometry(26, 9, 10, 20), mats.key);
+    bow.position.x = -36;
+    const shaft = new THREE.Mesh(new THREE.BoxGeometry(72, 12, 12), mats.key);
+    shaft.position.x = 8;
+    for (const [x, h] of [
+      [28, 24],
+      [8, 18],
+    ] as const) {
+      const tooth = new THREE.Mesh(new THREE.BoxGeometry(12, h, 12), mats.key);
+      tooth.position.set(x, -6 - h / 2, 0);
+      group.add(tooth);
+    }
+    group.add(bow, shaft);
+    group.scale.setScalar(1.6);
+    const baseY = c.y + 105;
+    group.position.set(c.x, baseY, c.z);
+    world.add(group);
+    decorUpdates.push((dt, elapsed) => {
+      if (reducedMotion()) return;
+      group.rotation.y += dt * 0.7;
+      group.position.y = baseY + Math.sin(elapsed * 0.002) * 8;
+    });
   }
   for (const pad of compiled.level.switches) {
     const m = compiled.moduleById.get(pad.moduleId);
     if (!m) continue;
     const c = centerPoint(m);
-    const mesh = new THREE.Mesh(new THREE.CylinderGeometry(42, 52, 22, 24), mats.switchPad);
-    mesh.position.set(c.x, c.y + 11, c.z);
-    world.add(mesh);
+    const base = new THREE.Mesh(new THREE.CylinderGeometry(78, 88, 12, 28), mats.wall);
+    base.position.set(c.x, c.y + 6, c.z);
+    const plate = new THREE.Mesh(new THREE.CylinderGeometry(46, 50, 16, 24), mats.switchPad);
+    plate.position.set(c.x, c.y + 14, c.z);
+    const rim = new THREE.Mesh(new THREE.TorusGeometry(64, 6, 8, 32), mats.switchRim);
+    rim.rotation.x = Math.PI / 2;
+    rim.position.set(c.x, c.y + 12, c.z);
+    world.add(base, plate, rim);
   }
   const spawn = compiled.moduleById.get(compiled.spawn);
   if (spawn) {
@@ -250,13 +323,23 @@ function addItems(world: THREE.Group, mats: Mats, compiled: CompiledLevel): void
   const goal = compiled.moduleById.get(compiled.goal);
   if (goal) {
     const c = centerPoint(goal);
-    const chest = new THREE.Mesh(new THREE.BoxGeometry(150, 110, 110), mats.goal);
-    chest.position.set(c.x, c.y + 55, c.z);
-    world.add(chest);
-    const lid = new THREE.Mesh(new THREE.ConeGeometry(80, 70, 4), mats.goal);
-    lid.rotation.y = Math.PI / 4;
-    lid.position.set(c.x, c.y + 145, c.z);
-    world.add(lid);
+    const pedestal = new THREE.Mesh(new THREE.CylinderGeometry(50, 62, 36, 24), mats.wall);
+    pedestal.position.set(c.x, c.y + 18, c.z);
+    world.add(pedestal);
+    const beacon = new THREE.Group();
+    const gem = new THREE.Mesh(new THREE.OctahedronGeometry(40), mats.goal);
+    const halo = new THREE.Mesh(new THREE.TorusGeometry(72, 5, 8, 40), mats.goalHalo);
+    halo.rotation.x = Math.PI / 2;
+    beacon.add(gem, halo);
+    const baseY = c.y + 130;
+    beacon.position.set(c.x, baseY, c.z);
+    beacon.add(new THREE.PointLight(COLORS.goal, 320, 1700, 1));
+    world.add(beacon);
+    decorUpdates.push((dt, elapsed) => {
+      if (reducedMotion()) return;
+      beacon.rotation.y += dt * 0.6;
+      beacon.position.y = baseY + Math.sin(elapsed * 0.0016) * 10;
+    });
   }
 }
 
@@ -264,6 +347,10 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel): SceneHan
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(window.devicePixelRatio);
   renderer.setSize(host.clientWidth || 800, host.clientHeight || 600);
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.12;
   host.appendChild(renderer.domElement);
 
   const scene = new THREE.Scene();
@@ -276,15 +363,146 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel): SceneHan
     addModule(world, mats, compiled, m);
   }
   addDoorFrames(world, mats, compiled);
-  addItems(world, mats, compiled);
+  const decorUpdates: DecorUpdate[] = [];
+  addItems(world, mats, compiled, decorUpdates);
+  // Everything solid casts and receives; upper floors shadow lower ones.
+  world.traverse((obj) => {
+    if (obj instanceof THREE.Mesh) {
+      obj.castShadow = true;
+      obj.receiveShadow = true;
+    }
+  });
 
+  // Lighting: warm key light with real shadows, cool sky fill, faint ambient.
+  scene.add(new THREE.HemisphereLight(0x505662, 0x2a241c, 0.8));
+  scene.add(new THREE.AmbientLight(0xffffff, 0.2));
   const center = layoutCenter(compiled);
-  const camera = new THREE.PerspectiveCamera(45, 16 / 9, 10, 40000);
-  camera.position.set(center.x + 1500, 3400, center.z + 3900);
-  camera.lookAt(center.x, center.y, center.z);
+  const sun = new THREE.DirectionalLight(0xfff2dd, 1.35);
+  sun.position.set(center.x - 2200, 5200, center.z + 1600);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(2048, 2048);
+  sun.shadow.camera.near = 500;
+  sun.shadow.camera.far = 20000;
+  sun.shadow.bias = -0.0004;
+  sun.shadow.normalBias = 12;
+  scene.add(sun);
+  scene.add(sun.target);
+
+  // Fit-to-level framing: frame the level's bounding sphere so the diorama
+  // fills the viewport instead of floating in margins. The view direction
+  // keeps the original elevated southeast azimuth.
+  let boundsRadius = 800;
+  let boundsMin = new THREE.Vector3(-800, -300, -800);
+  let boundsMax = new THREE.Vector3(800, 300, 800);
+  {
+    let minX = Infinity;
+    let minY = Infinity;
+    let minZ = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    let maxZ = -Infinity;
+    const half = GEOMETRY.cellPitchCm / 2 + WALL_THICKNESS_CM;
+    for (const m of compiled.level.modules) {
+      const c = centerPoint(m);
+      minX = Math.min(minX, c.x - half);
+      maxX = Math.max(maxX, c.x + half);
+      minY = Math.min(minY, c.y);
+      maxY = Math.max(maxY, c.y + DOOR_POST_HEIGHT_CM + 60);
+      minZ = Math.min(minZ, c.z - half);
+      maxZ = Math.max(maxZ, c.z + half);
+    }
+    if (Number.isFinite(minX)) {
+      const home = new THREE.Vector3(
+        (minX + maxX) / 2,
+        (minY + maxY) / 2,
+        (minZ + maxZ) / 2,
+      );
+      boundsRadius = Math.max(
+        half,
+        home.distanceTo(new THREE.Vector3(minX, minY, minZ)),
+      );
+      boundsMin.set(minX, minY, minZ);
+      boundsMax.set(maxX, maxY, maxZ);
+      // Shadow camera covers the level with margin, centered on it.
+      const s = boundsRadius + 600;
+      sun.shadow.camera.left = -s;
+      sun.shadow.camera.right = s;
+      sun.shadow.camera.top = s;
+      sun.shadow.camera.bottom = -s;
+      sun.target.position.copy(home);
+      sun.target.updateMatrixWorld();
+    }
+  }
+  // A stage under the level: the diorama casts onto it, grounding the scene.
+  const stage = new THREE.Mesh(
+    new THREE.CircleGeometry(boundsRadius * 1.55, 48),
+    new THREE.MeshStandardMaterial({ color: 0x17191f, roughness: 0.95 }),
+  );
+  stage.rotation.x = -Math.PI / 2;
+  stage.position.set(center.x, -60, center.z);
+  stage.receiveShadow = true;
+  scene.add(stage);
+
+  const viewDir = new THREE.Vector3(1500, 2600, 3900).normalize();
+  const camera = new THREE.PerspectiveCamera(45, 16 / 9, 10, 60000);
   const controls = new OrbitControls(camera, renderer.domElement);
-  controls.target.set(center.x, center.y, center.z);
   controls.maxPolarAngle = Math.PI / 2.05;
+  const homeTarget = new THREE.Vector3(center.x, center.y, center.z);
+  const corners: THREE.Vector3[] = [];
+  const computeFit = (): number => {
+    corners.length = 0;
+    const half = GEOMETRY.cellPitchCm / 2 + WALL_THICKNESS_CM;
+    for (const m of compiled.level.modules) {
+      const c = centerPoint(m);
+      for (const dx of [-half, half]) {
+        for (const dz of [-half, half]) {
+          corners.push(new THREE.Vector3(c.x + dx, c.y, c.z + dz));
+          corners.push(new THREE.Vector3(c.x + dx, c.y + DOOR_POST_HEIGHT_CM + 60, c.z + dz));
+        }
+      }
+    }
+    if (corners.length === 0) {
+      for (const x of [boundsMin.x, boundsMax.x]) {
+        for (const y of [boundsMin.y, boundsMax.y]) {
+          for (const z of [boundsMin.z, boundsMax.z]) corners.push(new THREE.Vector3(x, y, z));
+        }
+      }
+    }
+    // Same ray, any distance: the camera quaternion stays valid while only
+    // the position slides along the view direction.
+    const saved = camera.position.clone();
+    const extentAt = (d: number): number => {
+      camera.position.copy(homeTarget).addScaledVector(viewDir, d);
+      camera.updateMatrixWorld();
+      let maxExt = 0;
+      for (const c of corners) {
+        const p = c.clone().project(camera);
+        maxExt = Math.max(maxExt, Math.abs(p.x), Math.abs(p.y));
+      }
+      return maxExt;
+    };
+    let lo = 400;
+    let hi = 60000;
+    for (let i = 0; i < 24; i++) {
+      const mid = (lo + hi) / 2;
+      if (extentAt(mid) > 0.92) lo = mid;
+      else hi = mid;
+    }
+    const d = (lo + hi) / 2;
+    camera.position.copy(saved);
+    camera.updateMatrixWorld();
+    return d;
+  };
+  let cachedFit = 3000;
+  const fitDistance = (): number => cachedFit;
+  const frameHome = (): void => {
+    controls.target.copy(homeTarget);
+    camera.position.copy(homeTarget).addScaledVector(viewDir, fitDistance());
+    controls.update();
+  };
+  frameHome();
+  cachedFit = computeFit();
+  frameHome();
   // Keyboard orbit only while the canvas itself is focused, so arrows stay
   // free for manual play; damping follows reduced-motion changes live.
   renderer.domElement.tabIndex = 0;
@@ -296,13 +514,9 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel): SceneHan
   syncDamping();
   motionQuery.addEventListener('change', syncDamping);
 
-  scene.add(new THREE.AmbientLight(0xffffff, 0.55));
-  const sun = new THREE.DirectionalLight(0xfff2dd, 1.15);
-  sun.position.set(center.x - 2200, 5200, center.z + 1600);
-  scene.add(sun);
-
   const actorUpdates = new Set<(dt: number, elapsed: number) => void>();
   let followTarget: THREE.Object3D | null = null;
+  let distanceControl = false;
   let lastTime = performance.now();
   let frame = 0;
   const tick = () => {
@@ -310,9 +524,31 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel): SceneHan
     const dt = Math.min((now - lastTime) / 1000, 0.1);
     lastTime = now;
     for (const update of actorUpdates) update(dt, now);
+    for (const update of decorUpdates) update(dt, now);
     if (followTarget !== null) {
-      const k = 1 - Math.exp(-dt * 5);
-      controls.target.lerp(followTarget.position, reducedMotion() ? 1 : k);
+      // Following an actor: keep it centered and pull in close enough that
+      // the actor reads — the route stays in frame, the ghost is the focus.
+      distanceControl = true;
+      const k = reducedMotion() ? 1 : 1 - Math.exp(-dt * 5);
+      controls.target.lerp(followTarget.position, k);
+      const desired = fitDistance() * 0.3;
+      const offset = camera.position.clone().sub(controls.target);
+      const current = offset.length() || 1;
+      offset.multiplyScalar(THREE.MathUtils.lerp(current, desired, k) / current);
+      camera.position.copy(controls.target).add(offset);
+    } else if (distanceControl) {
+      // Follow ended: glide back to the framed overview, then hand control
+      // back to the user (their zoom/orbit is never fought otherwise).
+      const k = reducedMotion() ? 1 : 1 - Math.exp(-dt * 4);
+      controls.target.lerp(homeTarget, k);
+      const desired = fitDistance();
+      const offset = camera.position.clone().sub(controls.target);
+      const current = offset.length() || 1;
+      offset.multiplyScalar(THREE.MathUtils.lerp(current, desired, k) / current);
+      camera.position.copy(controls.target).add(offset);
+      if (Math.abs(current - desired) < 2 && controls.target.distanceTo(homeTarget) < 2) {
+        distanceControl = false;
+      }
     }
     controls.update();
     renderer.render(scene, camera);
@@ -327,6 +563,7 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel): SceneHan
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
     renderer.setSize(w, h);
+    cachedFit = computeFit();
   };
   const observer = new ResizeObserver(resize);
   observer.observe(host);
@@ -362,10 +599,21 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel): SceneHan
       motionQuery.removeEventListener('change', syncDamping);
       observer.disconnect();
       controls.dispose();
-      world.traverse((obj) => {
-        if (obj instanceof THREE.Mesh) obj.geometry.dispose();
-      });
-      for (const material of Object.values(mats)) material.dispose();
+      const shared = new Set<THREE.Material>(Object.values(mats));
+      const disposeAll = (root: THREE.Object3D): void => {
+        root.traverse((obj) => {
+          if (obj instanceof THREE.Mesh) {
+            obj.geometry.dispose();
+            const material = obj.material as THREE.Material | THREE.Material[];
+            for (const m of Array.isArray(material) ? material : [material]) {
+              if (!shared.has(m)) m.dispose();
+            }
+          }
+        });
+      };
+      disposeAll(world);
+      disposeAll(stage);
+      for (const material of shared) material.dispose();
       renderer.dispose();
       renderer.domElement.remove();
     },

@@ -91,21 +91,131 @@ function pointAt(step: PathStep, distance: number): THREE.Vector3 {
   return step.points[0]!.clone();
 }
 
-function actorMesh(color: number, opacity: number): THREE.Mesh {
-  return new THREE.Mesh(
+/** Trail/emissive colors mirror the shell: fail red, pass green (§12). */
+const TRAIL_FAIL = 0x8a3630;
+const TRAIL_PASS = 0x4fbe82;
+
+function actorBody(color: number, emissive: number, opacity: number): THREE.Mesh {
+  const mesh = new THREE.Mesh(
     new THREE.CapsuleGeometry(ACTOR_RADIUS_CM, ACTOR_BODY_CM, 6, 12),
-    new THREE.MeshStandardMaterial({ color, transparent: opacity < 1, opacity, roughness: 0.6 }),
+    new THREE.MeshStandardMaterial({
+      color,
+      emissive,
+      emissiveIntensity: 1.0,
+      transparent: opacity < 1,
+      opacity,
+      roughness: 0.5,
+    }),
   );
+  mesh.castShadow = true;
+  return mesh;
+}
+
+/** A back-face shell one size up: reads as a rim outline from any angle. */
+function actorOutline(color: number, opacity: number): THREE.Mesh {
+  const mesh = new THREE.Mesh(
+    new THREE.CapsuleGeometry(ACTOR_RADIUS_CM, ACTOR_BODY_CM, 6, 12),
+    new THREE.MeshBasicMaterial({
+      color,
+      transparent: true,
+      opacity,
+      side: THREE.BackSide,
+    }),
+  );
+  mesh.scale.setScalar(1.22);
+  return mesh;
+}
+
+/** Bright contact ring at the actor's feet so it grounds and stays findable. */
+function underRing(color: number): THREE.Mesh {
+  const mesh = new THREE.Mesh(
+    new THREE.RingGeometry(30, 42, 24),
+    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.75, side: THREE.DoubleSide }),
+  );
+  mesh.rotation.x = -Math.PI / 2;
+  mesh.position.y = -(ACTOR_CENTER_OFFSET_CM - 12);
+  return mesh;
+}
+
+class PolylineCurve extends THREE.Curve<THREE.Vector3> {
+  private readonly lengths: number[] = [0];
+  constructor(private readonly points: THREE.Vector3[]) {
+    super();
+    for (let i = 1; i < points.length; i++) {
+      this.lengths.push(this.lengths[i - 1]! + points[i]!.distanceTo(points[i - 1]!));
+    }
+  }
+  override getPoint(t: number, target = new THREE.Vector3()): THREE.Vector3 {
+    const total = this.lengths[this.lengths.length - 1]!;
+    const d = Math.max(0, Math.min(1, t)) * total;
+    for (let i = 1; i < this.points.length; i++) {
+      if (d <= this.lengths[i]! || i === this.points.length - 1) {
+        const seg = this.lengths[i]! - this.lengths[i - 1]!;
+        const k = seg === 0 ? 0 : (d - this.lengths[i - 1]!) / seg;
+        return target.copy(this.points[i - 1]!).lerp(this.points[i]!, k);
+      }
+    }
+    return target.copy(this.points[0]!);
+  }
+}
+/** A tapering tail under the capsule: reads as a spirit pawn, not a pill. */
+function ghostWisp(): THREE.Mesh {
+  const mesh = new THREE.Mesh(
+    new THREE.ConeGeometry(30, 80, 12, 1, true),
+    new THREE.MeshBasicMaterial({ color: 0xd57064, transparent: true, opacity: 0.55, side: THREE.DoubleSide }),
+  );
+  mesh.rotation.x = Math.PI;
+  mesh.position.y = -(ACTOR_CENTER_OFFSET_CM - 30);
+  return mesh;
+}
+
+/**
+ * The witness route rendered as an unlit tube on the floor plus an end
+ * marker ring at the route's final state. Fail routes read red; the one
+ * winning route reads pass green.
+ */
+function buildTrail(steps: PathStep[], kind: GhostFinishInfo['kind']): THREE.Group {
+  const group = new THREE.Group();
+  const color = kind === 'solution' ? TRAIL_PASS : TRAIL_FAIL;
+  const points = steps.flatMap((s) => s.points);
+  if (points.length >= 2) {
+    const lifted = points.map((p) => new THREE.Vector3(p.x, p.y + 12, p.z));
+    const total = new PolylineCurve(lifted).getLength();
+    const tube = new THREE.Mesh(
+      new THREE.TubeGeometry(new PolylineCurve(lifted), Math.max(8, Math.ceil(total / 24)), 10, 6),
+      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.8 }),
+    );
+    group.add(tube);
+    const end = lifted[lifted.length - 1]!;
+    // A faint vertical beam at the destination reads through walls: the
+    // viewer sees where the route ends before the ghost gets there.
+    const beam = new THREE.Mesh(
+      new THREE.CylinderGeometry(10, 10, 280, 8, 1, true),
+      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.3, side: THREE.DoubleSide }),
+    );
+    beam.position.set(end.x, end.y + 150, end.z);
+    group.add(beam);
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(40, 62, 28),
+      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.85, side: THREE.DoubleSide }),
+    );
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.set(end.x, end.y + 2, end.z);
+    group.add(ring);
+  }
+  return group;
 }
 
 export class GhostActor {
-  readonly mesh: THREE.Mesh;
+  readonly mesh: THREE.Group;
   private readonly ctx: ActorContext;
   private readonly steps: PathStep[];
   private readonly callbacks: GhostCallbacks;
   private readonly kind: GhostFinishInfo['kind'];
   private readonly missingKeys: string[];
   private readonly unregister: () => void;
+  private readonly body: THREE.Mesh;
+  private readonly trail: THREE.Group;
   private index = 0;
   private distance = 0;
   private stepClock = 0;
@@ -123,12 +233,22 @@ export class GhostActor {
     this.missingKeys = missingKeys;
     this.callbacks = callbacks;
     this.endState = route.length > 0 ? route[route.length - 1]!.after : initialState(ctx.compiled);
-    this.mesh = actorMesh(0xc9564a, 0.55);
+    this.mesh = new THREE.Group();
+    this.body = actorBody(0xe0685c, 0xc2453a, 0.95);
+    this.body.scale.setScalar(1.15);
+    this.mesh.add(this.body, actorOutline(0xffa89c, 0.5), underRing(0xffc0b5), ghostWisp());
+    const ghostLamp = new THREE.PointLight(0xd57064, 260, 1500, 1);
+    ghostLamp.position.y = -(ACTOR_CENTER_OFFSET_CM - 55);
+    this.mesh.add(ghostLamp);
     if (this.steps.length > 0) {
       const start = this.steps[0]!.points[0]!;
       this.mesh.position.set(start.x, start.y + ACTOR_CENTER_OFFSET_CM, start.z);
     }
     ctx.scene.add(this.mesh);
+    // The witness route is drawn on the floor ahead of the ghost: the viewer
+    // sees the doomed path, not just a pawn in the dark.
+    this.trail = buildTrail(this.steps, kind);
+    ctx.scene.add(this.trail);
     ctx.follow(this.mesh);
     this.unregister = ctx.register(this.update);
     this.emit();
@@ -171,16 +291,22 @@ export class GhostActor {
     this.unregister();
     this.ctx.follow(null);
     this.ctx.scene.remove(this.mesh);
-    this.mesh.geometry.dispose();
-    (this.mesh.material as THREE.Material).dispose();
+    this.ctx.scene.remove(this.trail);
+    for (const child of [...this.mesh.children, ...this.trail.children]) {
+      if (child instanceof THREE.Mesh) {
+        child.geometry.dispose();
+        (child.material as THREE.Material).dispose();
+      }
+    }
   }
 
   private update = (dt: number, elapsed: number): void => {
     if (this.finished) {
       if (!reducedMotion()) {
         // Hold at the trapped state, pulsing gently so the eye finds it.
-        const material = this.mesh.material as THREE.MeshStandardMaterial;
-        material.opacity = 0.45 + 0.18 * Math.sin(elapsed * 0.004);
+        const material = this.body.material as THREE.MeshStandardMaterial;
+        material.opacity = 0.55 + 0.2 * Math.sin(elapsed * 0.004);
+        material.emissiveIntensity = 0.8 + 0.4 * Math.sin(elapsed * 0.004);
       }
       return;
     }
@@ -240,7 +366,7 @@ export class GhostActor {
 }
 
 export class PlayerActor {
-  readonly mesh: THREE.Mesh;
+  readonly mesh: THREE.Group;
   private readonly ctx: ActorContext;
   private readonly callbacks: PlayerCallbacks;
   private readonly unregister: () => void;
@@ -253,7 +379,8 @@ export class PlayerActor {
     this.ctx = ctx;
     this.callbacks = callbacks;
     this.state = initialState(ctx.compiled);
-    this.mesh = actorMesh(0xd7d2c4, 1);
+    this.mesh = new THREE.Group();
+    this.mesh.add(actorBody(0xd7d2c4, 0x6e6a5e, 1), underRing(0xf2eee4));
     this.placeAtSpawn();
     ctx.scene.add(this.mesh);
     ctx.follow(this.mesh);
@@ -306,8 +433,12 @@ export class PlayerActor {
     this.unregister();
     this.ctx.follow(null);
     this.ctx.scene.remove(this.mesh);
-    this.mesh.geometry.dispose();
-    (this.mesh.material as THREE.MeshStandardMaterial).dispose();
+    for (const child of this.mesh.children) {
+      if (child instanceof THREE.Mesh) {
+        child.geometry.dispose();
+        (child.material as THREE.Material).dispose();
+      }
+    }
   }
 
 
