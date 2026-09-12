@@ -4,6 +4,8 @@ import type { MoveRecord } from '../core/movement.js';
 import { CARDINALS, type Cardinal, type Door, type LevelModule } from '../../shared/schema.js';
 import { GEOMETRY, centerPoint, dirDelta, portPoint, type Vec3 } from '../core/catalog.js';
 import { doorPassable, type GameState } from '../core/movement.js';
+import { applyOperations } from '../core/level.js';
+import type { Operation } from '../../shared/schema.js';
 import { neighbor, type CompiledLevel } from '../core/topology.js';
 import {
   GhostActor,
@@ -122,10 +124,13 @@ export interface SceneHandle {
   dispose(): void;
   spawnGhost(
     route: MoveRecord[],
-    kind: 'solution' | 'bypass' | 'dead_end',
+    kind: 'solution' | 'bypass' | 'dead_end' | 'replay',
     missingKeys: string[],
     callbacks: GhostCallbacks,
   ): GhostActor;
+  /** Before/after markers for a repair candidate (§9): old positions in
+   * fail-red, proposed positions in pass-green; null clears. */
+  previewOperations(operations: Operation[] | null): void;
   spawnPlayer(callbacks: PlayerCallbacks): PlayerActor;
   /** Arrow-key orbiting is disabled while manual play owns the arrows. */
   setKeyboardOrbit(enabled: boolean): void;
@@ -692,6 +697,73 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel): SceneHan
     return quad;
   };
 
+  // ---- Repair preview markers (§9 before/after) ----
+  const previewGroup = new THREE.Group();
+  previewGroup.visible = false;
+  scene.add(previewGroup);
+  const previewMats = {
+    old: new THREE.MeshBasicMaterial({ color: 0xd57064, transparent: true, opacity: 0.85, side: THREE.DoubleSide }),
+    fresh: new THREE.MeshBasicMaterial({ color: 0x4fbe82, transparent: true, opacity: 0.9, side: THREE.DoubleSide }),
+  };
+  const ringAt = (x: number, y: number, z: number, material: THREE.Material, scale = 1): void => {
+    const ring = new THREE.Mesh(new THREE.RingGeometry(30, 48, 28), material);
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.set(x, y + 4, z);
+    ring.scale.setScalar(scale);
+    previewGroup.add(ring);
+  };
+  const moduleCenter = (id: string): Vec3 | null => {
+    const m = compiled.moduleById.get(id);
+    return m ? centerPoint(m) : null;
+  };
+
+  const clearPreview = (): void => {
+    for (const child of [...previewGroup.children]) {
+      previewGroup.remove(child);
+      if (child instanceof THREE.Mesh) child.geometry.dispose();
+    }
+    previewGroup.visible = false;
+  };
+
+  const buildPreview = (operations: Operation[]): void => {
+    clearPreview();
+    const applied = applyOperations(compiled.level, operations);
+    if (!applied.ok) return;
+    const before = compiled.level;
+    const after = applied.level;
+    const markerForItem = (itemId: string, level: typeof before, material: THREE.Material): void => {
+      const key = level.keys.find((k) => k.id === itemId);
+      const pad = level.switches.find((sw) => sw.id === itemId);
+      const moduleId = key?.moduleId ?? pad?.moduleId;
+      if (moduleId === undefined) return;
+      const c = moduleCenter(moduleId);
+      if (c) ringAt(c.x, c.y, c.z, material);
+    };
+    for (const key of before.keys) {
+      const moved = after.keys.find((k) => k.id === key.id);
+      if (moved === undefined) markerForItem(key.id, before, previewMats.old);
+      else if (moved.moduleId !== key.moduleId) {
+        markerForItem(key.id, before, previewMats.old);
+        markerForItem(key.id, after, previewMats.fresh);
+      }
+    }
+    for (const pad of before.switches) {
+      const moved = after.switches.find((sw) => sw.id === pad.id);
+      if (moved === undefined) markerForItem(pad.id, before, previewMats.old);
+      else if (moved.moduleId !== pad.moduleId) {
+        markerForItem(pad.id, before, previewMats.old);
+        markerForItem(pad.id, after, previewMats.fresh);
+      }
+    }
+    for (const door of after.doors) {
+      if (before.doors.some((d) => d.id === door.id)) continue;
+      const a = moduleCenter(door.a);
+      const b = moduleCenter(door.b);
+      if (a && b) ringAt((a.x + b.x) / 2, (a.y + b.y) / 2, (a.z + b.z) / 2, previewMats.fresh, 0.8);
+    }
+    previewGroup.visible = previewGroup.children.length > 0;
+  };
+
   // ---- Engine-driven world state (§12 visible mechanism state) ----
   // The engine decides openness: doorPassable() against the live actor
   // state. Keyed doors rest locked; sealing doors rest open and slam shut
@@ -800,6 +872,13 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel): SceneHan
       analysisVisible = visible;
       analysisGroup.visible = visible && analysisGroup.children.length > 0;
     },
+    previewOperations(operations) {
+      if (operations === null) {
+        clearPreview();
+        return;
+      }
+      buildPreview(operations);
+    },
     spawnPlayer(callbacks) {
       return new PlayerActor(actorContext, callbacks);
     },
@@ -835,6 +914,8 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel): SceneHan
       }
       analysisMats.stranded.dispose();
       analysisMats.unreachable.dispose();
+      previewMats.old.dispose();
+      previewMats.fresh.dispose();
       for (const material of shared) material.dispose();
       renderer.dispose();
       renderer.domElement.remove();

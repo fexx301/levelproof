@@ -31,7 +31,7 @@ export interface GhostTickState {
 
 export interface GhostFinishInfo {
   endState: GameState;
-  kind: 'solution' | 'bypass' | 'dead_end';
+  kind: 'solution' | 'bypass' | 'dead_end' | 'replay';
   missingKeys: string[];
 }
 
@@ -186,7 +186,7 @@ function ghostWisp(): THREE.Mesh {
  */
 function buildTrail(steps: PathStep[], kind: GhostFinishInfo['kind']): THREE.Group {
   const group = new THREE.Group();
-  const color = kind === 'solution' ? TRAIL_PASS : TRAIL_FAIL;
+  const color = kind === 'solution' || kind === 'replay' ? TRAIL_PASS : TRAIL_FAIL;
   const points = steps.flatMap((s) => s.points);
   if (points.length >= 2) {
     const lifted = points.map((p) => new THREE.Vector3(p.x, p.y + 12, p.z));

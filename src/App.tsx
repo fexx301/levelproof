@@ -198,11 +198,23 @@ function Viewport({ level, mode, report }: { level: Level; mode: Mode; report: R
     sceneRef.current?.setAnalysisVisible(mode !== 'playing');
   }, [mode, level]);
 
+  // Repair preview markers follow the store (§9 before/after).
+  const previewOps = useApp((st) => st.previewOps);
+  useEffect(() => {
+    sceneRef.current?.previewOperations(previewOps);
+  }, [previewOps, level]);
+
   // Ghost: replays a verifier witness route — never a fabricated one.
   useEffect(() => {
     const scene = sceneRef.current;
     if (!scene || mode !== 'watching' || witnessKind === null) return;
-    const option = witnessOptions(report).find((o) => o.kind === witnessKind);
+    const replayRoute = useApp.getState().repairReplay;
+    const option =
+      witnessKind === 'replay'
+        ? replayRoute !== null && replayRoute.length > 0
+          ? { kind: 'replay' as const, route: replayRoute, missingKeys: [] }
+          : null
+        : witnessOptions(report).find((o) => o.kind === witnessKind);
     if (!option || option.route.length === 0) return;
     const actor = scene.spawnGhost(option.route, option.kind, option.missingKeys, {
       onTick: (state) => {
@@ -217,7 +229,9 @@ function Viewport({ level, mode, report }: { level: Level; mode: Mode; report: R
             ? `Stranded at “${info.endState.moduleId}” — no winning route remains.`
             : info.kind === 'bypass'
               ? `Reached the goal without the ${info.missingKeys.join(' and the ')}.`
-              : 'Goal reached.';
+              : info.kind === 'replay'
+                ? 'Route complete — the same moves no longer strand the player.'
+                : 'Goal reached.';
         useApp.setState({ ghost: { ...current, finished: true, playing: false, endNote } });
       },
     });

@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { RuleProposalResult, CompileResult } from '../../shared/compile-result.js';
 import { compileOkResponseSchema, explainOkResponseSchema } from '../../shared/api.js';
-import type { Level } from '../../shared/schema.js';
+import type { Level, Operation } from '../../shared/schema.js';
 import { unfamiliarLevel } from '../core/fixtures/unfamiliar.js';
 import { vaultEmptyLevel } from '../core/fixtures/vault-empty.js';
 import { twinKeysLevel, overpassLevel, gauntletLevel } from '../core/fixtures/gallery.js';
@@ -9,6 +9,7 @@ import { blankCanvasLevel } from '../core/fixtures/blank-canvas.js';
 import { applyOperations } from '../core/level.js';
 import { findRepairs, type RepairCandidate } from '../core/search.js';
 import { verify, type Report } from '../core/verifier.js';
+import type { MoveRecord } from '../core/movement.js';
 import { revisionId } from '../core/serialize.js';
 
 /** Gallery scenes (§12): the seeded vault plus three verified showcase levels. */
@@ -32,7 +33,7 @@ export type SceneId = (typeof SCENES)[number]['id'];
  */
 
 type Mode = 'authoring' | 'watching' | 'playing';
-type WitnessKind = 'solution' | 'dead_end' | 'bypass';
+type WitnessKind = 'solution' | 'dead_end' | 'bypass' | 'replay';
 
 interface DraftState {
   level: Level;
@@ -87,6 +88,10 @@ interface ExplainSlice {
 interface AppState {
   acceptedLevel: Level;
   sceneId: SceneId;
+  /** Repair preview: the candidate's operations rendered as scene markers. */
+  previewOps: Operation[] | null;
+  /** The failing witness route that existed before the applied repair. */
+  repairReplay: MoveRecord[] | null;
   previousAccepted: Level | null;
   draft: DraftState | null;
   pendingRule: { proposal: RuleProposalResult; base: Level } | null;
@@ -113,6 +118,9 @@ interface AppState {
   exitToAuthoring: () => void;
   runRepairs: (report: Report) => void;
   applyRepair: (index: number) => void;
+  previewRepair: (index: number) => void;
+  clearPreview: () => void;
+  watchReplay: () => void;
 }
 
 const GHOST_INITIAL: GhostSlice = {
@@ -194,6 +202,8 @@ function initialLevel(): Level {
 export const useApp = create<AppState>()((set, get) => ({
   acceptedLevel: initialLevel(),
   sceneId: 'balcony-vault',
+  previewOps: null,
+  repairReplay: null,
   previousAccepted: null,
   draft: null,
   pendingRule: null,
@@ -297,8 +307,9 @@ export const useApp = create<AppState>()((set, get) => ({
           return;
         }
         settleDraft(set, base, applied.level, false);
+        set({ repairReplay: null, previewOps: null });
       } else if (result.type === 'rule_proposal') {
-        set({ pendingRule: { proposal: result, base } });
+        set({ pendingRule: { proposal: result, base }, repairReplay: null, previewOps: null });
       }
       set({ busy: false });
     } catch (error) {
@@ -322,7 +333,8 @@ export const useApp = create<AppState>()((set, get) => ({
 
   declineRule: () => set({ pendingRule: null }),
 
-  discardDraft: () => set({ draft: null, pendingRule: null, ghost: GHOST_INITIAL, play: PLAY_INITIAL, repair: REPAIR_INITIAL }),
+  discardDraft: () =>
+    set({ draft: null, pendingRule: null, ghost: GHOST_INITIAL, play: PLAY_INITIAL, repair: REPAIR_INITIAL, previewOps: null, repairReplay: null }),
 
   undo: () => {
     const { previousAccepted } = get();
@@ -336,6 +348,8 @@ export const useApp = create<AppState>()((set, get) => ({
       ghost: GHOST_INITIAL,
       play: PLAY_INITIAL,
       repair: REPAIR_INITIAL,
+      previewOps: null,
+      repairReplay: null,
     });
   },
 
@@ -354,6 +368,8 @@ export const useApp = create<AppState>()((set, get) => ({
       play: PLAY_INITIAL,
       repair: REPAIR_INITIAL,
       explain: EXPLAIN_INITIAL,
+      previewOps: null,
+      repairReplay: null,
       sceneId: 'balcony-vault',
     }),
 
@@ -374,6 +390,8 @@ export const useApp = create<AppState>()((set, get) => ({
       play: PLAY_INITIAL,
       repair: REPAIR_INITIAL,
       explain: EXPLAIN_INITIAL,
+      previewOps: null,
+      repairReplay: null,
       sceneId: id,
     });
   },
@@ -418,7 +436,31 @@ export const useApp = create<AppState>()((set, get) => ({
       set({ repair: { ...repair, applyError: `The repair was rejected: ${applied.errors[0]}` } });
       return;
     }
+    // Stash the route that failed, so it can be replayed on the repaired
+    // scene — the same moves, no longer fatal.
+    const failing =
+      draft.report.checks.recovery.witness?.route ?? draft.report.checks.requirements.witness?.route ?? [];
     settleDraft(set, acceptedLevel, applied.level, false);
+    set({ previewOps: null, repairReplay: failing.length > 0 ? failing : null });
+  },
+
+  previewRepair: (index) => {
+    const { repair } = get();
+    const candidate = repair.candidates[index];
+    set({ previewOps: candidate ? candidate.operations : null });
+  },
+
+  clearPreview: () => set({ previewOps: null }),
+
+  watchReplay: () => {
+    const { repairReplay } = get();
+    if (repairReplay === null || repairReplay.length === 0) return;
+    set({
+      mode: 'watching',
+      ghost: { ...GHOST_INITIAL, witnessKind: 'replay' },
+      play: PLAY_INITIAL,
+      previewOps: null,
+    });
   },
 }));
 
