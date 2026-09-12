@@ -19,8 +19,10 @@ export const MODEL_OPTIONS: Record<string, ModelCallOptions> = {
   'deepseek/deepseek-v4-flash': { useSchema: true, reasoningEffort: 'low', maxTokens: 4000 },
   'deepseek/deepseek-v3.2': { useSchema: true, reasoningEffort: 'low', maxTokens: 4000 },
   'qwen/qwen-plus': { useSchema: true, reasoningEffort: 'low', maxTokens: 4000 },
-  'google/gemini-2.5-flash-lite': { useSchema: false },
-  'google/gemini-3.7-flash': { useSchema: false },
+  // From-scratch builds emit 10+ verbose operations; the old 2000-token
+  // default truncated their JSON into guaranteed schema failures.
+  'google/gemini-2.5-flash-lite': { useSchema: false, maxTokens: 8000 },
+  'google/gemini-3.7-flash': { useSchema: false, maxTokens: 8000 },
 };
 
 export function callOptionsFor(model: string): StructuredOptions {

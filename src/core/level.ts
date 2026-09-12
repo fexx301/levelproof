@@ -85,6 +85,11 @@ export function validateLevel(level: Level): string[] {
     if (c?.requiresKey !== undefined && !keyIds.has(c.requiresKey)) {
       errors.push(`Door "${d.id}" requires unknown key "${c.requiresKey}".`);
     }
+    if (c?.requiresKeys !== undefined) {
+      for (const keyId of c.requiresKeys) {
+        if (!keyIds.has(keyId)) errors.push(`Door "${d.id}" requires unknown key "${keyId}".`);
+      }
+    }
     if (c?.requiresSwitch !== undefined && !switchIds.has(c.requiresSwitch)) {
       errors.push(`Door "${d.id}" requires unknown switch "${c.requiresSwitch}".`);
     }

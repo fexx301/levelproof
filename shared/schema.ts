@@ -63,6 +63,8 @@ export const switchItemSchema = z.strictObject({ id: idSchema, moduleId: idSchem
  */
 export const doorConditionsSchema = z.strictObject({
   requiresKey: idSchema.optional(),
+  /** AND semantics: every listed key must be held (at most 3, one per kit key). */
+  requiresKeys: z.array(idSchema).max(3).optional(),
   requiresSwitch: idSchema.optional(),
   closesAfterSwitch: idSchema.optional(),
 });

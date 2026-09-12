@@ -2,6 +2,37 @@
 
 Build-window decisions and measured evidence, newest first. Dates are 2026.
 
+## Sep 12 (items 4/5/6 — from-scratch generation, twist, kit breadth)
+
+- **From-scratch generation shipped and measured**: a **Blank canvas** seed
+  (spawn → walk → goal, trivially green) in the scene picker. The battery's
+  new `scratch` class (6 whole-puzzle phrasings, engine-graded with rule
+  approval simulated): **6/6 accepted builds** (4–6 modules added each,
+  ~$0.014/build). The initial 0/6 was a **measurement artifact with a real
+  root cause**: the provider's default `max_tokens: 2000` truncated
+  multi-operation JSON into guaranteed schema failures — raised to 8000 for
+  the Gemini models (cap, not charge; only actual tokens bill). The battery
+  script also had an error-path bookkeeping bug that recorded $0 cost and
+  hid attempts for failed compiles, making schema failures look like
+  provider outages — fixed; error bodies now record attempts and cost
+  honestly.
+- **Suggest a twist shipped**: a universal chip whose canned prompt asks the
+  model for one mechanic that fits the current scene. Measured 2/3 (the
+  third a pre-token-fix casualty); live on production against the Gauntlet
+  it produced the product thesis in one click: model proposed a trap →
+  **Recovery=fail, 14 red stranded floors, stranded witness ready** for
+  repair. A twist that breaks the puzzle is a PASS by design — the engine
+  judging it IS the product.
+- **Multi-key doors shipped (`requiresKeys`)**: AND semantics — every listed
+  key must be held (≤3, one per kit key). Schema, movement
+  (`doorPassable`), level validation (dangling references rejected),
+  renderer (one keyhole gem per required key, fanned across the lintel),
+  and system-prompt documentation. Live proof: "Make the outer vault door
+  require both keys" on The Twin Keys compiled to
+  `requiresKeys: ["silver-key","gold-key"]` with all checks green — the
+  model adopted the new condition from prompt documentation alone. Suite at
+  64 (AND-blocking, validity, checker, dangling-ref tests).
+
 ## Sep 12 (competitive depth — self-repair, verification viz, gallery)
 
 - **Patch self-repair shipped** (`b3f0238`): the compile service now

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { DisclosureGlyph } from './check-strip.js';
-import { EXAMPLE_PROMPTS } from './example-prompts.js';
+import { EXAMPLE_PROMPTS, TWIST_PROMPT } from './example-prompts.js';
 import { useApp } from '../state/store.js';
 
 /** The prompt panel (§12): describe a change, watch it compile. */
@@ -27,6 +27,7 @@ export function PromptPanel() {
       prompt: hasKey ? EXAMPLE_PROMPTS.trap : EXAMPLE_PROMPTS.trapOneShot,
     },
     { label: 'Remove the ramp', prompt: EXAMPLE_PROMPTS.removeRamp },
+    { label: 'Suggest a twist', prompt: TWIST_PROMPT },
   ];
   const runExample = (prompt: string) => {
     setText(prompt);

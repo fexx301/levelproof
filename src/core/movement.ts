@@ -53,6 +53,12 @@ export function doorPassable(compiled: CompiledLevel, doorId: string, state: Gam
     const bit = compiled.keyBit.get(conditions.requiresKey);
     if (bit === undefined || (state.keyMask & bit) === 0) return false;
   }
+  if (conditions?.requiresKeys !== undefined) {
+    for (const keyId of conditions.requiresKeys) {
+      const bit = compiled.keyBit.get(keyId);
+      if (bit === undefined || (state.keyMask & bit) === 0) return false;
+    }
+  }
   if (conditions?.requiresSwitch !== undefined) {
     const bit = compiled.switchBit.get(conditions.requiresSwitch);
     if (bit === undefined || (state.switchMask & bit) === 0) return false;

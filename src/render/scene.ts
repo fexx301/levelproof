@@ -196,7 +196,7 @@ function addModule(world: THREE.Group, mats: Mats, compiled: CompiledLevel, m: L
 
 function doorMaterial(mats: Mats, door: Door): THREE.MeshStandardMaterial {
   const conditions = door.conditions;
-  if (conditions?.requiresKey !== undefined) return mats.doorKey;
+  if (conditions?.requiresKey !== undefined || conditions?.requiresKeys !== undefined) return mats.doorKey;
   if (conditions?.closesAfterSwitch !== undefined) return mats.doorSeal;
   return mats.doorPlain;
 }
@@ -243,13 +243,23 @@ function addDoorFrames(world: THREE.Group, mats: Mats, compiled: CompiledLevel):
       world.add(sill);
       // Type telegraph: a keyhole gem on keyed doors, a warning bar on seals.
       const conditions = door.conditions;
-      if (conditions?.requiresKey !== undefined) {
-        const gem = new THREE.Mesh(
-          new THREE.OctahedronGeometry(12),
-          new THREE.MeshBasicMaterial({ color: 0xe8c65a, transparent: true, opacity: 0.6 }),
-        );
-        gem.position.set(p.x, p.y + DOOR_POST_HEIGHT_CM + 24, p.z);
-        world.add(gem);
+      const requiredKeys = conditions?.requiresKeys ?? (conditions?.requiresKey !== undefined ? [conditions.requiresKey] : []);
+      if (requiredKeys.length > 0) {
+        // One keyhole gem per required key, fanned across the lintel.
+        const span = Math.min(requiredKeys.length, 3);
+        for (let i = 0; i < span; i++) {
+          const gem = new THREE.Mesh(
+            new THREE.OctahedronGeometry(12),
+            new THREE.MeshBasicMaterial({ color: 0xe8c65a, transparent: true, opacity: 0.6 }),
+          );
+          const offset = (i - (span - 1) / 2) * 34;
+          gem.position.set(
+            p.x + (alongX ? offset : 0),
+            p.y + DOOR_POST_HEIGHT_CM + 24,
+            p.z + (alongX ? 0 : offset),
+          );
+          world.add(gem);
+        }
       } else if (conditions?.closesAfterSwitch !== undefined) {
         const bar = new THREE.Mesh(
           new THREE.BoxGeometry(alongX ? span * 0.72 : 14, 10, alongX ? 14 : span * 0.72),

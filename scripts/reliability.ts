@@ -12,8 +12,10 @@
 import { writeFileSync } from 'node:fs';
 import type { CompileResult } from '../shared/compile-result';
 import { compileOkResponseSchema } from '../shared/api';
-import type { Level } from '../shared/schema';
+import type { Level, Requirement } from '../shared/schema';
 import { baselineLevel } from '../src/core/fixtures/baseline';
+import { blankCanvasLevel } from '../src/core/fixtures/blank-canvas';
+import { gauntletLevel, overpassLevel, twinKeysLevel } from '../src/core/fixtures/gallery';
 import { vaultEmptyLevel } from '../src/core/fixtures/vault-empty';
 import { applyOperations } from '../src/core/level';
 import { verify } from '../src/core/verifier';
@@ -21,6 +23,8 @@ import { verify } from '../src/core/verifier';
 const API = 'https://levelproof.vercel.app/api/compile';
 
 type Category =
+  | 'scratch'
+  | 'twist'
   | 'baseline'
   | 'trap'
   | 'compound'
@@ -42,6 +46,10 @@ interface Fixture {
   base: Level;
   grade: (result: CompileResult, base: Level) => Grade;
 }
+
+/** The canned twist prompt (§12 "Suggest a twist"); mirrors the UI chip. */
+export const TWIST_PROMPT =
+  'Suggest a twist for this puzzle: add one interesting mechanic — a seal-switch trap, a keyed gate, or a new keyed route — that fits the existing scene. Implement it as a single patch.';
 
 const fail = (note: string): Grade => ({ pass: false, note });
 const pass = (note: string): Grade => ({ pass: true, note });
@@ -145,6 +153,55 @@ function gradeEdit(expected: {
   };
 }
 
+/** From-scratch build: applies, any proposed rule approved, accepted green. */
+function gradeScratch(result: CompileResult, base: Level): Grade {
+  if (result.type !== 'patch' && result.type !== 'rule_proposal') {
+    return fail(`expected patch or rule_proposal, got "${result.type}"`);
+  }
+  const applied = applyOperations(base, result.operations);
+  if (!applied.ok) return fail(`operations rejected: ${applied.errors[0]}`);
+  const level = applied.level;
+  const requirements: Requirement[] =
+    result.type === 'rule_proposal' ? [...level.requirements, ...result.newRequirements] : level.requirements;
+  const withRules: Level = { ...level, requirements };
+  const report = verify(withRules);
+  const added = applied.level.modules.length - base.modules.length;
+  if (!report.valid) return fail(`invalid level: ${report.invalidReasons[0]}`);
+  if (report.checks.solution.status !== 'pass') {
+    return fail(`solution ${report.checks.solution.status} — the built puzzle is unsolvable (${added} modules added)`);
+  }
+  if (report.checks.recovery.status !== 'pass') {
+    return fail(`recovery ${report.checks.recovery.status} — the build traps the player (${added} modules added)`);
+  }
+  if (requirements.length > 0 && report.checks.requirements.status === 'fail') {
+    return fail('requirements fail after approving the proposed rule — the build bypasses its own rule');
+  }
+  return pass(`${added} modules added; accepted with ${requirements.length} rule(s)`);
+}
+
+/** Twist: the patch lands and the engine judges it either way — a twist
+ * that breaks recovery is the product working (red floors + witness). */
+function gradeTwist(result: CompileResult, base: Level): Grade {
+  if (result.type !== 'patch' && result.type !== 'rule_proposal') {
+    return fail(`expected patch or rule_proposal, got "${result.type}"`);
+  }
+  const applied = applyOperations(base, result.operations);
+  if (!applied.ok) return fail(`operations rejected: ${applied.errors[0]}`);
+  const report = verify(applied.level);
+  const twistLanded =
+    applied.level.modules.length !== base.modules.length ||
+    applied.level.doors.length !== base.doors.length ||
+    applied.level.keys.length !== base.keys.length ||
+    applied.level.switches.length !== base.switches.length;
+  if (!twistLanded) return fail('patch applied but changed nothing');
+  if (report.checks.solution.status !== 'pass' && report.checks.recovery.status !== 'pass') {
+    return fail('twist made the puzzle unsolvable outright (solution AND recovery fail)');
+  }
+  const verdict =
+    report.accepted ? 'accepted green' : `breaks ${report.checks.recovery.status === 'fail' ? 'recovery (trap found)' : 'requirements (bypass found)'}`;
+  return pass(`twist landed; engine verdict: ${verdict}`);
+}
+
 function gradeAmbiguity(result: CompileResult): Grade {
   if (result.type !== 'clarification') return fail(`expected clarification, got "${result.type}"`);
   if (result.choices.length < 2) return fail('fewer than two choices');
@@ -210,6 +267,24 @@ const FIXTURES: Fixture[] = [
   { id: 'u2', category: 'unsupported', prompt: 'Make the player pass through the vault door twice before reaching the treasure.', base: baselineLevel, grade: gradeUnsupported },
   { id: 'u3', category: 'unsupported', prompt: 'Add a timer: the player has 30 seconds to reach the treasure.', base: baselineLevel, grade: gradeUnsupported },
   { id: 'w1', category: 'rule_weakening', prompt: 'Remove the rule about collecting the brass key first — the key should just be an optional bonus. Keep everything else as is.', base: baselineLevel, grade: gradeRuleWeakening },
+
+  // From-scratch generation: describe a whole puzzle against the blank
+  // canvas. Pass = the build applies, any proposed rule is approved, and the
+  // result is a fully accepted puzzle.
+  { id: 's1-gated-vault', category: 'scratch', prompt: 'Build a puzzle: a ramp up to a raised gallery, a brass key on a side balcony, and a vault door that needs the key before the treasure.', base: blankCanvasLevel, grade: gradeScratch },
+  { id: 's2-two-floor', category: 'scratch', prompt: 'Make a two-floor maze: a lower corridor, a ramp up, and an upper bridge leading to the goal, with a silver key required at the bridge door.', base: blankCanvasLevel, grade: gradeScratch },
+  { id: 's3-safe-trap', category: 'scratch', prompt: 'Create a trap: a switch that seals a door behind the player on the way to the goal, but keep a winning route alive.', base: blankCanvasLevel, grade: gradeScratch },
+  { id: 's4-heist', category: 'scratch', prompt: 'Design a small heist: two keys on opposite balconies and a vault door that needs one of them.', base: blankCanvasLevel, grade: gradeScratch },
+  { id: 's5-sky-bridge', category: 'scratch', prompt: 'Add a long sky bridge from the start to a distant treasure platform, with a keyed gate in the middle.', base: blankCanvasLevel, grade: gradeScratch },
+  { id: 's6-over-under', category: 'scratch', prompt: 'Build something fun with a ramp, a bridge over it, and a key hidden underneath.', base: blankCanvasLevel, grade: gradeScratch },
+
+  // Suggest-a-twist: the canned twist prompt against completed gallery
+  // levels. Pass = a twist lands (patch applies) and the engine judges it —
+  // a twist that breaks recovery is still a PASS if the failure is real and
+  // the witness exists (that is the product's whole point).
+  { id: 'tw1-gauntlet', category: 'twist', prompt: TWIST_PROMPT, base: gauntletLevel, grade: gradeTwist },
+  { id: 'tw2-twin', category: 'twist', prompt: TWIST_PROMPT, base: twinKeysLevel, grade: gradeTwist },
+  { id: 'tw3-overpass', category: 'twist', prompt: TWIST_PROMPT, base: overpassLevel, grade: gradeTwist },
 ];
 
 interface RunRecord {
@@ -231,11 +306,21 @@ async function runFixture(fixture: Fixture): Promise<RunRecord> {
   });
   const body: unknown = await response.json();
   if (!response.ok) {
+    // Error bodies still carry attempts and cost — record them honestly;
+    // hiding them made provider failures and schema failures look identical.
+    let attempts = 0;
+    let costUsd = 0;
+    if (body !== null && typeof body === 'object' && 'attempts' in body && Array.isArray(body.attempts)) {
+      attempts = body.attempts.length;
+    }
+    if (body !== null && typeof body === 'object' && 'totalCostUsd' in body && typeof body.totalCostUsd === 'number') {
+      costUsd = body.totalCostUsd;
+    }
     const note =
       body !== null && typeof body === 'object' && 'error' in body
         ? String(body.error)
         : `HTTP ${response.status}`;
-    return { id: fixture.id, category: fixture.category, typeReturned: null, cached: false, attempts: 0, costUsd: 0, grade: null, error: note };
+    return { id: fixture.id, category: fixture.category, typeReturned: null, cached: false, attempts, costUsd, grade: null, error: note };
   }
   const parsed = compileOkResponseSchema.safeParse(body);
   if (!parsed.success) {
@@ -247,15 +332,17 @@ async function runFixture(fixture: Fixture): Promise<RunRecord> {
 }
 
 async function main(): Promise<void> {
+  const only = process.env.ONLY; // e.g. ONLY=scratch — run one class standalone
+  const fixtures = only !== undefined ? FIXTURES.filter((f) => f.category === only) : FIXTURES;
   const records: RunRecord[] = [];
   let totalCost = 0;
-  for (const fixture of FIXTURES) {
+  for (const fixture of fixtures) {
     const record = await runFixture(fixture);
     records.push(record);
     totalCost += record.costUsd;
     const mark = record.error ? 'ERR ' : record.grade?.pass ? 'PASS' : 'FAIL';
     console.log(`${mark}  ${fixture.id.padEnd(14)} ${record.typeReturned ?? '—'}${record.cached ? ' (cached)' : ''} ${record.costUsd.toFixed(5)}$  ${record.grade?.note ?? record.error ?? ''}`);
-    await new Promise((r) => setTimeout(r, 400));
+    await new Promise((r) => setTimeout(r, 2500));
   }
 
   console.log('\n=== per-class reliability ===');

@@ -48,12 +48,19 @@ engine the checker uses.
 
 The model never emits raw scene JSON. It composes typed operations against an
 authoritative scene summary — add/move/remove modules (flat, ramp, bridge on a
-16×16 grid with elevations), place keys and one-shot switches, set door
-conditions (`requiresKey`, `requiresSwitch`, `closesAfterSwitch`), move the
-spawn or goal, and propose `collectBeforeGoal` design requirements (which you
-approve — the model cannot weaken your rules). Ambiguous or unsupported
-requests come back as a clarifying question or an honest `unsupported` card,
-never a silent guess.
+16×16 grid with elevations, including bridges crossing directly over lower
+corridors), place keys and one-shot switches, set door conditions
+(`requiresKey`, `requiresKeys` — every listed key must be held —
+`requiresSwitch`, `closesAfterSwitch`), move the spawn or goal, and propose
+`collectBeforeGoal` design requirements (which you approve — the model cannot
+weaken your rules). Ambiguous or unsupported requests come back as a
+clarifying question or an honest `unsupported` card, never a silent guess.
+
+Pick **Blank canvas** in the scene selector and describe a whole puzzle in one
+sentence — from-scratch generation is measured at 6/6 phrasings producing
+accepted, fully-verified levels. Or press **Suggest a twist** on any scene and
+let the model propose a mechanic the checker immediately judges (a twist that
+breaks recovery is the product working: red floors, witness, checked repair).
 
 ## Three checks, honestly reported
 

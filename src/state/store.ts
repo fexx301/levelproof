@@ -5,6 +5,7 @@ import type { Level } from '../../shared/schema.js';
 import { unfamiliarLevel } from '../core/fixtures/unfamiliar.js';
 import { vaultEmptyLevel } from '../core/fixtures/vault-empty.js';
 import { twinKeysLevel, overpassLevel, gauntletLevel } from '../core/fixtures/gallery.js';
+import { blankCanvasLevel } from '../core/fixtures/blank-canvas.js';
 import { applyOperations } from '../core/level.js';
 import { findRepairs, type RepairCandidate } from '../core/search.js';
 import { verify, type Report } from '../core/verifier.js';
@@ -13,6 +14,7 @@ import { revisionId } from '../core/serialize.js';
 /** Gallery scenes (§12): the seeded vault plus three verified showcase levels. */
 export const SCENES = [
   { id: 'balcony-vault', label: 'The Balcony Vault', level: vaultEmptyLevel },
+  { id: 'blank-canvas', label: 'Blank canvas', level: blankCanvasLevel },
   { id: 'twin-keys', label: 'The Twin Keys', level: twinKeysLevel },
   { id: 'overpass', label: 'The Overpass', level: overpassLevel },
   { id: 'gauntlet', label: 'The Gauntlet', level: gauntletLevel },

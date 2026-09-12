@@ -20,3 +20,12 @@ export const EXAMPLE_PROMPTS = {
   trapOneShot:
     'Put the brass key on the key balcony and make the vault door require it. Then add a switch named seal-switch on the vault approach, and a door named gallery-door between the gallery and the bridge landing that closes permanently after the seal-switch activates.',
 } as const;
+
+/**
+ * The universal twist suggestion (§12 "Suggest a twist"): the model proposes
+ * one mechanic that fits the current scene; the engine then judges it — a
+ * twist that breaks recovery is the product working, not failing (red
+ * floors, witness, checked repair). Byte-identical to scripts/reliability.ts.
+ */
+export const TWIST_PROMPT =
+  'Suggest a twist for this puzzle: add one interesting mechanic — a seal-switch trap, a keyed gate, or a new keyed route — that fits the existing scene. Implement it as a single patch.';
