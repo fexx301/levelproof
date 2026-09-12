@@ -2,6 +2,21 @@
 
 Build-window decisions and measured evidence, newest first. Dates are 2026.
 
+## Sep 12 (verification discipline — advisory catch)
+
+- **A piped-verification hole was caught and closed**: `;`-chained checks
+  piped through `tail`/`grep` reported success while lint had four errors,
+  and the commit went through. Fixed (`e2470fb`), and verification now runs
+  as `set -o pipefail && typecheck && lint && test && build` with commit
+  inside the chain — a failing check stops the push. The lint errors
+  themselves were emitted-code-identical (type import, let→const), so the
+  deployed bundle was never wrong, but the process was.
+- README refreshed for selection, keep-this, and save/share/remix;
+  `docs/creator-session-script.md` written as the §14/§17 session protocol
+  (six beats: warm-up, free build, intentional break, read the failure,
+  choose a repair, share — measuring hesitations, surprises, and
+  checker-caught-what-they-missed moments).
+
 ## Sep 12 (items 4 and 6 — preservation constraints; save, share, remix)
 
 - **"Keep this" preservation constraints shipped** (§9, user-approved

@@ -42,7 +42,9 @@ tiles can strand a player, dimmed tiles are unreachable — the exhaustive
 search made visible (hidden while you play, so it never spoils the puzzle).
 
 You can also play any scene yourself with the keyboard — the same movement
-engine the checker uses.
+engine the checker uses. **Save** stores your puzzle locally; **Share** copies
+a link that opens it directly in play mode, where a friend can press
+**Remix this puzzle** to start editing their own copy.
 
 ## What the AI can edit
 
@@ -61,6 +63,13 @@ sentence — from-scratch generation is measured at 6/6 phrasings producing
 accepted, fully-verified levels. Or press **Suggest a twist** on any scene and
 let the model propose a mechanic the checker immediately judges (a twist that
 breaks recovery is the product working: red floors, witness, checked repair).
+
+You can also **click anything in the scene** — a floor, key, switch, or door —
+and describe the change relative to it: "move this behind that door", "make
+these two doors require both keys", "put a switch here". And when a repair
+would touch something you care about, select it and press **Keep these**: the
+repair search then excludes anything that moves or removes it, and says so
+when that leaves no checked fix.
 
 ## Three checks, honestly reported
 
