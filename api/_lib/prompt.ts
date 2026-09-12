@@ -9,6 +9,12 @@ import { BOUNDS, type Level } from '../../shared/schema.js';
 export function sceneSummary(level: Level): string {
   return JSON.stringify(
     {
+      // 16x16 occupancy map, one row per z (north z=0 first), one char per x
+      // (west x=0 first): '.' free at every elevation, '0'/'1'/'2' occupied at
+      // exactly that elevation, 'M' stacked (multiple elevations — see modules).
+      // Read this before placing modules; a new module needs a '.' cell (or a
+      // free elevation under 'M').
+      occupiedGrid: occupancyGrid(level),
       modules: [...level.modules]
         .sort((a, b) => (a.id < b.id ? -1 : 1))
         .map((m) => ({
@@ -33,8 +39,23 @@ export function sceneSummary(level: Level): string {
   );
 }
 
+function occupancyGrid(level: Level): string[] {
+  const rows: string[] = [];
+  for (let z = 0; z < 16; z++) {
+    let row = '';
+    for (let x = 0; x < 16; x++) {
+      const elevations = new Set(level.modules.filter((m) => m.x === x && m.z === z).map((m) => m.h));
+      if (elevations.size === 0) row += '.';
+      else if (elevations.size === 1) row += String([...elevations][0]);
+      else row += 'M';
+    }
+    rows.push(row);
+  }
+  return rows;
+}
+
 /** Bump when the system prompt changes; participates in the cache key (§10.2). */
-export const PROMPT_VERSION = 'prompt-4';
+export const PROMPT_VERSION = 'prompt-6';
 
 export function buildSystemPrompt(level: Level, baseRevision: string): string {
   return `You are the compiler for LevelProof, a 3D puzzle editor with discrete movement. Convert the user's request into exactly ONE typed result: a patch, a clarification, a rule_proposal, or an unsupported response. You compose typed edits against the scene; you never invent traversal rules, verify puzzles, or emit raw level JSON.
@@ -49,6 +70,8 @@ KIT RULES:
 - Keys (at most ${BOUNDS.maxKeys}) are collected on arrival and never consumed or dropped. Switches (at most ${BOUNDS.maxSwitches}) activate once on arrival. Doors sit between two connected modules; at most one door per edge; conditions may combine requiresKey, requiresSwitch, and closesAfterSwitch (the door becomes permanently impassable once that switch activates).
 - Doors, switches, and keys NEVER require new geometry: a door is an edge between two EXISTING connected modules (use addDoor with a and b set to existing module ids); a switch or key is an item ON an existing flat module (use addItem with an existing moduleId). Never create a module to host a door, switch, or key — such patches are rejected as overlaps.
 - A door with closesAfterSwitch: S starts OPEN (passable) and seals permanently the moment switch S activates. A player who activates S before crossing is stranded on the far side — this is the intended "switch trap" pattern.
+- Every cell (x, z, h) holds at most ONE module. Before addModule, scan the scene's modules and choose a cell that is FREE at that elevation — patches placing a module on an occupied cell are rejected as overlaps. Bridge chains must step through free cells, port by port.
+- Reference EXISTING modules only by their exact "id" from the scene; "label" is descriptive prose, never an id (for example "upper gallery" is the label of module "bridge-landing"). addDoor's a/b and addItem's moduleId must be exact existing ids, or the patch is rejected.
 - Items, spawn, and goal sit on flat modules only; at most one item per module. Spawn and goal always exist.
 - The only supported requirement type is collectBeforeGoal(keyId).
 

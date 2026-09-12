@@ -82,8 +82,10 @@ a rule is a separate, explicitly approved diff.
 
 ## Model and cache, disclosed
 
-Compiles run through OpenRouter (`google/gemini-2.5-flash-lite`, fallback
-`google/gemini-3.7-flash`; selection recorded in `docs/model-eval.md`).
+Compiles run through OpenRouter (`google/gemini-3.7-flash`, fallback
+`google/gemini-2.5-flash-lite`; chosen by a measured reliability battery —
+30+ phrasings graded by the deterministic engine — see
+`docs/model-eval.md` and `scripts/reliability.ts`).
 Identical requests — same level, rules, prompt, and versions — are served from
 an exact-match cache, and the UI always shows whether you are seeing a
 **Fresh compile** or a **Cached compile** with its model, cost, and attempt

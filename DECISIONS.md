@@ -2,6 +2,38 @@
 
 Build-window decisions and measured evidence, newest first. Dates are 2026.
 
+## Sep 12 (reliability battery — model decision by measurement)
+
+- **Eval allowance raised to ~$1** (user-approved ~$10 total budget) for one
+  systematic battery; total spend across four full runs: **$0.249**
+  (`scripts/reliability.ts`, 30–34 phrasings per run, all graded by the
+  deterministic engine — the engine is the oracle, no human judgment).
+- **Battery 1 (flash-lite, prompt-4) exposed the never-tested bypass class:
+  0/5** — two modes: bridges placed on occupied cells (overlap rejection)
+  and ids invented from labels ("upper-gallery"). prompt-5 added
+  occupancy + id rules; **prompt-6 added a 16×16 occupancy grid to the scene
+  summary** — neither moved flash-lite (bypass still 0/5; trap 4/11 fresh).
+  Verdict: a model capability ceiling for multi-constraint spatial
+  composition, not a prompt defect.
+- **Model flip measured**: primary switched to `google/gemini-3.7-flash`
+  (fallback `google/gemini-2.5-flash-lite`), same battery: **trap 10/11,
+  bypass 3/4 real responses, compound 2/2, edits/unsupported/rule-weakening
+  clean; ~93% valid overall** on non-outage responses (4 provider outages at
+  $0 = battery rate-cadence artifact, not product behavior). Cost ≈
+  $0.005/fresh compile → ~2,000 fresh compiles on the judging budget.
+- **Grader lessons recorded**: baseline "failures" under 3.7-flash were valid
+  puzzles with the keyed door on the treasure edge instead of the approach
+  edge (both are sound "vault door" readings — grader now accepts either);
+  battery-1's trap 5/7 was inflated by prompt-4-era cache hits mixing with
+  fresh calls — **only fresh calls measure reliability; caches pin history**.
+- **Canonical demo strings re-verified fresh under the new model**: prompt 1
+  accepts (all green), prompt 2 traps with the stranded witness, compound
+  one-shot traps. The model flip invalidated every cache entry — the video
+  warm-up protocol must re-run under the final config (done for the arc).
+- **Config now live**: `LLM_MODEL=google/gemini-3.7-flash`,
+  `LLM_FALLBACK_MODEL=google/gemini-2.5-flash-lite` (env, .env.example, and
+  README disclosure updated).
+
 ## Sep 12 (Phase 2b — repair template breadth, §9)
 
 - **Two new repair families shipped** (allowed now that the §8.4
