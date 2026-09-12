@@ -92,6 +92,8 @@ interface AppState {
   previewOps: Operation[] | null;
   /** The failing witness route that existed before the applied repair. */
   repairReplay: MoveRecord[] | null;
+  /** Entity ids selected in the scene (§12 "select, then describe"). */
+  selection: string[];
   previousAccepted: Level | null;
   draft: DraftState | null;
   pendingRule: { proposal: RuleProposalResult; base: Level } | null;
@@ -121,6 +123,8 @@ interface AppState {
   previewRepair: (index: number) => void;
   clearPreview: () => void;
   watchReplay: () => void;
+  toggleSelect: (id: string) => void;
+  clearSelection: () => void;
 }
 
 const GHOST_INITIAL: GhostSlice = {
@@ -204,6 +208,7 @@ export const useApp = create<AppState>()((set, get) => ({
   sceneId: 'balcony-vault',
   previewOps: null,
   repairReplay: null,
+  selection: [],
   previousAccepted: null,
   draft: null,
   pendingRule: null,
@@ -261,6 +266,7 @@ export const useApp = create<AppState>()((set, get) => ({
     const state = get();
     if (state.busy || prompt.trim().length === 0) return;
     set({ busy: true, error: null });
+    const selection = state.selection;
     const base = state.draft?.level ?? state.acceptedLevel;
     // §11: every result binds to a base revision. If the scene changes while
     // the request is in flight (scene picker, reset), the result is stale and
@@ -270,7 +276,7 @@ export const useApp = create<AppState>()((set, get) => ({
       const response = await fetch('/api/compile', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ level: base, prompt, clarificationContext }),
+        body: JSON.stringify({ level: base, prompt, clarificationContext, selection }),
       });
       const body: unknown = await response.json();
       if (!response.ok) {
@@ -307,9 +313,9 @@ export const useApp = create<AppState>()((set, get) => ({
           return;
         }
         settleDraft(set, base, applied.level, false);
-        set({ repairReplay: null, previewOps: null });
+        set({ repairReplay: null, previewOps: null, selection: [] });
       } else if (result.type === 'rule_proposal') {
-        set({ pendingRule: { proposal: result, base }, repairReplay: null, previewOps: null });
+        set({ pendingRule: { proposal: result, base }, repairReplay: null, previewOps: null, selection: [] });
       }
       set({ busy: false });
     } catch (error) {
@@ -334,7 +340,7 @@ export const useApp = create<AppState>()((set, get) => ({
   declineRule: () => set({ pendingRule: null }),
 
   discardDraft: () =>
-    set({ draft: null, pendingRule: null, ghost: GHOST_INITIAL, play: PLAY_INITIAL, repair: REPAIR_INITIAL, previewOps: null, repairReplay: null }),
+    set({ draft: null, pendingRule: null, ghost: GHOST_INITIAL, play: PLAY_INITIAL, repair: REPAIR_INITIAL, previewOps: null, repairReplay: null, selection: [] }),
 
   undo: () => {
     const { previousAccepted } = get();
@@ -350,6 +356,7 @@ export const useApp = create<AppState>()((set, get) => ({
       repair: REPAIR_INITIAL,
       previewOps: null,
       repairReplay: null,
+      selection: [],
     });
   },
 
@@ -462,5 +469,14 @@ export const useApp = create<AppState>()((set, get) => ({
       previewOps: null,
     });
   },
+
+  toggleSelect: (id) => {
+    const { selection } = get();
+    set({
+      selection: selection.includes(id) ? selection.filter((s) => s !== id) : [...selection, id],
+    });
+  },
+
+  clearSelection: () => set({ selection: [] }),
 }));
 

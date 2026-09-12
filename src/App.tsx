@@ -204,6 +204,22 @@ function Viewport({ level, mode, report }: { level: Level; mode: Mode; report: R
     sceneRef.current?.previewOperations(previewOps);
   }, [previewOps, level]);
 
+  // Click-to-select (§12): picked entities toggle store selection; empty
+  // space clears it. Selection rings follow the store.
+  const selection = useApp((st) => st.selection);
+  const toggleSelect = useApp((st) => st.toggleSelect);
+  const clearSelection = useApp((st) => st.clearSelection);
+  useEffect(() => {
+    sceneRef.current?.onPick((id) => {
+      if (id === null) clearSelection();
+      else toggleSelect(id);
+    });
+    return () => sceneRef.current?.onPick(null);
+  }, [level, toggleSelect, clearSelection]);
+  useEffect(() => {
+    sceneRef.current?.setSelection(selection);
+  }, [selection, level]);
+
   // Ghost: replays a verifier witness route — never a fabricated one.
   useEffect(() => {
     const scene = sceneRef.current;

@@ -55,17 +55,24 @@ export function cacheKey(input: CacheKeyInput): string {
   );
 }
 
-/** Kept for the compile path: full-input key including clarification context. */
+/** Kept for the compile path: full-input key including clarification
+ * context and the author's scene selection. */
 export function compileCacheKey(input: {
   level: Level;
   prompt: string;
   clarificationContext?: string;
+  selection?: string[];
   models: string;
   promptVersion: string;
 }): string {
   return cacheKey({
     level: input.level,
-    payload: input.prompt + '\u0001' + (input.clarificationContext ?? ''),
+    payload:
+      input.prompt +
+      '\u0001' +
+      (input.clarificationContext ?? '') +
+      '\u0001' +
+      (input.selection?.join(',') ?? ''),
     models: input.models,
     promptVersion: input.promptVersion,
   });

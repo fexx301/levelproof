@@ -131,6 +131,11 @@ export interface SceneHandle {
   /** Before/after markers for a repair candidate (§9): old positions in
    * fail-red, proposed positions in pass-green; null clears. */
   previewOperations(operations: Operation[] | null): void;
+  /** Click-to-select: the scene reports picked entity ids (null = empty
+   * space). "Select something, then describe the change" (§12). */
+  onPick(handler: ((id: string | null) => void) | null): void;
+  /** Brass rings on the currently selected entities. */
+  setSelection(ids: string[]): void;
   spawnPlayer(callbacks: PlayerCallbacks): PlayerActor;
   /** Arrow-key orbiting is disabled while manual play owns the arrows. */
   setKeyboardOrbit(enabled: boolean): void;
@@ -228,9 +233,16 @@ function doorMaterial(mats: Mats, door: Door): THREE.MeshStandardMaterial {
 }
 
 /** Door frame: two posts, a lintel, and a sill across the shared port. */
-function addDoorFrames(world: THREE.Group, mats: Mats, compiled: CompiledLevel, visuals: WorldVisuals): void {
+function addDoorFrames(
+  world: THREE.Group,
+  mats: Mats,
+  compiled: CompiledLevel,
+  visuals: WorldVisuals,
+  tag?: (root: THREE.Object3D, id: string) => void,
+): void {
   for (const door of compiled.level.doors) {
     const material = doorMaterial(mats, door);
+    const doorStart = world.children.length;
     for (const dir of CARDINALS) {
       if (neighbor(compiled, door.a, dir)?.toId !== door.b) continue;
       const a = compiled.moduleById.get(door.a);
@@ -337,6 +349,7 @@ function addDoorFrames(world: THREE.Group, mats: Mats, compiled: CompiledLevel, 
       }
       break; // exactly one direction joins the two endpoints
     }
+    for (const child of world.children.slice(doorStart)) tag?.(child, door.id);
   }
 }
 
@@ -353,6 +366,7 @@ function addItems(
   compiled: CompiledLevel,
   decorUpdates: DecorUpdate[],
   visuals: WorldVisuals,
+  tag?: (root: THREE.Object3D, id: string) => void,
 ): void {
   for (const key of compiled.level.keys) {
     const m = compiled.moduleById.get(key.moduleId);
@@ -378,6 +392,7 @@ function addItems(
     world.add(group);
     group.userData.baseY = baseY;
     visuals.keys.set(key.id, group);
+    tag?.(group, key.id);
     decorUpdates.push((dt, elapsed) => {
       if (reducedMotion()) return;
       if (group.visible) {
@@ -400,6 +415,9 @@ function addItems(
     plate.userData.restY = plate.position.y;
     world.add(base, plate, rim);
     visuals.switches.set(pad.id, { plate, rim });
+    tag?.(base, pad.id);
+    tag?.(plate, pad.id);
+    tag?.(rim, pad.id);
   }
   const spawn = compiled.moduleById.get(compiled.spawn);
   if (spawn) {
@@ -407,6 +425,7 @@ function addItems(
     const mesh = new THREE.Mesh(new THREE.CylinderGeometry(60, 60, 8, 32), mats.spawn);
     mesh.position.set(c.x, c.y + 4, c.z);
     world.add(mesh);
+    tag?.(mesh, compiled.spawn);
   }
   const goal = compiled.moduleById.get(compiled.goal);
   if (goal) {
@@ -425,6 +444,8 @@ function addItems(
     // intensity ~= desired illuminance at 1 unit keeps pools readable.
     beacon.add(new THREE.PointLight(COLORS.goal, 320, 1700, 1));
     world.add(beacon);
+    tag?.(pedestal, compiled.goal);
+    tag?.(beacon, compiled.goal);
     decorUpdates.push((dt, elapsed) => {
       if (reducedMotion()) return;
       beacon.rotation.y += dt * 0.6;
@@ -449,13 +470,20 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel): SceneHan
   const mats = buildMats();
   const world = new THREE.Group();
   scene.add(world);
+  // mesh -> entity id, for click-to-select (§12 "select, then describe").
+  const meshToEntity = new Map<THREE.Object3D, string>();
   const visuals: WorldVisuals = { keys: new Map(), switches: new Map(), doors: new Map() };
+  const tag = (root: THREE.Object3D, id: string): void => {
+    root.traverse((child) => meshToEntity.set(child, id));
+  };
   for (const m of compiled.level.modules) {
+    const firstIndex = world.children.length;
     addModule(world, mats, compiled, m);
+    for (const child of world.children.slice(firstIndex)) tag(child, m.id);
   }
-  addDoorFrames(world, mats, compiled, visuals);
+  addDoorFrames(world, mats, compiled, visuals, tag);
   const decorUpdates: DecorUpdate[] = [];
-  addItems(world, mats, compiled, decorUpdates, visuals);
+  addItems(world, mats, compiled, decorUpdates, visuals, tag);
   // Everything solid casts and receives; upper floors shadow lower ones.
   world.traverse((obj) => {
     if (obj instanceof THREE.Mesh) {
@@ -764,6 +792,80 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel): SceneHan
     previewGroup.visible = previewGroup.children.length > 0;
   };
 
+  // ---- Selection (§12 "select, then describe") ----
+  const selectionGroup = new THREE.Group();
+  selectionGroup.visible = false;
+  scene.add(selectionGroup);
+  const selectionMat = new THREE.MeshBasicMaterial({
+    color: 0xc9a227,
+    transparent: true,
+    opacity: 0.9,
+    side: THREE.DoubleSide,
+  });
+  let pickHandler: ((id: string | null) => void) | null = null;
+  const selectionRingAt = (x: number, y: number, z: number, scale = 1): void => {
+    const ring = new THREE.Mesh(new THREE.RingGeometry(52, 68, 32), selectionMat);
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.set(x, y + 5, z);
+    ring.scale.setScalar(scale);
+    selectionGroup.add(ring);
+  };
+  const entityPosition = (id: string): Vec3 | null => {
+    const module = compiled.moduleById.get(id);
+    if (module) return centerPoint(module);
+    const key = compiled.level.keys.find((k) => k.id === id);
+    if (key) {
+      const m = compiled.moduleById.get(key.moduleId);
+      return m ? centerPoint(m) : null;
+    }
+    const pad = compiled.level.switches.find((sw) => sw.id === id);
+    if (pad) {
+      const m = compiled.moduleById.get(pad.moduleId);
+      return m ? centerPoint(m) : null;
+    }
+    const door = compiled.level.doors.find((d) => d.id === id);
+    if (door) {
+      const a = compiled.moduleById.get(door.a);
+      const b = compiled.moduleById.get(door.b);
+      if (a && b) {
+        const ca = centerPoint(a);
+        const cb = centerPoint(b);
+        return { x: (ca.x + cb.x) / 2, y: (ca.y + cb.y) / 2, z: (ca.z + cb.z) / 2 };
+      }
+    }
+    return null;
+  };
+  const raycaster = new THREE.Raycaster();
+  const pointerDown = { x: 0, y: 0, active: false };
+  const onPointerDown = (event: PointerEvent): void => {
+    pointerDown.x = event.clientX;
+    pointerDown.y = event.clientY;
+    pointerDown.active = true;
+  };
+  const onPointerUp = (event: PointerEvent): void => {
+    if (!pointerDown.active) return;
+    pointerDown.active = false;
+    const dx = event.clientX - pointerDown.x;
+    const dy = event.clientY - pointerDown.y;
+    if (dx * dx + dy * dy > 25) return; // a drag orbits; a click selects
+    if (pickHandler === null) return;
+    const rect = renderer.domElement.getBoundingClientRect();
+    const ndc = new THREE.Vector2(
+      ((event.clientX - rect.left) / rect.width) * 2 - 1,
+      -((event.clientY - rect.top) / rect.height) * 2 + 1,
+    );
+    raycaster.setFromCamera(ndc, camera);
+    const hits = raycaster.intersectObject(world, true);
+    const hit = hits[0]?.object ?? null;
+    if (hit === null) {
+      pickHandler(null);
+      return;
+    }
+    pickHandler(meshToEntity.get(hit) ?? null);
+  };
+  renderer.domElement.addEventListener('pointerdown', onPointerDown);
+  renderer.domElement.addEventListener('pointerup', onPointerUp);
+
   // ---- Engine-driven world state (§12 visible mechanism state) ----
   // The engine decides openness: doorPassable() against the live actor
   // state. Keyed doors rest locked; sealing doors rest open and slam shut
@@ -879,6 +981,20 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel): SceneHan
       }
       buildPreview(operations);
     },
+    onPick(handler) {
+      pickHandler = handler;
+    },
+    setSelection(ids) {
+      for (const child of [...selectionGroup.children]) {
+        selectionGroup.remove(child);
+        if (child instanceof THREE.Mesh) child.geometry.dispose();
+      }
+      for (const id of ids) {
+        const c = entityPosition(id);
+        if (c) selectionRingAt(c.x, c.y, c.z);
+      }
+      selectionGroup.visible = selectionGroup.children.length > 0;
+    },
     spawnPlayer(callbacks) {
       return new PlayerActor(actorContext, callbacks);
     },
@@ -916,6 +1032,9 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel): SceneHan
       analysisMats.unreachable.dispose();
       previewMats.old.dispose();
       previewMats.fresh.dispose();
+      selectionMat.dispose();
+      renderer.domElement.removeEventListener('pointerdown', onPointerDown);
+      renderer.domElement.removeEventListener('pointerup', onPointerUp);
       for (const material of shared) material.dispose();
       renderer.dispose();
       renderer.domElement.remove();

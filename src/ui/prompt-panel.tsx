@@ -11,6 +11,8 @@ export function PromptPanel() {
   const meta = useApp((s) => s.lastCompileMeta);
   const submitPrompt = useApp((s) => s.submitPrompt);
   const hasKey = useApp((s) => (s.draft?.level ?? s.acceptedLevel).keys.length > 0);
+  const selection = useApp((s) => s.selection);
+  const clearSelection = useApp((s) => s.clearSelection);
 
   const submit = () => {
     void submitPrompt(text);
@@ -47,7 +49,7 @@ export function PromptPanel() {
         maxLength={2000}
         rows={3}
         placeholder={
-          'Put a brass key on the side balcony. Lock the vault with it. The player must collect that key before reaching the treasure.'
+          'Click a floor, key, switch, or door in the scene to select it — then describe the change. Or: put a brass key on the side balcony and lock the vault with it.'
         }
         onChange={(event) => setText(event.target.value)}
         onKeyDown={(event) => {
@@ -70,6 +72,24 @@ export function PromptPanel() {
           {meta ? (meta.cached ? 'Cached compile' : 'Fresh compile') : ''}
         </span>
       </div>
+      {selection.length > 0 && (
+        <div className="selection-row" role="group" aria-label="Selected scene entities">
+          <span className="panel-note">Selected:</span>
+          {selection.map((id) => (
+            <button
+              key={id}
+              type="button"
+              className="example-chip"
+              onClick={() => useApp.getState().toggleSelect(id)}
+            >
+              {id} ✕
+            </button>
+          ))}
+          <button type="button" className="example-chip" onClick={clearSelection}>
+            Clear
+          </button>
+        </div>
+      )}
       <div className="example-prompts" role="group" aria-label="Example prompts">
         <span className="panel-note">Try:</span>
         {examples.map((example) => (

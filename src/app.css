@@ -596,6 +596,13 @@ details.inspector[open] summary .disclosure-glyph {
   color: var(--color-text);
 }
 
+.selection-row {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
 .example-prompts {
   align-items: center;
   display: flex;

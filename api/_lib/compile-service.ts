@@ -32,6 +32,7 @@ export interface CompileInput {
   level: Level;
   prompt: string;
   clarificationContext?: string;
+  selection?: string[];
 }
 
 export interface AttemptRecord {
@@ -88,6 +89,7 @@ export async function compile(
     level: input.level,
     prompt: input.prompt,
     clarificationContext: input.clarificationContext,
+    selection: input.selection,
     models: hasFallback ? `${primary.model},${fallbackModel}` : primary.model,
     promptVersion: PROMPT_VERSION,
   });
@@ -100,9 +102,15 @@ export async function compile(
     { role: 'system', content: buildSystemPrompt(input.level, revisionId(input.level)) },
     {
       role: 'user',
-      content: input.clarificationContext
-        ? `${input.prompt}\n\n(Clarification context: ${input.clarificationContext})`
-        : input.prompt,
+      content: [
+        input.prompt,
+        input.selection && input.selection.length > 0
+          ? `(The author selected these scene entities: ${input.selection.join(', ')}. References like "this door" or "that switch" mean these.)`
+          : null,
+        input.clarificationContext ? `(Clarification context: ${input.clarificationContext})` : null,
+      ]
+        .filter((part): part is string => part !== null)
+        .join('\n\n'),
     },
   ];
 
