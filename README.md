@@ -119,6 +119,8 @@ npm run typecheck && npm run lint && npm run build
 
 The deterministic core (`src/core`) has no DOM, renderer, React, or network
 imports — the same engine runs in tests, the browser, and the serverless API.
+Full details: [architecture](docs/architecture.md) and
+[the movement model](docs/movement-model.md).
 
 ## Provenance and licenses
 

@@ -2,6 +2,35 @@
 
 Build-window decisions and measured evidence, newest first. Dates are 2026.
 
+## Sep 12 (review hardening — six implementation gaps, all fixed)
+
+External review found six gaps; all verified real, all fixed
+(`66 tests`):
+
+1. **Wire schema lacked `requiresKeys`** — the strict JSON-Schema sent to
+   structured-output providers now includes the multi-key array (nullable
+   placeholder, normalizer-stripped), so non-Gemini models can emit it too.
+2. **Stale results could apply across a scene change** — `submitPrompt` now
+   binds to `revisionId(base)` and discards results when the scene moved
+   during the request ("The scene changed while compiling; the result was
+   discarded."). Live-verified: mid-compile scene switch → discard message,
+   target scene untouched.
+3. **Results did not carry a base revision** — the OK response envelope now
+   carries server-attached `baseRevision` (never model-emitted; the model
+   cannot know it), asserted client-side against the bound revision.
+4. **Provider error kinds collapsed** — failed attempts record `errorKind`
+   (rate_limited / timeout / budget / outage / unknown), the error response
+   carries `providerError`, and the client renders it ("compilation_failed
+   (rate_limited)") — honest telemetry for the judging window.
+5. **90s service deadline vs 60s platform maxDuration** — deadline is now
+   52s and every attempt's timeout clamps to the remaining budget
+   (≥4s floor), so no attempt can straddle the platform kill and every
+   failure is a clean error, never FUNCTION_INVOCOCATION_FAILED.
+6. **docs/architecture.md and docs/movement-model.md absent** — both written
+   from the current code (module map, hard boundary, revision model,
+   compile policy, cache; kit, doors incl. requiresKeys, state bound,
+   measured timings) and linked from the README.
+
 ## Sep 12 (items 4/5/6 — from-scratch generation, twist, kit breadth)
 
 - **From-scratch generation shipped and measured**: a **Blank canvas** seed

@@ -39,17 +39,27 @@ export interface AttemptRecord {
   outcome: 'schema_valid' | 'schema_invalid' | 'rejected' | 'error';
   latencyMs: number;
   costUsd: number;
+  errorKind?: 'rate_limited' | 'timeout' | 'budget' | 'outage' | 'unknown';
 }
 
 export interface CompileOutcome {
   result: CompileResult | null;
+  /** Server-attached (§11): the revision the result was computed against. */
+  baseRevision: string;
   cached: boolean;
   attempts: AttemptRecord[];
   totalCostUsd: number;
   error?: string;
+  /** The provider's failure class when the final attempt errored. */
+  providerError?: 'rate_limited' | 'timeout' | 'budget' | 'outage' | 'unknown';
 }
 
-const SERVICE_DEADLINE_MS = 90_000;
+// The Vercel handlers declare maxDuration = 60; the service must finish
+// cleanly inside it. 52s leaves margin, and per-attempt timeouts are
+// clamped to the remaining budget (below) so no attempt can straddle the
+// platform kill.
+const SERVICE_DEADLINE_MS = 52_000;
+const MIN_ATTEMPT_BUDGET_MS = 4_000;
 
 function tryParse(raw: string): CompileResult | null {
   try {
@@ -66,9 +76,10 @@ export async function compile(
   deps: { callModel?: CallModel } = {},
 ): Promise<CompileOutcome> {
   const callModel = deps.callModel ?? chatCompletion;
+  const baseRevision = revisionId(input.level);
   const primary = providerConfigFromEnv(env);
   if (!primary) {
-    return { result: null, cached: false, attempts: [], totalCostUsd: 0, error: 'missing_provider_config' };
+    return { result: null, baseRevision, cached: false, attempts: [], totalCostUsd: 0, error: 'missing_provider_config' };
   }
   const fallbackModel = env.LLM_FALLBACK_MODEL;
   const hasFallback = fallbackModel !== undefined && fallbackModel !== primary.model;
@@ -82,7 +93,7 @@ export async function compile(
   });
   const hit = compileCache.get(key);
   if (hit !== null) {
-    return { result: hit, cached: true, attempts: [], totalCostUsd: 0 };
+    return { result: hit, baseRevision, cached: true, attempts: [], totalCostUsd: 0 };
   }
 
   const baseMessages: ChatMessage[] = [
@@ -98,12 +109,20 @@ export async function compile(
   const attempts: AttemptRecord[] = [];
   const started = performance.now();
   let totalCostUsd = 0;
+  let lastProviderError: 'rate_limited' | 'timeout' | 'budget' | 'outage' | 'unknown' | undefined;
 
   const attempt = async (
     model: string,
     messages: ChatMessage[],
   ): Promise<{ parsed: CompileResult | null; rejection?: string[] }> => {
-    const config: ProviderConfig = { ...primary, model };
+    const elapsed = performance.now() - started;
+    const remaining = SERVICE_DEADLINE_MS - elapsed;
+    if (remaining < MIN_ATTEMPT_BUDGET_MS) return { parsed: null };
+    const config: ProviderConfig = {
+      ...primary,
+      model,
+      timeoutMs: Math.min(primary.timeoutMs, Math.max(MIN_ATTEMPT_BUDGET_MS, remaining)),
+    };
     const t0 = performance.now();
     const response = await callModel(config, messages, {
       ...callOptionsFor(model),
@@ -117,6 +136,7 @@ export async function compile(
     let rejection: string[] | undefined;
     if (!response.ok) {
       outcome = 'error';
+      lastProviderError = response.kind;
     } else {
       parsed = tryParse(response.content);
       if (parsed === null) {
@@ -137,13 +157,13 @@ export async function compile(
         outcome = 'schema_valid';
       }
     }
-    attempts.push({ model, outcome, latencyMs, costUsd });
+    attempts.push({ model, outcome, latencyMs, costUsd, ...(outcome === 'error' && lastProviderError !== undefined ? { errorKind: lastProviderError } : {}) });
     return { parsed, rejection };
   };
 
   const finish = (result: CompileResult): CompileOutcome => {
     compileCache.set(key, result);
-    return { result, cached: false, attempts, totalCostUsd };
+    return { result, baseRevision, cached: false, attempts, totalCostUsd };
   };
 
   // Attempt 1: the primary model.
@@ -179,5 +199,5 @@ export async function compile(
     if (outcome3.parsed) return finish(outcome3.parsed);
   }
 
-  return { result: null, cached: false, attempts, totalCostUsd, error: 'invalid_output' };
+  return { result: null, baseRevision, cached: false, attempts, totalCostUsd, error: 'invalid_output', ...(lastProviderError !== undefined ? { providerError: lastProviderError } : {}) };
 }

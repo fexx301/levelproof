@@ -49,7 +49,10 @@ export interface ExplainInput {
 /** Bump when the explanation prompt changes; participates in the cache key. */
 export const EXPLAIN_PROMPT_VERSION = 'explain-1';
 
-const SERVICE_DEADLINE_MS = 90_000;
+// Fits Vercel's 60s maxDuration with margin; per-attempt timeouts are
+// clamped to the remaining budget.
+const SERVICE_DEADLINE_MS = 52_000;
+const MIN_ATTEMPT_BUDGET_MS = 4_000;
 
 const explanationSchema = z.strictObject({
   explanation: z.string().min(40).max(600),
@@ -180,7 +183,13 @@ export async function explain(
   let totalCostUsd = 0;
 
   const attempt = async (model: string, messages: ChatMessage[]): Promise<string | null> => {
-    const config: ProviderConfig = { ...primary, model };
+    const remaining = SERVICE_DEADLINE_MS - (performance.now() - started);
+    if (remaining < MIN_ATTEMPT_BUDGET_MS) return null;
+    const config: ProviderConfig = {
+      ...primary,
+      model,
+      timeoutMs: Math.min(primary.timeoutMs, Math.max(MIN_ATTEMPT_BUDGET_MS, remaining)),
+    };
     const t0 = performance.now();
     const response = await callModel(config, messages, {
       ...callOptionsFor(model),

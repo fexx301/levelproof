@@ -28,9 +28,14 @@ const moduleJson = {
 const conditionsJson = {
   type: 'object',
   additionalProperties: false,
-  required: ['requiresKey', 'requiresSwitch', 'closesAfterSwitch'],
+  required: ['requiresKey', 'requiresKeys', 'requiresSwitch', 'closesAfterSwitch'],
   properties: {
     requiresKey: { type: ['string', 'null'], pattern: '^[a-z][a-z0-9-]{1,31}$' },
+    requiresKeys: {
+      type: ['array', 'null'],
+      items: { type: 'string', pattern: '^[a-z][a-z0-9-]{1,31}$' },
+      maxItems: 3,
+    },
     requiresSwitch: { type: ['string', 'null'], pattern: '^[a-z][a-z0-9-]{1,31}$' },
     closesAfterSwitch: { type: ['string', 'null'], pattern: '^[a-z][a-z0-9-]{1,31}$' },
   },

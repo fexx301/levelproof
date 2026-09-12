@@ -4,6 +4,7 @@ import { compile, type CallModel } from '../api/_lib/compile-service';
 import type { ProviderResult } from '../api/_lib/provider';
 import { vaultEmptyLevel } from '../src/core/fixtures/vault-empty';
 import { applyOperations } from '../src/core/level';
+import { revisionId } from '../src/core/serialize';
 
 /** §10 three-attempt bound and §10.2 full-input cache, with an injected model. */
 
@@ -185,5 +186,22 @@ describe('full-input cache (§10.2)', () => {
       { callModel: fn },
     );
     expect(calls).toHaveLength(3);
+  });
+});
+
+describe('result binding and provider error classes (§10, §11)', () => {
+  it('attaches the base revision the result was computed against', async () => {
+    const { fn } = scriptedModel([ok(validPatch)]);
+    const outcome = await compile(ENV, { level: vaultEmptyLevel, prompt: 'p10' }, { callModel: fn });
+    expect(outcome.baseRevision).toBe(revisionId(vaultEmptyLevel));
+  });
+
+  it('records the provider error class on failed attempts and the outcome', async () => {
+    const rateLimited: ProviderResult = { ok: false, kind: 'rate_limited', error: '429' };
+    const { fn } = scriptedModel([rateLimited, rateLimited, rateLimited]);
+    const outcome = await compile(ENV, { level: vaultEmptyLevel, prompt: 'p11' }, { callModel: fn });
+    expect(outcome.result).toBeNull();
+    expect(outcome.providerError).toBe('rate_limited');
+    expect(outcome.attempts.every((a) => a.errorKind === 'rate_limited')).toBe(true);
   });
 });

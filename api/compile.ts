@@ -35,6 +35,7 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json(
       {
         error: outcome.error === 'missing_provider_config' ? 'provider_not_configured' : 'compilation_failed',
+        ...(outcome.providerError !== undefined ? { providerError: outcome.providerError } : {}),
         attempts: outcome.attempts,
         totalCostUsd: outcome.totalCostUsd,
       },
@@ -44,6 +45,7 @@ export async function POST(request: Request): Promise<Response> {
 
   return Response.json({
     result: outcome.result,
+    baseRevision: outcome.baseRevision,
     cached: outcome.cached,
     attempts: outcome.attempts,
     totalCostUsd: outcome.totalCostUsd,

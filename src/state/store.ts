@@ -157,11 +157,17 @@ function explainErrorText(body: unknown): string {
   }
   return 'Explanation unavailable — the engine verdict above stands.';
 }
+
 function extractError(body: unknown): string {
   if (body !== null && typeof body === 'object' && 'error' in body) {
-    const record = body as { error: unknown; issues?: string[] };
-    const base = String(record.error);
-    return record.issues && record.issues.length > 0 ? `${base}: ${record.issues[0]}` : base;
+    const base = String(body.error);
+    const issue =
+      'issues' in body && Array.isArray(body.issues) && body.issues.length > 0
+        ? `: ${String(body.issues[0])}`
+        : '';
+    const kind =
+      'providerError' in body && typeof body.providerError === 'string' ? ` (${body.providerError})` : '';
+    return `${base}${issue}${kind}`;
   }
   return 'Compilation failed.';
 }
@@ -246,6 +252,10 @@ export const useApp = create<AppState>()((set, get) => ({
     if (state.busy || prompt.trim().length === 0) return;
     set({ busy: true, error: null });
     const base = state.draft?.level ?? state.acceptedLevel;
+    // §11: every result binds to a base revision. If the scene changes while
+    // the request is in flight (scene picker, reset), the result is stale and
+    // is discarded instead of applied to the wrong level.
+    const boundRevision = revisionId(base);
     try {
       const response = await fetch('/api/compile', {
         method: 'POST',
@@ -262,7 +272,17 @@ export const useApp = create<AppState>()((set, get) => ({
         set({ busy: false, error: 'The compile response failed validation.', lastResult: null, lastCompileMeta: null });
         return;
       }
-      const { result, cached, attempts, totalCostUsd } = parsed.data;
+      const { result, baseRevision, cached, attempts, totalCostUsd } = parsed.data;
+      const stillCurrent = revisionId(get().draft?.level ?? get().acceptedLevel) === boundRevision;
+      if (!stillCurrent || baseRevision !== boundRevision) {
+        set({
+          busy: false,
+          error: 'The scene changed while compiling; the result was discarded.',
+          lastResult: null,
+          lastCompileMeta: null,
+        });
+        return;
+      }
       const model = attempts.length > 0 ? (attempts.at(-1)?.model ?? 'unknown') : 'cache';
       set({
         lastResult: result,

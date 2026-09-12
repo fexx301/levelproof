@@ -16,11 +16,16 @@ export const attemptRecordSchema = z.strictObject({
   outcome: z.enum(['schema_valid', 'schema_invalid', 'rejected', 'error']),
   latencyMs: z.number(),
   costUsd: z.number(),
+  /** Present only on error attempts: the provider's failure class. */
+  errorKind: z.enum(['rate_limited', 'timeout', 'budget', 'outage', 'unknown']).optional(),
 });
 export type AttemptRecord = z.infer<typeof attemptRecordSchema>;
 
 export const compileOkResponseSchema = z.strictObject({
   result: compileResultSchema,
+  /** Server-attached: the revision the result was computed against (§11).
+   * Never model-emitted — the model cannot know it. */
+  baseRevision: z.string(),
   cached: z.boolean(),
   attempts: z.array(attemptRecordSchema),
   totalCostUsd: z.number(),
