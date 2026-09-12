@@ -1,4 +1,4 @@
-import type { Cardinal, LevelModule } from '../../shared/schema';
+import type { Cardinal, LevelModule } from '../../shared/schema.js';
 
 /**
  * Versioned kit catalog (§4.1). All geometry in integer centimeters.

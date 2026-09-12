@@ -8,16 +8,16 @@
  * Usage: npx tsx scripts/eval.ts [--models openai/gpt-oss-120b,...]
  */
 import { readFileSync } from 'node:fs';
-import { compileResultSchema, normalizeWirePayload, type CompileResult } from '../api/_lib/compile-result';
+import { callOptionsFor } from '../api/_lib/model-options';
 import { buildSystemPrompt } from '../api/_lib/prompt';
 import { chatCompletion, providerConfigFromEnv, type ChatMessage, type ProviderConfig } from '../api/_lib/provider';
-import { compileResultJsonSchema } from '../api/_lib/wire-schema';
 import { baselineLevel } from '../src/core/fixtures/baseline';
 import { trapRepairedLevel } from '../src/core/fixtures/trap-repaired';
 import { vaultEmptyLevel } from '../src/core/fixtures/vault-empty';
 import { applyOperations } from '../src/core/level';
 import { revisionId } from '../src/core/serialize';
 import { verify } from '../src/core/verifier';
+import { compileResultSchema, normalizeWirePayload, type CompileResult } from '../shared/compile-result';
 import type { Level } from '../shared/schema';
 
 const EVAL_BUDGET_USD = 0.25;
@@ -268,28 +268,7 @@ function callCost(model: string, usage: { promptTokens: number; completionTokens
   return (usage.promptTokens / 1e6) * priceIn + (usage.completionTokens / 1e6) * priceOut;
 }
 
-interface ModelCallOptions {
-  /** Strict json_schema wire contract; off for providers that reject it. */
-  useSchema: boolean;
-  reasoningEffort?: 'low' | 'medium' | 'high';
-  maxTokens?: number;
-}
-
-const MODEL_OPTIONS: Record<string, ModelCallOptions> = {
-  'openai/gpt-oss-120b': { useSchema: true, reasoningEffort: 'low' },
-  'deepseek/deepseek-v4-flash': { useSchema: true, reasoningEffort: 'low', maxTokens: 4000 },
-  'deepseek/deepseek-v3.2': { useSchema: true, reasoningEffort: 'low', maxTokens: 4000 },
-  'qwen/qwen-plus': { useSchema: true, reasoningEffort: 'low', maxTokens: 4000 },
-  'google/gemini-3.7-flash': { useSchema: false },
-  'google/gemini-2.5-flash-lite': { useSchema: false },
-};
-
-async function runOne(
-  config: ProviderConfig,
-  fixture: EvalFixture,
-  run: number,
-  options: ModelCallOptions,
-): Promise<CallRecord> {
+async function runOne(config: ProviderConfig, fixture: EvalFixture, run: number): Promise<CallRecord> {
   const messages: ChatMessage[] = [
     { role: 'system', content: buildSystemPrompt(fixture.base, revisionId(fixture.base)) },
     { role: 'user', content: fixture.prompt },
@@ -304,11 +283,8 @@ async function runOne(
   while (attempts < 2 && parsed === null) {
     attempts++;
     const response = await chatCompletion(config, messages, {
-      ...(options.useSchema
-        ? { jsonSchema: compileResultJsonSchema as unknown as Record<string, unknown>, schemaName: 'levelproof_result' }
-        : {}),
-      ...(options.reasoningEffort !== undefined ? { reasoningEffort: options.reasoningEffort } : {}),
-      ...(options.maxTokens !== undefined ? { maxTokens: options.maxTokens } : {}),
+      ...callOptionsFor(config.model),
+      schemaName: 'levelproof_result',
     });
     if (!response.ok) {
       return {
@@ -448,12 +424,11 @@ async function main(): Promise<void> {
   let spent = 0;
   for (const model of models) {
     const config: ProviderConfig = { ...base, model };
-    const options = MODEL_OPTIONS[model] ?? { useSchema: true };
-    console.log(`\n--- ${model} · config: ${JSON.stringify(options)} ---`);
+    console.log(`\n--- ${model} · config: ${JSON.stringify(callOptionsFor(model))} ---`);
     const records: CallRecord[] = [];
     for (const fixture of FIXTURES) {
       for (let run = 1; run <= RUNS_PER_FIXTURE; run++) {
-        const record = await runOne(config, fixture, run, options);
+        const record = await runOne(config, fixture, run);
         records.push(record);
         spent += record.costUsd;
         console.log(

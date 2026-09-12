@@ -2,6 +2,29 @@
 
 Build-window decisions and measured evidence, newest first. Dates are 2026.
 
+## Sep 12 (live compile flow)
+
+- **The §14 Sep 14–15 gate is live early on the deployed URL.** `POST
+  /api/compile` (Vercel function) validates requests strictly, runs the
+  three-attempt bound (primary → schema-correction retry → evaluated
+  fallback) with usage accounting and a 90 s service deadline, and serves
+  the full-input demo cache. The client applies results atomically through
+  the shared core: prompt 1 → rule proposal → explicit approval → all
+  three checks pass; prompt 2 → patch → the designed trap (solution pass,
+  requirement pass, recovery fail with the stranded vault-approach
+  witness). Verified in a real browser against production.
+- **Prompt iteration v3 disclosed:** two generic contract clarifications
+  (explicit `"type"` envelope; "door conditions are ordinary scene edits,
+  not design requirements") after live misfires. The model's ~50% P2
+  semantic rate is the known eval finding — a goal-deadlocking variant is
+  handled honestly (draft labeled, return to accepted) and the demo-path
+  cache replays the rehearsed good response deterministically.
+- **Cache verified live:** an identical prompt returns "Cached compilation"
+  with no provider call; a different prompt or clarification context
+  misses by design. Cache is instance-local — a cold start means fresh
+  calls, never stale verdicts.
+- **Live session spend ≈ $0.002** across ~7 calls.
+
 ## Sep 12 (model selection)
 
 - **§10.1 evaluation complete; no model meets the full bar.** Six models

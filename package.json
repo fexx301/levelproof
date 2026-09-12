@@ -11,14 +11,15 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
-    "deploy": "vercel --prod --yes --name levelproof",
+    "deploy": "npx vercel --prod --yes --name levelproof",
     "eval": "tsx scripts/eval.ts"
   },
   "dependencies": {
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "three": "^0.186.0",
-    "zod": "^4.6.2"
+    "zod": "^4.6.2",
+    "zustand": "^5.0.15"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

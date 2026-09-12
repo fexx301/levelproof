@@ -1,10 +1,11 @@
 import { z } from 'zod';
-import { BOUNDS, idSchema, operationSchema, requirementSchema } from '../../shared/schema';
+import { BOUNDS, idSchema, operationSchema, requirementSchema } from './schema.js';
 
 /**
  * The four compile results (§10): patch, clarification, rule_proposal,
  * unsupported. Model output is validated strictly here; unknown fields and
- * operation kinds are rejected, never accommodated (§2.6).
+ * operation kinds are rejected, never accommodated (§2.6). Shared by the
+ * server (validation) and the client (rendering).
  */
 
 export const clarificationChoiceSchema = z.strictObject({
@@ -39,18 +40,22 @@ export const compileResultSchema = z.discriminatedUnion('type', [
 ]);
 
 export type CompileResult = z.infer<typeof compileResultSchema>;
+export type RuleProposalResult = Extract<CompileResult, { type: 'rule_proposal' }>;
 
+/**
+ * The strict wire contract forces null placeholders for type-specific
+ * fields, and some providers wrap JSON in markdown fences. Neither carries
+ * meaning, so strip both recursively before strict validation.
+ */
 export function normalizeWirePayload(raw: string): unknown {
   return stripNulls(JSON.parse(stripCodeFences(raw)));
 }
 
-/** Some providers wrap JSON in markdown fences even when asked not to. */
 function stripCodeFences(raw: string): string {
   const trimmed = raw.trim();
   const fenced = /^```(?:json)?\s*([\s\S]*?)\s*```$/.exec(trimmed);
   return fenced ? fenced[1]! : trimmed;
 }
-
 
 function stripNulls(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(stripNulls);

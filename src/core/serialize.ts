@@ -1,5 +1,5 @@
-import { CARDINALS, type Level, type LevelModule } from '../../shared/schema';
-import { CATALOG_VERSION } from './catalog';
+import { CARDINALS, type Level, type LevelModule } from '../../shared/schema.js';
+import { CATALOG_VERSION } from './catalog.js';
 
 /**
  * Canonical ordering and revision identity (§3, §11). Entity order never

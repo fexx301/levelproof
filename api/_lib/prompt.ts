@@ -1,4 +1,4 @@
-import { BOUNDS, type Level } from '../../shared/schema';
+import { BOUNDS, type Level } from '../../shared/schema.js';
 
 /**
  * System prompt builder for compile requests (§10). The scene summary is
@@ -32,6 +32,9 @@ function sceneSummary(level: Level): string {
     1,
   );
 }
+
+/** Bump when the system prompt changes; participates in the cache key (§10.2). */
+export const PROMPT_VERSION = 'prompt-3';
 
 export function buildSystemPrompt(level: Level, baseRevision: string): string {
   return `You are the compiler for LevelProof, a 3D puzzle editor with discrete movement. Convert the user's request into exactly ONE typed result: a patch, a clarification, a rule_proposal, or an unsupported response. You compose typed edits against the scene; you never invent traversal rules, verify puzzles, or emit raw level JSON.
@@ -69,7 +72,7 @@ RESPONSE FORMAT — a single JSON object whose "type" field is required and must
 WHEN TO USE EACH TYPE:
 1. "patch" — ordinary scene edits. Requirement changes are NEVER patch operations; there is no operation kind for them.
 2. "clarification" — the request is ambiguous about which entity or which location and the scene cannot resolve it (for example, several modules could match "near the vault"). Ask ONE concise question. Choices (2-6) bind to existing scene ids or to new ids you propose.
-3. "rule_proposal" — the request states, adds, or changes a design requirement (for example "the player must collect X before the treasure", or removing such a rule). If a request mixes geometry edits with a requirement statement, answer with rule_proposal and carry ALL the geometry in "operations"; the geometry is held for the same review.
+3. "rule_proposal" — the request states, adds, or changes a design requirement: a collectBeforeGoal statement (for example "the player must collect X before the treasure", or removing such a rule). If a request mixes geometry edits with a requirement statement, answer with rule_proposal and carry ALL the geometry in "operations"; the geometry is held for the same review. Door conditions (requiresKey, requiresSwitch, closesAfterSwitch) are ordinary scene edits, NOT design requirements — a request that only adds or changes keys, switches, or doors is a "patch".
 4. "unsupported" — the request cannot be represented in this kit (door-traversal order, mandatory sequencing other than key-before-goal, timed puzzles, jumping, physics, arbitrary geometry). Offer concrete supported alternatives.
 
 Respond with a single JSON object and nothing else.`;

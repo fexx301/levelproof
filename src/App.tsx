@@ -1,27 +1,27 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import type { Level } from '../shared/schema';
-import { baselineLevel } from './core/fixtures/baseline';
-import { trapLevel } from './core/fixtures/trap';
 import { compileLevel } from './core/topology';
-import { verify, type CheckedResult, type Report } from './core/verifier';
+import { verify } from './core/verifier';
 import { mountScene } from './render/scene';
-
-const FIXTURES = { baseline: baselineLevel, trap: trapLevel } as const;
-type FixtureName = keyof typeof FIXTURES;
-
-const FIXTURE_LABELS: Record<FixtureName, string> = {
-  baseline: 'Balcony Vault (baseline)',
-  trap: 'Switch trap',
-};
+import { useApp } from './state/store';
+import { CheckStrip, RuleChips } from './ui/check-strip';
+import { PromptPanel } from './ui/prompt-panel';
+import { ResultCards } from './ui/result-cards';
 
 /**
- * Minimal deployed scene (§14 Sep 11–12 gate): the diorama rendered from the
- * compiled core, the three-check strip with surfaced measurements, and a
- * fixture toggle. The full §12 shell lands with the designed UI milestone.
+ * The authoring surface: the diorama, the prompt panel, active-rule chips,
+ * result cards, and the three-check strip. One accepted checkpoint plus at
+ * most one editable draft (§11); the scene shows the draft when one exists.
  */
 export function App() {
-  const [fixture, setFixture] = useState<FixtureName>('baseline');
-  const level = FIXTURES[fixture];
+  const acceptedLevel = useApp((s) => s.acceptedLevel);
+  const draft = useApp((s) => s.draft);
+  const previousAccepted = useApp((s) => s.previousAccepted);
+  const undo = useApp((s) => s.undo);
+  const discardDraft = useApp((s) => s.discardDraft);
+  const resetVault = useApp((s) => s.resetVault);
+
+  const level = draft?.level ?? acceptedLevel;
   const { report, ms } = useMemo(() => {
     const t0 = performance.now();
     const result = verify(level);
@@ -33,24 +33,31 @@ export function App() {
       <header className="app-header">
         <h1 className="app-title">LevelProof</h1>
         <p className="app-sub">An AI puzzle creator with automatic playtesting</p>
-        <div className="fixture-toggle" role="tablist" aria-label="Fixture">
-          {(Object.keys(FIXTURES) as FixtureName[]).map((name) => (
-            <button
-              key={name}
-              type="button"
-              role="tab"
-              aria-selected={name === fixture}
-              className={`fixture-toggle-button${name === fixture ? ' is-active' : ''}`}
-              onClick={() => setFixture(name)}
-            >
-              {FIXTURE_LABELS[name]}
+        <div className="header-actions">
+          {draft && <span className="draft-badge">Draft — not accepted</span>}
+          <button type="button" onClick={undo} disabled={!previousAccepted}>
+            Undo
+          </button>
+          {draft && (
+            <button type="button" onClick={discardDraft}>
+              Return to accepted
             </button>
-          ))}
+          )}
+          <button type="button" onClick={resetVault}>
+            Reset to the empty vault
+          </button>
         </div>
       </header>
+      <div className="rule-bar" aria-label="Active rules">
+        <RuleChips level={level} />
+      </div>
       <main className="app-main">
         <Viewport level={level} />
-        <CheckStrip report={report} ms={ms} />
+        <aside className="side-panel">
+          <PromptPanel />
+          <ResultCards />
+          <CheckStrip report={report} ms={ms} />
+        </aside>
       </main>
     </div>
   );
@@ -65,49 +72,4 @@ function Viewport({ level }: { level: Level }) {
     return () => handle.dispose();
   }, [level]);
   return <div className="viewport" ref={hostRef} aria-label="3D scene" />;
-}
-
-function statusText(status: CheckedResult['status']): string {
-  switch (status) {
-    case 'pass':
-      return 'pass';
-    case 'fail':
-      return 'fail';
-    case 'unknown':
-      return 'check incomplete';
-    case 'not_applicable':
-      return 'not applicable';
-  }
-}
-
-function CheckStrip({ report, ms }: { report: Report; ms: number }) {
-  const checks: Array<{ name: string; result: CheckedResult }> = [
-    { name: 'Solution', result: report.checks.solution },
-    { name: 'Design requirements', result: report.checks.requirements },
-    { name: 'Recovery', result: report.checks.recovery },
-  ];
-  return (
-    <aside className="check-strip" aria-label="Verification checks">
-      <p className={`acceptance${report.accepted ? ' is-accepted' : ''}`}>
-        {report.accepted ? 'Accepted' : 'Not accepted'}
-      </p>
-      {checks.map(({ name, result }) => (
-        <section key={name} className={`check check--${result.status}`}>
-          <h2 className="check-name">
-            <span>{name}</span>
-            <span className="check-status">{statusText(result.status)}</span>
-          </h2>
-          <p className="check-explanation">{result.explanation}</p>
-        </section>
-      ))}
-      <p className="check-meta">
-        {report.revisionId} · catalog {report.catalogVersion} · verifier {report.verifierVersion} ·{' '}
-        {report.exploredCount} states explored · {ms.toFixed(1)} ms
-      </p>
-      <p className="check-note">
-        Under these game rules. Exhaustive bounded exploration — one successful route never
-        proves no bypasses or dead ends.
-      </p>
-    </aside>
-  );
 }
