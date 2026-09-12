@@ -2,6 +2,38 @@
 
 Build-window decisions and measured evidence, newest first. Dates are 2026.
 
+## Sep 12 (complete loop — §14 Sep 26 gate, early)
+
+- **Every Sep 26 gate item is verified live on the deployed URL:**
+  - **Prompt 3 (§8.3) end to end:** two honest rejections first (label used
+    as an id; walkway routed through occupied cells), then the §10
+    fallback fired in production — flash-lite failed schema twice and
+    gemini-3.7-flash placed the walkway correctly (3 attempts, $0.010).
+    The bypass diagnosis is exact: solution pass, requirement fail
+    (keyless winning route), recovery pass. Bypass ghost: “Reached the
+    goal without: brass-key.” Repair search found both entrance gates
+    (2.4 ms); applying one → Accepted, rule preserved.
+  - **Unfamiliar layout gate (§8.4, held out from all prompt work):** the
+    seed verifies green; a natural-language bridge edit produced a correct
+    playable diagnosis — requirement fails with the iron-key bypass,
+    recovery holds, bypass ghost replays — with no fixture-specific logic.
+    Honest caveat: it took several attempts and finally explicit cell
+    coordinates plus the fallback model; flash-lite's unaided spatial
+    composition on novel layouts is not demo-grade, consistent with
+    docs/model-eval.md. The rejection → rephrase → clarification →
+    fallback chain carried every failure safely.
+  - **Clarification:** the model asked bridge-orientation questions with
+    entity-bound choices; choosing resubmits with clarification context
+    (context participates in the cache key).
+  - **Unsupported:** the jump request returns real supported alternatives.
+  - **No checked fix:** removing the spiral stair disconnects the goal;
+    the search reports “No checked fix in this search. 0 candidates
+    checked in 0.2 ms.” — honest, with discard available.
+- **Stale-result hardening:** pending rule proposals are cleared whenever
+    the level changes (a stale approval can never apply to a moved-on
+    base), and failed compiles clear the previous result card.
+- **Session spend ≈ $0.025.**
+
 ## Sep 12 (ghost, play, repair — §14 Sep 13 gate)
 
 - **The signature moment is live on the deployed URL.** The ghost walks

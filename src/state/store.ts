@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { RuleProposalResult, CompileResult } from '../../shared/compile-result';
 import { compileOkResponseSchema } from '../../shared/api';
 import type { Level } from '../../shared/schema';
+import { unfamiliarLevel } from '../core/fixtures/unfamiliar';
 import { vaultEmptyLevel } from '../core/fixtures/vault-empty';
 import { applyOperations } from '../core/level';
 import { findRepairs, type RepairCandidate } from '../core/search';
@@ -132,11 +133,19 @@ function settleDraft(set: (partial: Partial<AppState>) => void, base: Level, lev
   } else {
     set({ draft: { level, report, viaRule } });
   }
-  set({ mode: 'authoring', ghost: GHOST_INITIAL, play: PLAY_INITIAL, repair: REPAIR_INITIAL });
+  set({ pendingRule: null, mode: 'authoring', ghost: GHOST_INITIAL, play: PLAY_INITIAL, repair: REPAIR_INITIAL });
+}
+
+/** Seed scene: the empty vault, or the held-out unfamiliar layout via ?scene=unfamiliar (§8.4 gate). */
+function initialLevel(): Level {
+  if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('scene') === 'unfamiliar') {
+    return unfamiliarLevel;
+  }
+  return vaultEmptyLevel;
 }
 
 export const useApp = create<AppState>()((set, get) => ({
-  acceptedLevel: vaultEmptyLevel,
+  acceptedLevel: initialLevel(),
   previousAccepted: null,
   draft: null,
   pendingRule: null,
@@ -163,12 +172,12 @@ export const useApp = create<AppState>()((set, get) => ({
       });
       const body: unknown = await response.json();
       if (!response.ok) {
-        set({ busy: false, error: extractError(body) });
+        set({ busy: false, error: extractError(body), lastResult: null, lastCompileMeta: null });
         return;
       }
       const parsed = compileOkResponseSchema.safeParse(body);
       if (!parsed.success) {
-        set({ busy: false, error: 'The compile response failed validation.' });
+        set({ busy: false, error: 'The compile response failed validation.', lastResult: null, lastCompileMeta: null });
         return;
       }
       const { result, cached, attempts, totalCostUsd } = parsed.data;
@@ -211,7 +220,7 @@ export const useApp = create<AppState>()((set, get) => ({
 
   declineRule: () => set({ pendingRule: null }),
 
-  discardDraft: () => set({ draft: null, repair: REPAIR_INITIAL }),
+  discardDraft: () => set({ draft: null, pendingRule: null, ghost: GHOST_INITIAL, play: PLAY_INITIAL, repair: REPAIR_INITIAL }),
 
   undo: () => {
     const { previousAccepted } = get();
@@ -230,7 +239,7 @@ export const useApp = create<AppState>()((set, get) => ({
 
   resetVault: () =>
     set({
-      acceptedLevel: vaultEmptyLevel,
+      acceptedLevel: initialLevel(),
       previousAccepted: null,
       draft: null,
       pendingRule: null,
