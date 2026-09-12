@@ -2,6 +2,21 @@
 
 Build-window decisions and measured evidence, newest first. Dates are 2026.
 
+## Sep 12 (seam guards — the onChange regression can never recur silently)
+
+- **Prompt-panel interaction tests added** (`tests/prompt-panel.test.tsx`,
+  jsdom + React Testing Library): typing updates the controlled value
+  **across a forced re-render** (a missing onChange only reverts on the
+  next render — the naive assertion would pass), Compile submits exactly
+  the typed prompt (with onChange missing the button stays disabled and
+  the spy never fires), disabled-when-empty, and the selection→Keep-these
+  chip flow. **Mutation-verified**: with onChange temporarily removed,
+  three of four tests fail; restored, all pass. The dead-prompt-box deploy
+  could not happen green again.
+- **`npm run verify` added** as the single strict command
+  (typecheck && lint && test && build) — the pipefail chain is now the
+  easiest path, not a discipline to remember.
+
 ## Sep 12 (verification discipline — advisory catch)
 
 - **A piped-verification hole was caught and closed**: `;`-chained checks
