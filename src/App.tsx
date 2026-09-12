@@ -4,7 +4,7 @@ import { verify, type Report } from './core/verifier';
 import { compileLevel } from './core/topology';
 import { actorBridge } from './render/bridge';
 import { mountScene, type SceneHandle } from './render/scene';
-import { SCENES, useApp, type SceneId } from './state/store';
+import { SCENES, useApp } from './state/store';
 import { CheckStrip, RuleChips } from './ui/check-strip';
 import { PlayPanel } from './ui/play-panel';
 import { PlaytesterPanel, witnessOptions } from './ui/playtester';

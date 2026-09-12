@@ -513,8 +513,8 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel): SceneHan
   // fills the viewport instead of floating in margins. The view direction
   // keeps the original elevated southeast azimuth.
   let boundsRadius = 800;
-  let boundsMin = new THREE.Vector3(-800, -300, -800);
-  let boundsMax = new THREE.Vector3(800, 300, 800);
+  const boundsMin = new THREE.Vector3(-800, -300, -800);
+  const boundsMax = new THREE.Vector3(800, 300, 800);
   {
     let minX = Infinity;
     let minY = Infinity;

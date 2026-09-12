@@ -175,7 +175,7 @@ export async function compile(
   };
 
   // Attempt 1: the primary model.
-  let outcome1 = await attempt(primary.model, baseMessages);
+  const outcome1 = await attempt(primary.model, baseMessages);
   if (outcome1.parsed) return finish(outcome1.parsed);
 
   // Attempt 2: one correction retry on the primary — for malformed JSON the
