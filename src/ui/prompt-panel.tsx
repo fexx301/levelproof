@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { DisclosureGlyph } from './check-strip';
 import { useApp } from '../state/store';
 
 /** The prompt panel (§12): describe a change, watch it compile. */
@@ -41,16 +42,32 @@ export function PromptPanel() {
         >
           {busy ? 'Compiling…' : 'Compile'}
         </button>
-        {meta && (
-          <span className={`compile-status${meta.cached ? ' is-cached' : ''}`}>
-            {meta.cached
-              ? 'Cached compilation'
-              : `Live · ${meta.model} · $${meta.totalCostUsd.toFixed(5)} · ${meta.attempts} attempt${
-                  meta.attempts === 1 ? '' : 's'
-                }`}
-          </span>
-        )}
+        <span
+          className={`compile-status${meta?.cached ? ' is-cached' : ''}`}
+          aria-live="polite"
+        >
+          {meta ? (meta.cached ? 'Cached compile' : 'Fresh compile') : ''}
+        </span>
       </div>
+      <p className="panel-note">
+        {typeof navigator !== 'undefined' &&
+        /Mac|iP/.test(
+          (navigator as Navigator & { userAgentData?: { platform?: string } }).userAgentData
+            ?.platform ?? navigator.platform,
+        )
+          ? '⌘⏎'
+          : 'Ctrl+⏎'}{' '}
+        compiles
+      </p>
+      {meta && !meta.cached && (
+        <details className="inspector">
+          <summary><DisclosureGlyph />Model</summary>
+          <p className="inspector-body">
+            {meta.model} · ${meta.totalCostUsd.toFixed(5)} · {meta.attempts} attempt
+            {meta.attempts === 1 ? '' : 's'}
+          </p>
+        </details>
+      )}
       {error && (
         <p className="compile-error" role="alert">
           {error}

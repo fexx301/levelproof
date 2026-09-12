@@ -54,11 +54,12 @@ interface PlaySlice {
 }
 
 interface RepairSlice {
-  status: 'idle' | 'done';
+  status: 'idle' | 'running' | 'done';
   candidates: RepairCandidate[];
   explored: number;
   durationMs: number;
   note: string | null;
+  applyError: string | null;
 }
 
 interface AppState {
@@ -114,6 +115,7 @@ const REPAIR_INITIAL: RepairSlice = {
   explored: 0,
   durationMs: 0,
   note: null,
+  applyError: null,
 };
 
 function extractError(body: unknown): string {
@@ -261,7 +263,7 @@ export const useApp = create<AppState>()((set, get) => ({
     }),
 
 
-  startPlay: () => set({ mode: 'playing', ghost: GHOST_INITIAL, play: PLAY_INITIAL, repair: REPAIR_INITIAL }),
+  startPlay: () => set({ mode: 'playing', ghost: GHOST_INITIAL, play: PLAY_INITIAL }),
 
   exitToAuthoring: () => set({ mode: 'authoring', ghost: GHOST_INITIAL, play: PLAY_INITIAL }),
 
@@ -269,6 +271,7 @@ export const useApp = create<AppState>()((set, get) => ({
   runRepairs: (report) => {
     const { draft, acceptedLevel } = get();
     if (!draft) return;
+    set({ repair: { ...REPAIR_INITIAL, status: 'running' } });
     const result = findRepairs(acceptedLevel, draft.level, report);
     set({
       repair: {
@@ -277,6 +280,7 @@ export const useApp = create<AppState>()((set, get) => ({
         explored: result.explored,
         durationMs: result.durationMs,
         note: result.note,
+        applyError: null,
       },
     });
   },
@@ -288,7 +292,7 @@ export const useApp = create<AppState>()((set, get) => ({
     if (!candidate) return;
     const applied = applyOperations(draft.level, candidate.operations);
     if (!applied.ok) {
-      set({ error: `The repair was rejected: ${applied.errors[0]}` });
+      set({ repair: { ...repair, applyError: `The repair was rejected: ${applied.errors[0]}` } });
       return;
     }
     settleDraft(set, acceptedLevel, applied.level, false);

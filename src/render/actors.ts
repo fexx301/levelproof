@@ -15,6 +15,10 @@ const WALK_SPEED_CM_S = 300;
 const ACTOR_RADIUS_CM = 25;
 const ACTOR_BODY_CM = 110;
 const ACTOR_CENTER_OFFSET_CM = ACTOR_BODY_CM / 2 + ACTOR_RADIUS_CM;
+/** Contract floor (§12): reduced motion means a stepped ghost, no pulse. Read live so mid-session preference changes are honored. */
+export function reducedMotion(): boolean {
+  return typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
 
 export interface GhostTickState {
   playing: boolean;
@@ -104,6 +108,7 @@ export class GhostActor {
   private readonly unregister: () => void;
   private index = 0;
   private distance = 0;
+  private stepClock = 0;
   private playing = false;
   private finished = false;
   private stepMode = false;
@@ -172,13 +177,23 @@ export class GhostActor {
 
   private update = (dt: number, elapsed: number): void => {
     if (this.finished) {
-      // Hold at the trapped state, pulsing gently so the eye finds it.
-      const material = this.mesh.material as THREE.MeshStandardMaterial;
-      material.opacity = 0.45 + 0.18 * Math.sin(elapsed * 0.004);
+      if (!reducedMotion()) {
+        // Hold at the trapped state, pulsing gently so the eye finds it.
+        const material = this.mesh.material as THREE.MeshStandardMaterial;
+        material.opacity = 0.45 + 0.18 * Math.sin(elapsed * 0.004);
+      }
       return;
     }
     if (!this.playing || this.steps.length === 0) return;
-    this.distance += WALK_SPEED_CM_S * dt;
+    if (reducedMotion()) {
+      // Stepped ghost: one discrete move per interval, no interpolation.
+      this.stepClock += dt;
+      if (this.stepClock < 0.6) return;
+      this.stepClock = 0;
+      this.distance += this.steps[this.index]!.length;
+    } else {
+      this.distance += WALK_SPEED_CM_S * dt;
+    }
     while (this.index < this.steps.length && this.distance >= this.steps[this.index]!.length) {
       this.distance -= this.steps[this.index]!.length;
       const completed = this.steps[this.index]!;
@@ -251,6 +266,20 @@ export class PlayerActor {
     if (this.animation) return;
     const move = step(this.ctx.compiled, this.state, dir);
     if (!move) return;
+    if (reducedMotion()) {
+      // Reduced motion: instant transition, no interpolation.
+      this.state = move.after;
+      if (move.events.collectedKey) this.keys = [...this.keys, move.events.collectedKey];
+      if (move.events.activatedSwitch) this.switches = [...this.switches, move.events.activatedSwitch];
+      const destination = move.segments[move.segments.length - 1]!;
+      this.mesh.position.set(
+        destination.x,
+        destination.y + ACTOR_CENTER_OFFSET_CM,
+        destination.z,
+      );
+      this.emit();
+      return;
+    }
     const points = move.segments.map((p) => new THREE.Vector3(p.x, p.y, p.z));
     let length = 0;
     for (let i = 1; i < points.length; i++) length += points[i]!.distanceTo(points[i - 1]!);

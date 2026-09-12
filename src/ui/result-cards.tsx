@@ -10,6 +10,7 @@ export function ResultCards() {
   const pendingRule = useApp((s) => s.pendingRule);
   const lastResult = useApp((s) => s.lastResult);
   const lastPrompt = useApp((s) => s.lastPrompt);
+  const busy = useApp((s) => s.busy);
   const approveRule = useApp((s) => s.approveRule);
   const declineRule = useApp((s) => s.declineRule);
   const submitPrompt = useApp((s) => s.submitPrompt);
@@ -70,7 +71,7 @@ export function ResultCards() {
               key={choice.id}
               type="button"
               className="choice-button"
-              disabled={!lastPrompt}
+              disabled={busy || !lastPrompt}
               onClick={() => void submitPrompt(lastPrompt!, choice.label)}
             >
               {choice.label}
@@ -98,7 +99,7 @@ export function ResultCards() {
 
   if (result.type === 'patch') {
     return (
-      <section className="card card--patch" aria-label="Applied edit">
+      <section className="card" aria-label="Applied edit">
         <h2 className="card-title">Edit compiled</h2>
         <p className="card-text">{result.rationale}</p>
         {result.assumptions.length > 0 && (

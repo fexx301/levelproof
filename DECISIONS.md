@@ -2,6 +2,33 @@
 
 Build-window decisions and measured evidence, newest first. Dates are 2026.
 
+## Sep 12 (design-critic loop — §12 shell)
+
+- **Ten independent design-critic rounds run against the deployed shell**,
+  each with fresh measured evidence (computed styles, pixel statistics,
+  live flows) and a fixed eight-axis rubric; every round's improvements
+  implemented, browser-verified, and deployed before the next critique.
+  Score trajectory: **6.4 → 9.2 → 9.4 → 9.3 → 9.3 → 9.6 → 9.6 → 9.6 →
+  9.6 → 9.4** (the final round's critic discovered a mobile regression
+  introduced by an earlier round's fix — sticky strip occluding the panel —
+  since corrected by pinning only a short head+verdict fragment, verified
+  at 390×844).
+- **~110 improvements landed across the rounds**, including: identity
+  typography (Space Grotesk Variable + IBM Plex Mono, self-hosted);
+  four-step tokenized type scale; three-layer reduced motion; WCAG
+  AA/1.4.11 contrast verified numerically across every pair; complete
+  button state matrix with coarse-pointer targets; collapsible inspectors;
+  verdict-forward sticky strip; armed two-stage destructive reset with
+  tracked timer; live-region discipline (verdict, compile outcomes, move
+  progress, errors); keyboard orbit with play-mode ownership swap; focus
+  management on mode changes; favicon/theme-color/::selection/scrollbar
+  polish; mobile mode-aware panel caps with a pinned verdict fragment.
+- **Convergence behavior:** the independent critic asymptotes at ~9.5–9.6,
+  each round surfacing a new micro-layer (sub-perceptual type steps,
+  mobile panel-share trade-offs, live-region chatter). The remaining
+  0.1–0.2 to a 9.7+ is a long tail of increasingly theoretical items, not
+  a single fixable gap.
+
 ## Sep 12 (complete loop — §14 Sep 26 gate, early)
 
 - **Every Sep 26 gate item is verified live on the deployed URL:**

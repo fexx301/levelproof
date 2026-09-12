@@ -30,7 +30,22 @@ function statusText(status: CheckedResult['status']): string {
   }
 }
 
-/** The three-check strip with surfaced measurements (§7, §12). */
+
+export function DisclosureGlyph() {
+  return (
+    <span className="disclosure-glyph" aria-hidden="true">
+      ›
+    </span>
+  );
+}
+
+/**
+ * The three-check strip (§12): always reachable at the panel's foot, the
+ * verdict line forward and announced, the "Under these game rules" link
+ * beside the indicators, and measurement details folded into a collapsible
+ * inspector. Internal errors and incomplete-exploration explanations render
+ * rather than silently blocking acceptance.
+ */
 export function CheckStrip({ report, ms }: { report: Report; ms: number }) {
   const checks: Array<{ name: string; result: CheckedResult }> = [
     { name: 'Solution', result: report.checks.solution },
@@ -39,9 +54,15 @@ export function CheckStrip({ report, ms }: { report: Report; ms: number }) {
   ];
   return (
     <section className="check-strip" aria-label="Verification checks">
-      <p className={`acceptance${report.accepted ? ' is-accepted' : ''}`}>
-        {report.accepted ? 'Accepted' : 'Not accepted'}
-      </p>
+      <div className="check-strip-pin">
+        <div className="check-strip-head">
+          <h2>Checks</h2>
+          <a href="#rules">Under these game rules</a>
+        </div>
+        <p className={`acceptance${report.accepted ? ' is-accepted' : ''}`} role="status">
+          {report.accepted ? 'Accepted' : 'Not accepted'}
+        </p>
+      </div>
       {checks.map(({ name, result }) => (
         <div key={name} className={`check check--${result.status}`}>
           <h3 className="check-name">
@@ -51,13 +72,25 @@ export function CheckStrip({ report, ms }: { report: Report; ms: number }) {
           <p className="check-explanation">{result.explanation}</p>
         </div>
       ))}
-      <p className="check-meta">
-        {report.revisionId} · catalog {report.catalogVersion} · verifier {report.verifierVersion} ·{' '}
-        {report.exploredCount} states explored · {ms.toFixed(1)} ms
-      </p>
+      {report.internalError && (
+        <p className="compile-error" role="alert">
+          Verifier check failed: {report.internalError}
+        </p>
+      )}
+      <details className="inspector">
+        <summary>
+          <DisclosureGlyph />
+          Inspector
+        </summary>
+        <p className="inspector-body">
+          {report.revisionId} · catalog {report.catalogVersion} · verifier {report.verifierVersion} ·{' '}
+          {report.exploredCount} states explored · {ms.toFixed(1)} ms
+          {!report.complete && ` · ${report.completionExplanation}`}
+          {report.invalidReasons.length > 0 && ` · ${report.invalidReasons.join(' · ')}`}
+        </p>
+      </details>
       <p className="check-note">
-        Under these game rules. Exhaustive bounded exploration — one successful route never proves
-        no bypasses or dead ends.
+        Exhaustive bounded exploration — one successful route never proves no bypasses or dead ends.
       </p>
     </section>
   );

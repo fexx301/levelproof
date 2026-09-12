@@ -7,6 +7,7 @@ import { neighbor, type CompiledLevel } from '../core/topology';
 import {
   GhostActor,
   PlayerActor,
+  reducedMotion,
   type ActorContext,
   type GhostCallbacks,
   type PlayerCallbacks,
@@ -15,8 +16,8 @@ import {
 /**
  * Imperative Three.js diorama built from the compiled level (§3, §12).
  * Rendering never decides movement legality — it consumes the same catalog
- * the core uses. Scaffold for the minimal deployed scene; camera
- * choreography and ghost interpolation land Sep 13+.
+ * the core uses. Camera follows actors with a dt-normalized lerp and snaps
+ * instantly under reduced motion.
  */
 
 const COLORS = {
@@ -85,6 +86,8 @@ export interface SceneHandle {
     callbacks: GhostCallbacks,
   ): GhostActor;
   spawnPlayer(callbacks: PlayerCallbacks): PlayerActor;
+  /** Arrow-key orbiting is disabled while manual play owns the arrows. */
+  setKeyboardOrbit(enabled: boolean): void;
 }
 
 function layoutCenter(compiled: CompiledLevel): Vec3 {
@@ -281,8 +284,17 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel): SceneHan
   camera.lookAt(center.x, center.y, center.z);
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.target.set(center.x, center.y, center.z);
-  controls.enableDamping = true;
   controls.maxPolarAngle = Math.PI / 2.05;
+  // Keyboard orbit only while the canvas itself is focused, so arrows stay
+  // free for manual play; damping follows reduced-motion changes live.
+  renderer.domElement.tabIndex = 0;
+  controls.listenToKeyEvents(renderer.domElement);
+  const motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+  const syncDamping = () => {
+    controls.enableDamping = !motionQuery.matches;
+  };
+  syncDamping();
+  motionQuery.addEventListener('change', syncDamping);
 
   scene.add(new THREE.AmbientLight(0xffffff, 0.55));
   const sun = new THREE.DirectionalLight(0xfff2dd, 1.15);
@@ -299,7 +311,8 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel): SceneHan
     lastTime = now;
     for (const update of actorUpdates) update(dt, now);
     if (followTarget !== null) {
-      controls.target.lerp(followTarget.position, 0.08);
+      const k = 1 - Math.exp(-dt * 5);
+      controls.target.lerp(followTarget.position, reducedMotion() ? 1 : k);
     }
     controls.update();
     renderer.render(scene, camera);
@@ -337,8 +350,16 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel): SceneHan
     spawnPlayer(callbacks) {
       return new PlayerActor(actorContext, callbacks);
     },
+    setKeyboardOrbit(enabled) {
+      if (enabled) {
+        controls.listenToKeyEvents(renderer.domElement);
+      } else {
+        controls.stopListenToKeyEvents();
+      }
+    },
     dispose() {
       cancelAnimationFrame(frame);
+      motionQuery.removeEventListener('change', syncDamping);
       observer.disconnect();
       controls.dispose();
       world.traverse((obj) => {

@@ -52,7 +52,6 @@ export function PlaytesterPanel({ report }: { report: Report }) {
   const mode = useApp((s) => s.mode);
   const ghost = useApp((s) => s.ghost);
   const watchWitness = useApp((s) => s.watchWitness);
-  const exitToAuthoring = useApp((s) => s.exitToAuthoring);
   const startPlay = useApp((s) => s.startPlay);
   const options = witnessOptions(report);
   if (mode !== 'watching') {
@@ -80,7 +79,11 @@ export function PlaytesterPanel({ report }: { report: Report }) {
   return (
     <section className="panel panel--active" aria-label="Playtester">
       <h2 className="panel-title">Watch playtester</h2>
-      <p className="panel-note">
+      {(() => {
+        const current = options.find((option) => option.kind === ghost.witnessKind);
+        return current ? <p className="panel-note">Replaying: {current.label}</p> : null;
+      })()}
+      <p className="panel-note" role="status">
         Move {Math.min(ghost.moveIndex + (ghost.finished ? 0 : 1), ghost.totalMoves)} of{' '}
         {ghost.totalMoves}
       </p>
@@ -124,9 +127,6 @@ export function PlaytesterPanel({ report }: { report: Report }) {
           {ghost.endNote}
         </p>
       )}
-      <button type="button" onClick={exitToAuthoring}>
-        Back to editing
-      </button>
     </section>
   );
 }

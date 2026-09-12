@@ -301,9 +301,15 @@ export function verify(level: Level, config: VerifierConfig = {}): Report {
       const activeSwitches = [...compiled.switchBit]
         .filter(([, bit]) => (first.state.switchMask & bit) !== 0)
         .map(([id]) => id);
+      const holding =
+        heldKeys.length > 0
+          ? ` holding the ${heldKeys.join(' and the ')}`
+          : ' holding no keys';
+      const switches =
+        activeSwitches.length > 0 ? `, with the ${activeSwitches.join(' and the ')} active` : '';
       recoveryCheck = {
         status: 'fail',
-        explanation: `A player can be stranded at "${first.state.moduleId}" with keys [${heldKeys.join(', ') || 'none'}] and switches [${activeSwitches.join(', ') || 'none'}]; no winning route remains.`,
+        explanation: `A player can be stranded at “${first.state.moduleId}”${holding}${switches} — no winning route remains.`,
         witness: { kind: 'dead_end', route: routeTo(first), endState: first.state },
       };
     } else {

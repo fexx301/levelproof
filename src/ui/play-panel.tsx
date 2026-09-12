@@ -14,8 +14,7 @@ import { useApp } from '../state/store';
  */
 export function PlayPanel({ level, report }: { level: Level; report: Report }) {
   const play = useApp((s) => s.play);
-  const exitToAuthoring = useApp((s) => s.exitToAuthoring);
-
+  const hasDraft = useApp((s) => s.draft !== null);
   const compiled = useMemo(() => compileLevel(level), [level]);
   const deadEnd =
     report.checks.recovery.status === 'fail' ? report.checks.recovery.witness?.endState : undefined;
@@ -27,8 +26,8 @@ export function PlayPanel({ level, report }: { level: Level; report: Report }) {
 
   return (
     <section className="panel panel--active" aria-label="Play">
-      <h2 className="panel-title">Play the draft</h2>
-      <p className="panel-note">WASD / arrows · R restart · Escape exits. Compass: N is away from you.</p>
+      <h2 className="panel-title">{hasDraft ? 'Play the draft' : 'Play the level'}</h2>
+      <p className="panel-note">WASD / arrows · Esc exits. Compass: N is away from you.</p>
       <div className="dpad">
         <span />
         <button type="button" onClick={() => actorBridge.player()?.move('N')} aria-label="Move north">
@@ -38,7 +37,7 @@ export function PlayPanel({ level, report }: { level: Level; report: Report }) {
         <button type="button" onClick={() => actorBridge.player()?.move('W')} aria-label="Move west">
           W
         </button>
-        <span className="dpad-center">{play.at || '—'}</span>
+        <span className="dpad-center" role="status">{play.at || '—'}</span>
         <button type="button" onClick={() => actorBridge.player()?.move('E')} aria-label="Move east">
           E
         </button>
@@ -47,6 +46,11 @@ export function PlayPanel({ level, report }: { level: Level; report: Report }) {
           S
         </button>
         <span />
+      </div>
+      <div className="ghost-controls">
+        <button type="button" onClick={() => actorBridge.player()?.restart()}>
+          Restart
+        </button>
       </div>
       <div className="inventory">
         {play.keys.length === 0 && play.switches.length === 0 && (
@@ -73,9 +77,11 @@ export function PlayPanel({ level, report }: { level: Level; report: Report }) {
           You reproduced the failure — the same trapped state as the ghost. No winning route remains.
         </p>
       )}
-      <button type="button" onClick={exitToAuthoring}>
-        Back to editing (Escape)
-      </button>
+      {play.trapped && !play.atGoal && !reproduced && (
+        <p className="banner banner--fail" role="status">
+          Trapped — no route to the goal remains. R restarts.
+        </p>
+      )}
     </section>
   );
 }

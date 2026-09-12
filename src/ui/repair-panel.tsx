@@ -4,8 +4,8 @@ import type { Report } from '../core/verifier';
 /**
  * Checked repairs (§9, §12): only fully checked candidates are shown; a
  * chosen repair is applied to the exact draft revision and re-verified
- * before it can replace the accepted level. "No checked fix in this search"
- * is honest — it does not mean no repair exists.
+ * before it can replace the accepted level. Apply errors render here, next
+ * to the button that caused them.
  */
 export function RepairPanel({ report }: { report: Report }) {
   const draft = useApp((s) => s.draft);
@@ -18,11 +18,16 @@ export function RepairPanel({ report }: { report: Report }) {
   return (
     <section className="panel" aria-label="Repairs">
       <h2 className="panel-title">Repairs</h2>
-      {repair.status === 'idle' ? (
+      {repair.status === 'idle' || repair.status === 'running' ? (
         <>
           <p className="panel-note">Search checked fixes that keep every active rule.</p>
-          <button type="button" onClick={() => runRepairs(report)}>
-            Find repairs
+          <button
+            type="button"
+            disabled={repair.status === 'running'}
+            style={{ minWidth: '8rem' }}
+            onClick={() => runRepairs(report)}
+          >
+            {repair.status === 'running' ? 'Searching…' : 'Find repairs'}
           </button>
         </>
       ) : (
@@ -39,6 +44,11 @@ export function RepairPanel({ report }: { report: Report }) {
               </button>
             </div>
           ))}
+          {repair.applyError && (
+            <p className="compile-error" role="alert">
+              {repair.applyError}
+            </p>
+          )}
         </>
       )}
     </section>

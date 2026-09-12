@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Cardinal, Level } from '../shared/schema';
 import { verify, type Report } from './core/verifier';
 import { compileLevel } from './core/topology';
@@ -44,6 +44,13 @@ export function App() {
   const resetVault = useApp((s) => s.resetVault);
   const startPlay = useApp((s) => s.startPlay);
   const exitToAuthoring = useApp((s) => s.exitToAuthoring);
+  const [resetArmed, setResetArmed] = useState(false);
+  const resetArmTimer = useRef<number | null>(null);
+  useEffect(() => {
+    return () => {
+      if (resetArmTimer.current !== null) window.clearTimeout(resetArmTimer.current);
+    };
+  }, []);
 
   const level = draft?.level ?? acceptedLevel;
   const { report, ms } = useMemo(() => {
@@ -52,8 +59,24 @@ export function App() {
     return { report: result, ms: performance.now() - t0 };
   }, [level]);
 
+  // Escape exits any non-authoring mode (the header control promises it).
+  useEffect(() => {
+    if (mode === 'authoring') return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') useApp.getState().exitToAuthoring();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [mode]);
+
+  // Moving keyboard focus to the panel on mode change confirms the switch.
+  const panelRef = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    if (mode === 'authoring') return;
+    panelRef.current?.focus();
+  }, [mode]);
   return (
-    <div className="app">
+    <div className="app" data-mode={mode}>
       <header className="app-header">
         <h1 className="app-title">LevelProof</h1>
         <p className="app-sub">An AI puzzle creator with automatic playtesting</p>
@@ -70,10 +93,34 @@ export function App() {
                 </button>
               )}
               <button type="button" onClick={startPlay}>
-                Play the draft
+                {draft ? 'Play the draft' : 'Play the level'}
               </button>
-              <button type="button" onClick={resetVault}>
-                Reset to the empty vault
+              {resetArmed && (
+                <span role="status" className="control-status">
+                  Reset armed — press again within 3 seconds
+                </span>
+              )}
+              <button
+                type="button"
+                className={`reset-button${resetArmed ? ' button--danger' : ''}`}
+                onClick={() => {
+                  if (resetArmTimer.current !== null) {
+                    window.clearTimeout(resetArmTimer.current);
+                    resetArmTimer.current = null;
+                  }
+                  if (resetArmed) {
+                    resetVault();
+                    setResetArmed(false);
+                  } else {
+                    setResetArmed(true);
+                    resetArmTimer.current = window.setTimeout(() => {
+                      setResetArmed(false);
+                      resetArmTimer.current = null;
+                    }, 3000);
+                  }
+                }}
+              >
+                {resetArmed ? 'Confirm reset' : 'Reset to the empty vault'}
               </button>
             </>
           )}
@@ -84,12 +131,12 @@ export function App() {
           )}
         </div>
       </header>
-      <div className="rule-bar" aria-label="Active rules">
+      <div className="rule-bar" id="rules" tabIndex={-1} role="group" aria-label="Active rules">
         <RuleChips level={level} />
       </div>
       <main className="app-main">
         <Viewport level={level} mode={mode} report={report} />
-        <aside className="side-panel">
+        <aside className="side-panel" ref={panelRef} tabIndex={-1}>
           {mode === 'authoring' && (
             <>
               <PromptPanel />
@@ -141,7 +188,7 @@ function Viewport({ level, mode, report }: { level: Level; mode: Mode; report: R
           info.kind === 'dead_end'
             ? `Stranded at “${info.endState.moduleId}” — no winning route remains.`
             : info.kind === 'bypass'
-              ? `Reached the goal without: ${info.missingKeys.join(', ')}.`
+              ? `Reached the goal without the ${info.missingKeys.join(' and the ')}.`
               : 'Goal reached.';
         useApp.setState({ ghost: { ...current, finished: true, playing: false, endNote } });
       },
@@ -158,15 +205,12 @@ function Viewport({ level, mode, report }: { level: Level; mode: Mode; report: R
   useEffect(() => {
     const scene = sceneRef.current;
     if (!scene || mode !== 'playing') return;
+    scene.setKeyboardOrbit(false);
     const actor = scene.spawnPlayer({
       onState: (info) => useApp.setState({ play: info }),
     });
     actorBridge.setPlayer(actor);
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        useApp.getState().exitToAuthoring();
-        return;
-      }
       if (event.key === 'r' || event.key === 'R') {
         actor.restart();
         return;
@@ -180,11 +224,16 @@ function Viewport({ level, mode, report }: { level: Level; mode: Mode; report: R
     window.addEventListener('keydown', onKey);
     return () => {
       window.removeEventListener('keydown', onKey);
+      scene.setKeyboardOrbit(true);
       actorBridge.setPlayer(null);
       actor.dispose();
     };
   }, [level, mode]);
 
-  return <div className="viewport" ref={hostRef} aria-label="3D scene" />;
+  const viewportLabel =
+    mode === 'playing'
+      ? '3D view of the current level — WASD or arrows to move, R restart'
+      : '3D view of the current level — drag to orbit, scroll to zoom, arrow keys orbit when focused';
+  return <div className="viewport" ref={hostRef} role="region" aria-label={viewportLabel} />;
 }
 
