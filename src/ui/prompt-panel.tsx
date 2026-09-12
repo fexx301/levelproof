@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { DisclosureGlyph } from './check-strip';
+import { EXAMPLE_PROMPTS } from './example-prompts';
 import { useApp } from '../state/store';
 
 /** The prompt panel (§12): describe a change, watch it compile. */
@@ -9,10 +10,29 @@ export function PromptPanel() {
   const error = useApp((s) => s.error);
   const meta = useApp((s) => s.lastCompileMeta);
   const submitPrompt = useApp((s) => s.submitPrompt);
+  const hasKey = useApp((s) => (s.draft?.level ?? s.acceptedLevel).keys.length > 0);
 
   const submit = () => {
     void submitPrompt(text);
   };
+
+  // One-click examples: the cache-verified canonical demo prompts, so a
+  // first-time visitor can reach the signature moment without reading docs.
+  const examples: { label: string; prompt: string }[] = [
+    { label: 'Key + locked door', prompt: EXAMPLE_PROMPTS.baseline },
+    {
+      label: 'The switch trap',
+      // Self-sufficient on a fresh scene; the canonical second step once the
+      // baseline (any key) is already in place.
+      prompt: hasKey ? EXAMPLE_PROMPTS.trap : EXAMPLE_PROMPTS.trapOneShot,
+    },
+    { label: 'Remove the ramp', prompt: EXAMPLE_PROMPTS.removeRamp },
+  ];
+  const runExample = (prompt: string) => {
+    setText(prompt);
+    void submitPrompt(prompt);
+  };
+
 
   return (
     <section className="prompt-panel" aria-label="Describe a change">
@@ -48,6 +68,20 @@ export function PromptPanel() {
         >
           {meta ? (meta.cached ? 'Cached compile' : 'Fresh compile') : ''}
         </span>
+      </div>
+      <div className="example-prompts" role="group" aria-label="Example prompts">
+        <span className="panel-note">Try:</span>
+        {examples.map((example) => (
+          <button
+            key={example.label}
+            type="button"
+            className="example-chip"
+            disabled={busy}
+            onClick={() => runExample(example.prompt)}
+          >
+            {example.label}
+          </button>
+        ))}
       </div>
       <p className="panel-note">
         {typeof navigator !== 'undefined' &&

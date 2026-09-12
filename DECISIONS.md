@@ -2,6 +2,40 @@
 
 Build-window decisions and measured evidence, newest first. Dates are 2026.
 
+## Sep 12 (Phase 1 — judge experience + scale evidence)
+
+- **Example chips shipped** (deployed `index-BttU0Z2F`): three one-click
+  prompts under the Describe-a-change box. The trap chip is state-aware —
+  on a fresh scene it sends a **one-shot compound prompt** (baseline + trap
+  in a single compile; the model encodes the keyed door as a door condition,
+  so no rule-approval step); once any key exists it sends the canonical
+  second prompt. Both orders verified live on production: **direct →
+  Recovery fail + stranded witness; sequential (chip 1 → chip 2) → same**.
+  The compound string is recorded in `src/ui/example-prompts.ts` alongside
+  the canonical arc strings.
+- **Scale evidence recorded** (`scripts/stress.ts`, tsx-run): verify() on
+  generated open grids — 36 modules/4,160 states → 31 ms; 81/9,920 → 41 ms;
+  144/17,984 → 65 ms; **256 modules (kit max)/32,320 states (at the
+  32,768 bound) → 138 ms** — one-and-a-half frames at absolute worst case,
+  so main-thread verification stands (§11: Worker only if input-blocking).
+  Repair search on the trap fixture: 2.7 ms, 1 candidate. On an open plane
+  the repair search honestly returns zero candidates (nothing gateable) —
+  the "no checked fix" path is reachable by construction.
+- **Cache reality check**: the demo-path cache is in-memory and
+  instance-local by design (§10.2 note in `api/_lib/cache.ts`) — a cold
+  serverless start begins empty. So cache-backed determinism holds within a
+  warm instance window, not across cold starts. **Video protocol: warm the
+  exact demo sequence immediately before recording, then record within the
+  warm window** (each cache hit also keeps the instance warm). For the
+  weeks-long judging window, cold-start judges simply get fresh compiles at
+  measured reliability (canonical trap 3/4; compound 1/1 sampled) —
+  honest and disclosed by the Fresh/Cached badge. A persistent cache
+  (Vercel KV) is optional hardening, not required.
+- **Tab-wear note**: a long-lived headless tab accumulated puppeteer
+  protocol timeouts and then silently dropped results that a fresh tab
+  handled fine — a test-harness artifact, not product behavior. Verify
+  suspicious UI failures in a fresh tab before debugging the app.
+
 ## Sep 12 (prompt-4 — trap reliability, measured)
 
 - **The signature trap was unreachable by prose**: a 4-phrasing experiment

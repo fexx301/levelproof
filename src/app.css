@@ -554,6 +554,42 @@ details.inspector[open] summary .disclosure-glyph {
   font-size: var(--text-xs);
 }
 
+.example-prompts {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.example-chip {
+  background: none;
+  border: 1px solid var(--color-line);
+  border-radius: 999px;
+  color: var(--color-muted);
+  cursor: pointer;
+  font-family: var(--font-data);
+  font-size: var(--text-xs);
+  min-height: 28px;
+  padding: var(--space-05) var(--space-2);
+}
+
+.example-chip:hover:not(:disabled) {
+  border-color: var(--color-text);
+  color: var(--color-text);
+}
+
+.example-chip:focus-visible {
+  border-color: var(--color-text);
+  color: var(--color-text);
+  outline: 1px solid var(--color-text);
+  outline-offset: 2px;
+}
+
+.example-chip:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
 .inventory-chip {
   border: 1px solid var(--color-line);
   border-radius: 999px;
