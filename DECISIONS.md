@@ -2,6 +2,35 @@
 
 Build-window decisions and measured evidence, newest first. Dates are 2026.
 
+## Sep 13 (art-direction and craft pass — external session, verified)
+
+- **A second session's art/craft pass was reviewed and shipped** (`ea38d70`):
+  per-scene material palettes (`src/render/art-direction.ts` — limestone
+  vault, ivory observatory, patinated relay works, basalt lockhouse;
+  presentation-only, nothing enters the level schema), crafted edges
+  (RoundedBoxGeometry without touching catalog collision bounds), true
+  ramp geometry (vertex-displaced, orientation-exact), a rewritten
+  state-driven mechanism module (`src/render/mechanisms.ts` — cleaner than
+  the event-callback version: state, not event ordering, determines all
+  visuals; in-flight collections cancel on restart), **Frame level**
+  button, and a switch-shape legend (hexagonal openers vs triangular
+  sealers — distinct shape AND color cues). The gallery levels were
+  redesigned with richer semantics: Twin Keys now gates the gold wing
+  behind the silver key with a powered return loop and a two-key
+  (`requiresKeys`) vault; Overpass is a two-elevation relay circuit;
+  Gauntlet is prepare/arm/commit.
+- **Verification performed before shipping**: strict chain green (113
+  tests — 34 new, including semantic gallery assertions like "cannot
+  reach gold first or skip the power room"); deployed and live-checked —
+  canonical trap arc with mechanisms slamming, ghost visible with the
+  stranded note, all three gallery scenes Accepted with pixel-distinct
+  palettes, legend rendering, Frame level restoring its pose. One false
+  alarm during verification: a mid camera-glide screenshot read as 9%
+  content fill; after settle the same scene fills 81%×95% — screenshots
+  after scene changes need a 6s settle, not 2.2s.
+- `.openai/` (tool-generated hosting config with a project id) added to
+  `.gitignore` rather than committed.
+
 ## Sep 12 (seam guards — the onChange regression can never recur silently)
 
 - **Prompt-panel interaction tests added** (`tests/prompt-panel.test.tsx`,
