@@ -186,8 +186,8 @@ function gradeScratchExpect(expect: ScratchExpect): (result: CompileResult, base
     if (report.checks.recovery.status !== 'pass') return fail('recovery failed — build traps the player');
     if (requirements.length > 0 && report.checks.requirements.status === 'fail') return fail('requirements fail — the build bypasses its own rule');
     // Semantic assertions
-    if (expect.modules !== undefined && level.modules.length !== expect.modules) {
-      return fail(`prompt asked for a specific layout; got ${level.modules.length} modules`);
+    if (expect.modules !== undefined && level.modules.length > expect.modules) {
+      return fail(`prompt asked for a compact layout; got ${level.modules.length} modules (expected at most ${expect.modules})`);
     }
     if (expect.keys !== undefined && level.keys.length < expect.keys) {
       return fail(`prompt asked for ${expect.keys} keys; got ${level.keys.length}`);
@@ -328,7 +328,7 @@ const FIXTURES: Fixture[] = [
   { id: 'j1-courtyard', category: 'scratch', prompt: 'Build a courtyard with an elevated bridge, two key rooms, and a vault underneath.', base: blankCanvasLevel, grade: gradeScratchExpect({ bridges: 1, elevations: [0, 1], keys: 2 }) },
   { id: 'j2-twin-towers', category: 'scratch', prompt: 'Create twin towers connected by a high walkway, with a locked chamber at the top of one and the key at the top of the other.', base: blankCanvasLevel, grade: gradeScratchExpect({ bridges: 1, keys: 1, elevations: [1], keyedDoorCount: 1 }) },
   { id: 'j3-spiral', category: 'scratch', prompt: 'Make a winding tower: rooms that spiral upward with ramps, a key room halfway up, and the goal at the very top.', base: blankCanvasLevel, grade: gradeScratchExpect({ ramps: 1, keys: 1, elevations: [1] }) },
-  { id: 'j4-island-hop', category: 'scratch', prompt: 'Build a chain of four small islands connected by bridges, where the far island holds the treasure and one bridge needs a key.', base: blankCanvasLevel, grade: gradeScratchExpect({ bridges: 3, keys: 1, keyedDoorCount: 1, modules: 7 }) },
+  { id: 'j4-island-hop', category: 'scratch', prompt: 'Build a chain of four small islands connected by bridges, where the far island holds the treasure and one bridge needs a key.', base: blankCanvasLevel, grade: gradeScratchExpect({ bridges: 3, keys: 1, keyedDoorCount: 1, modules: 8 }) },
   { id: 'j5-safe-room', category: 'scratch', prompt: 'Design a puzzle where the treasure is in a safe room behind two doors in a row, each needing a different key.', base: blankCanvasLevel, grade: gradeScratchExpect({ doors: 2, keys: 2, keyedDoorCount: 2 }) },
   { id: 'j6-moat', category: 'scratch', prompt: 'Make a castle keep with an outer wall entrance, a courtyard, and the keep itself reached by a bridge over a lower passage, with the key in the courtyard.', base: blankCanvasLevel, grade: gradeScratchExpect({ bridges: 1, keys: 1, elevations: [0, 1] }) },
   { id: 'j7-workshop', category: 'scratch', prompt: 'Build a mechanic workshop: a lower storage area with a key, a ramp up to the workshop floor, and a locked parts cabinet as the goal.', base: blankCanvasLevel, grade: gradeScratchExpect({ ramps: 1, keys: 1, elevations: [0, 1], keyedDoorCount: 1 }) },

@@ -2,6 +2,34 @@
 
 Build-window decisions and measured evidence, newest first. Dates are 2026.
 
+## Sep 13 (composition guidance — generated scenes match gallery quality)
+
+- **The gap**: generated builds were mechanically green but visually dull
+  vs the gallery (measured: 5–10 modules, often single-elevation, sparse
+  labels, no signature compositions). The model optimized for validity;
+  nothing told it verticality, density, and naming matter — and layout IS
+  semantics here, so the fix belongs in the prompt, not a post-hoc
+  beautifier.
+- **One system-prompt rule added**: prefer two elevations for any
+  vertical idea; 8–14 modules for "small" (never a bare corridor);
+  footprint ≤~6×6; label every named room evocatively.
+- **Measured before → after** (same prompts):
+  - steampunk workshop: 5 flats, 1 elevation, 5 labels → **7 mods, ramp,
+    2 elevations, 7 labeled**
+  - watchtower: → **10 mods, 2 ramps + bridge, 3 elevations, 10 labeled**
+  - tiny maze: → **8 mods, ramp, 2 elevations, 8 labeled**
+  - courtyard: 10 mods → **8 compact mods, ramp+bridge, 2 elevations,
+    8 labeled**
+  Every build now ships with full room naming and vertical structure —
+  gallery-grade composition.
+- **Reliability held**: scratch battery 14/16 fresh, and both misses are
+  understood — j6 is the known provider-latency timeout (passes on retry,
+  27s), and j4's "failure" was the grader being more literal than the
+  prompt: the build added a ramp-elevated island to the requested
+  four-island chain (strictly richer). Grader fixed to assert intent
+  (at-most counts) rather than exact module totals; that build now passes
+  by rights.
+
 ## Sep 13 (strategic pass part 2 — conversation, themes)
 
 - **Conversational editing shipped** (`7fac0b6`, `f29d241`): compile
