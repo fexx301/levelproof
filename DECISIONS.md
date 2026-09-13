@@ -2,6 +2,38 @@
 
 Build-window decisions and measured evidence, newest first. Dates are 2026.
 
+## Sep 13 (strategic pass part 2 — conversation, themes)
+
+- **Conversational editing shipped** (`7fac0b6`, `f29d241`): compile
+  requests carry the last six turns (cache-keyed; the system prompt frames
+  them as context — the scene already reflects applied edits), every
+  applied patch shows a **one-line change summary** ("Changed: moved
+  'goal-pad', ramp 'keep-ramp', flat 'gate-room' +3 more"), and a
+  **revision history** (last 12 accepted checkpoints, labeled by prompt or
+  repair) restores any prior level with one click. Follow-up battery
+  (`ONLY=followup`, 5 two-turn conversations with anaphora, semantically
+  graded): **4/5** — the miss asked a genuinely ambiguous question
+  ("make it harder") and a clarification was a defensible answer.
+- **Two conversation gaps found and closed**: there was **no
+  setModuleLabel operation** (renames returned `unsupported` — the model
+  was right), and elevation changes needed explicit guidance ("raise X"
+  = moveModule with consistent reconnection). Both shipped; the failing
+  battery cases now pass.
+- **Theme promptability shipped** (`f23de4a`): presentation themes
+  (limestone / ivory / patina / basalt) as a **side-channel** —
+  word-detected from the prompt, sent on the request, echoed by the
+  server, overriding the renderer's scene-derived default. No theme field
+  enters the level schema or verifier (the art-direction module's own
+  contract); the system prompt tells the model never to encode visual
+  style in operations. Live-verified through the API (theme echo) and
+  unit-verified in the renderer (all four themes resolve correctly after
+  fixing a key-mapping bug the first live test caught).
+- **Tooling note**: the long-lived headless browser session eventually
+  degrades beyond single tabs (blank loads on fresh tabs that reload
+  fine); production was re-verified healthy via three consecutive clean
+  loads with error listeners attached before trusting any interactive
+  test from it again.
+
 ## Sep 13 (strategic pass — judge-prompt reliability, extended requirements)
 
 - **Judge-prompt reliability, measured honestly** (reviewer-advised
