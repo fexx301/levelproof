@@ -143,6 +143,8 @@ interface AppState {
   promptHistory: string[];
   /** One-line summary of the last applied change (§12 visible edit). */
   changeSummary: string | null;
+  /** Presentation theme the author asked for (§12 visual expression). */
+  theme: 'limestone' | 'ivory' | 'patina' | 'basalt' | null;
   /** Revision history entries (§11): every accepted checkpoint this session. */
   history: { level: Level; label: string }[];
   /** Entities the creator marked "keep this" (§9): repairs that move or
@@ -252,6 +254,16 @@ function summarizeOperations(operations: Operation[]): string {
   return names.length > 3 ? `${shown} +${names.length - 3} more` : shown;
 }
 
+/** Theme words in a prompt → the theme side-channel (presentation only). */
+function themeFromPrompt(prompt: string): 'limestone' | 'ivory' | 'patina' | 'basalt' | undefined {
+  const p = prompt.toLowerCase();
+  if (/stone ruin|limestone|castle|crypt|dungeon/.test(p)) return 'limestone';
+  if (/ivory|observatory|white tower|marble|moonlit/.test(p)) return 'ivory';
+  if (/patina|verdigris|relay|steampunk|copper|factory|workshop/.test(p)) return 'patina';
+  if (/basalt|volcanic|dark fortress|shadow|obsidian/.test(p)) return 'basalt';
+  return undefined;
+}
+
 /** Short label for a revision-history entry. */
 function lastPromptLabel(prompt: string): string {
   const trimmed = prompt.trim().replace(/\s+/g, ' ');
@@ -319,6 +331,7 @@ export const useApp = create<AppState>()((set, get) => ({
   protectedIds: [],
   promptHistory: [],
   changeSummary: null,
+  theme: null,
   history: [],
   previousAccepted: null,
   draft: null,
@@ -391,7 +404,14 @@ export const useApp = create<AppState>()((set, get) => ({
       const response = await fetch('/api/compile', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ level: base, prompt, clarificationContext, selection, history: history.map((h) => ({ prompt: h })) }),
+        body: JSON.stringify({
+          level: base,
+          prompt,
+          clarificationContext,
+          selection,
+          history: history.map((h) => ({ prompt: h })),
+          ...(themeFromPrompt(prompt) !== undefined ? { theme: themeFromPrompt(prompt) } : {}),
+        }),
       });
       const body: unknown = await response.json();
       if (!response.ok) {
@@ -403,7 +423,7 @@ export const useApp = create<AppState>()((set, get) => ({
         set({ busy: false, error: 'The compile response failed validation.', lastResult: null, lastCompileMeta: null });
         return;
       }
-      const { result, baseRevision, cached, attempts, totalCostUsd } = parsed.data;
+      const { result, baseRevision, cached, attempts, totalCostUsd, theme } = parsed.data;
       const stillCurrent = revisionId(get().draft?.level ?? get().acceptedLevel) === boundRevision;
       if (!stillCurrent || baseRevision !== boundRevision) {
         set({
@@ -420,6 +440,7 @@ export const useApp = create<AppState>()((set, get) => ({
         lastPrompt: prompt,
         lastCompileMeta: { cached, totalCostUsd, attempts: attempts.length, model },
         promptHistory: [...history, prompt].slice(-6),
+        ...(theme !== undefined ? { theme } : {}),
       });
 
       if (result.type === 'patch') {

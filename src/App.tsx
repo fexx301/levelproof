@@ -199,11 +199,12 @@ function Viewport({ level, mode, report }: { level: Level; mode: Mode; report: R
   const hostRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<SceneHandle | null>(null);
   const witnessKind = useApp((s) => s.ghost.witnessKind);
+  const theme = useApp((s) => s.theme);
 
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
-    const handle = mountScene(host, compileLevel(level));
+    const handle = mountScene(host, compileLevel(level), theme ?? undefined);
     sceneRef.current = handle;
     return () => {
       handle.dispose();

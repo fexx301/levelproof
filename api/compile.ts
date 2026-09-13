@@ -50,6 +50,7 @@ export async function POST(request: Request): Promise<Response> {
   return Response.json({
     result: outcome.result,
     baseRevision: outcome.baseRevision,
+    ...(outcome.theme !== undefined ? { theme: outcome.theme } : {}),
     cached: outcome.cached,
     attempts: outcome.attempts,
     totalCostUsd: outcome.totalCostUsd,

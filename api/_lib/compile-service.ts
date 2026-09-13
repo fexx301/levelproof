@@ -34,6 +34,7 @@ export interface CompileInput {
   clarificationContext?: string;
   selection?: string[];
   history?: string[];
+  theme?: 'limestone' | 'ivory' | 'patina' | 'basalt';
 }
 
 export interface AttemptRecord {
@@ -48,6 +49,8 @@ export interface CompileOutcome {
   result: CompileResult | null;
   /** Server-attached (§11): the revision the result was computed against. */
   baseRevision: string;
+  /** Server-echoed presentation theme. */
+  theme?: 'limestone' | 'ivory' | 'patina' | 'basalt';
   cached: boolean;
   attempts: AttemptRecord[];
   totalCostUsd: number;
@@ -81,7 +84,7 @@ export async function compile(
   const baseRevision = revisionId(input.level);
   const primary = providerConfigFromEnv(env);
   if (!primary) {
-    return { result: null, baseRevision, cached: false, attempts: [], totalCostUsd: 0, error: 'missing_provider_config' };
+    return { result: null, baseRevision, theme: input.theme, cached: false, attempts: [], totalCostUsd: 0, error: 'missing_provider_config' };
   }
   const fallbackModel = env.LLM_FALLBACK_MODEL;
   const hasFallback = fallbackModel !== undefined && fallbackModel !== primary.model;
@@ -97,11 +100,18 @@ export async function compile(
   });
   const hit = compileCache.get(key);
   if (hit !== null) {
-    return { result: hit, baseRevision, cached: true, attempts: [], totalCostUsd: 0 };
+    return { result: hit, baseRevision, theme: input.theme, cached: true, attempts: [], totalCostUsd: 0 };
   }
 
   const baseMessages: ChatMessage[] = [
-    { role: 'system', content: buildSystemPrompt(input.level, revisionId(input.level)) },
+    {
+      role: 'system',
+      content:
+        buildSystemPrompt(input.level, revisionId(input.level)) +
+        (input.theme !== undefined
+          ? `\n(Presentation theme is handled outside this contract; never encode visual style in operations.)\n`
+          : ''),
+    },
     {
       role: 'user',
       content: [
@@ -176,7 +186,7 @@ export async function compile(
 
   const finish = (result: CompileResult): CompileOutcome => {
     compileCache.set(key, result);
-    return { result, baseRevision, cached: false, attempts, totalCostUsd };
+    return { result, baseRevision, theme: input.theme, cached: false, attempts, totalCostUsd };
   };
 
   // Attempt 1: the primary model.
@@ -212,5 +222,5 @@ export async function compile(
     if (outcome3.parsed) return finish(outcome3.parsed);
   }
 
-  return { result: null, baseRevision, cached: false, attempts, totalCostUsd, error: 'invalid_output', ...(lastProviderError !== undefined ? { providerError: lastProviderError } : {}) };
+  return { result: null, baseRevision, theme: input.theme, cached: false, attempts, totalCostUsd, error: 'invalid_output', ...(lastProviderError !== undefined ? { providerError: lastProviderError } : {}) };
 }

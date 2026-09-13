@@ -14,6 +14,9 @@ export const compileRequestSchema = z.strictObject({
   /** Recent conversation turns (oldest first), for follow-ups like "raise
    * the bridge" — the scene already reflects earlier applied edits. */
   history: z.array(z.strictObject({ prompt: z.string().min(1).max(2000) })).max(6).optional(),
+  /** Presentation theme the author asked for ("make it a stone ruin").
+   * Presentation only — never part of level semantics. */
+  theme: z.enum(['limestone', 'ivory', 'patina', 'basalt']).optional(),
 });
 export type CompileRequest = z.infer<typeof compileRequestSchema>;
 
@@ -32,6 +35,8 @@ export const compileOkResponseSchema = z.strictObject({
   /** Server-attached: the revision the result was computed against (§11).
    * Never model-emitted — the model cannot know it. */
   baseRevision: z.string(),
+  /** Server-echoed presentation theme (the author's choice, not the model's). */
+  theme: z.enum(['limestone', 'ivory', 'patina', 'basalt']).optional(),
   cached: z.boolean(),
   attempts: z.array(attemptRecordSchema),
   totalCostUsd: z.number(),

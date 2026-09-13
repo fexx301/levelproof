@@ -6,7 +6,7 @@ import { GEOMETRY, centerPoint, dirDelta, portPoint, type Vec3 } from '../core/c
 import { doorPassable, initialState } from '../core/movement.js';
 import { craftedBox, rampGeometry, sceneBounds, framingPoints, fitOverview } from './craft.js';
 import { createMechanisms, type WorldVisuals } from './mechanisms.js';
-import { artDirection, switchSignature, type ArtDirection } from './art-direction.js';
+import { artDirection, switchSignature, type ArtDirection, type ThemeKey } from './art-direction.js';
 import { applyOperations } from '../core/level.js';
 import type { Operation } from '../../shared/schema.js';
 import { neighbor, type CompiledLevel } from '../core/topology.js';
@@ -544,7 +544,7 @@ function addItems(
   }
 }
 
-export function mountScene(host: HTMLElement, compiled: CompiledLevel): SceneHandle {
+export function mountScene(host: HTMLElement, compiled: CompiledLevel, theme?: ThemeKey): SceneHandle {
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.setSize(host.clientWidth || 800, host.clientHeight || 600);
@@ -557,7 +557,7 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel): SceneHan
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(COLORS.background);
 
-  const direction = artDirection(compiled);
+  const direction = artDirection(compiled, theme);
   const mats = buildMats(direction);
   const world = new THREE.Group();
   scene.add(world);
