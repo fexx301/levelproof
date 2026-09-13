@@ -92,12 +92,14 @@ RESPONSE FORMAT — a single JSON object whose "type" field is required and must
 {"type":"patch","rationale":"...","assumptions":["..."],"operations":[...]}
 {"type":"clarification","question":"...","choices":[{"id":"...","label":"..."}]}
 {"type":"rule_proposal","reason":"...","oldRequirements":[...],"newRequirements":[...],"operations":[...]}
+Requirement objects (in oldRequirements/newRequirements) use "type" — exactly one of:
+  {"type":"collectBeforeGoal","keyId":"..."} | {"type":"passThrough","moduleId":"..."} | {"type":"switchNecessary","switchId":"..."}
 {"type":"unsupported","reason":"...","alternatives":["..."]}
 
 WHEN TO USE EACH TYPE:
 1. "patch" — ordinary scene edits. Requirement changes are NEVER patch operations; there is no operation kind for them.
 2. "clarification" — the request is ambiguous about which entity or which location and the scene cannot resolve it (for example, several modules could match "near the vault"). Ask ONE concise question. Choices (2-6) bind to existing scene ids or to new ids you propose.
-3. "rule_proposal" — the request states, adds, or changes a design requirement: a collectBeforeGoal statement (for example "the player must collect X before the treasure", or removing such a rule). If a request mixes geometry edits with a requirement statement, answer with rule_proposal and carry ALL the geometry in "operations"; the geometry is held for the same review. Door conditions (requiresKey, requiresSwitch, closesAfterSwitch) are ordinary scene edits, NOT design requirements — a request that only adds or changes keys, switches, or doors is a "patch".
+3. "rule_proposal" — the request states, adds, or changes a design requirement: collectBeforeGoal ("must collect X before the treasure"), passThrough ("must cross/use X", "X is the only way"), or switchNecessary ("X must matter / be required"), or removing such a rule. If a request mixes geometry edits with a requirement statement, answer with rule_proposal and carry ALL the geometry in "operations"; the geometry is held for the same review. Door conditions (requiresKey, requiresSwitch, closesAfterSwitch) are ordinary scene edits, NOT design requirements — a request that only adds or changes keys, switches, or doors is a "patch".
 4. "unsupported" — the request cannot be represented in this kit (door-traversal order, mandatory sequencing other than key-before-goal, timed puzzles, jumping, physics, arbitrary geometry). Offer concrete supported alternatives.
 
 Respond with a single JSON object and nothing else.`;
