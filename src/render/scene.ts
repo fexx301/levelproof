@@ -957,6 +957,12 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel, theme?: T
       }
     },
     dispose() {
+      // A theme change tears down the old renderer before React binds the new
+      // one. Ignore any pointer-up that was already queued against this
+      // canvas; otherwise a late empty hit can clear the store's selection
+      // during the remount and make the UI/ring disappear.
+      pickHandler = null;
+      pointerDown.active = false;
       cancelAnimationFrame(frame);
       motionQuery.removeEventListener('change', syncDamping);
       observer.disconnect();
