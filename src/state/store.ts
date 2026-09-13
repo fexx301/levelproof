@@ -6,7 +6,7 @@ import { unfamiliarLevel } from '../core/fixtures/unfamiliar.js';
 import { vaultEmptyLevel } from '../core/fixtures/vault-empty.js';
 import { twinKeysLevel, overpassLevel, gauntletLevel } from '../core/fixtures/gallery.js';
 import { blankCanvasLevel } from '../core/fixtures/blank-canvas.js';
-import { applyOperations } from '../core/level.js';
+import { applyOperations, requirementText } from '../core/level.js';
 import { findRepairs, touchesProtected, type RepairCandidate } from '../core/search.js';
 import { verify, type Report } from '../core/verifier.js';
 import type { MoveRecord } from '../core/movement.js';
@@ -139,6 +139,12 @@ interface AppState {
   repairReplay: MoveRecord[] | null;
   /** Entity ids selected in the scene (§12 "select, then describe"). */
   selection: string[];
+  /** Recent prompts (oldest first) for conversational follow-ups (§12). */
+  promptHistory: string[];
+  /** One-line summary of the last applied change (§12 visible edit). */
+  changeSummary: string | null;
+  /** Revision history entries (§11): every accepted checkpoint this session. */
+  history: { level: Level; label: string }[];
   /** Entities the creator marked "keep this" (§9): repairs that move or
    * remove them are excluded from the search. */
   protectedIds: string[];
@@ -179,6 +185,8 @@ interface AppState {
   toggleSelect: (id: string) => void;
   clearSelection: () => void;
   keepSelected: () => void;
+  /** Restore a revision-history level as the accepted checkpoint. */
+  loadLevel: (level: Level) => void;
   unkeep: (id: string) => void;
   saveScene: () => void;
   deleteSaved: (id: string) => void;
@@ -220,6 +228,36 @@ const EXPLAIN_INITIAL: ExplainSlice = {
   error: null,
 };
 
+/** One-line human summary of an applied patch (§12 visible edits). */
+function summarizeOperations(operations: Operation[]): string {
+  const counts = new Map<string, number>();
+  const names: string[] = [];
+  for (const op of operations) {
+    if (op.kind === 'addModule') names.push(`${op.module.template} "${op.module.id}"`);
+    else if (op.kind === 'removeModule') names.push(`removed "${op.id}"`);
+    else if (op.kind === 'moveModule') names.push(`moved "${op.id}"`);
+    else if (op.kind === 'addItem') names.push(`${op.itemType} "${op.id}"`);
+    else if (op.kind === 'removeItem') names.push(`removed ${op.kind === 'removeItem' ? 'item' : ''} "${op.id}"`);
+    else if (op.kind === 'moveItem') names.push(`moved "${op.id}"`);
+    else if (op.kind === 'addDoor') names.push(`door "${op.door.id}"`);
+    else if (op.kind === 'removeDoor') names.push(`removed door "${op.id}"`);
+    else if (op.kind === 'moveSpawn') names.push('spawn moved');
+    else if (op.kind === 'moveGoal') names.push('goal moved');
+    else if (op.kind === 'setModulePorts') names.push(`re-ported "${op.id}"`);
+    else if (op.kind === 'setDoorConditions') names.push(`re-conditioned door "${op.id}"`);
+    void counts;
+  }
+  if (names.length === 0) return 'No changes.';
+  const shown = names.slice(0, 3).join(', ');
+  return names.length > 3 ? `${shown} +${names.length - 3} more` : shown;
+}
+
+/** Short label for a revision-history entry. */
+function lastPromptLabel(prompt: string): string {
+  const trimmed = prompt.trim().replace(/\s+/g, ' ');
+  return trimmed.length > 42 ? `${trimmed.slice(0, 42)}…` : trimmed;
+}
+
 function explainErrorText(body: unknown): string {
   if (body !== null && typeof body === 'object' && 'error' in body) {
     if (body.error === 'check_not_failing') return 'That check is not failing.';
@@ -242,13 +280,22 @@ function extractError(body: unknown): string {
   return 'Compilation failed.';
 }
 
-/** Apply a passing/failing edit as the new draft; auto-accept when green (§11.3). */
-function settleDraft(set: (partial: Partial<AppState>) => void, base: Level, level: Level, viaRule: boolean): void {
+/** Apply a passing/failing edit as the new draft; auto-accept when green
+ * (§11.3). The summary line makes the edit visible; callers that accept a
+ * new checkpoint push it onto the revision history themselves (they hold
+ * the pre-update state). */
+function settleDraft(
+  set: (partial: Partial<AppState>) => void,
+  base: Level,
+  level: Level,
+  viaRule: boolean,
+  summary: string | null = null,
+): void {
   const report = verify(level);
   if (report.accepted) {
-    set({ acceptedLevel: level, previousAccepted: base, draft: null });
+    set({ acceptedLevel: level, previousAccepted: base, draft: null, changeSummary: summary });
   } else {
-    set({ draft: { level, report, viaRule } });
+    set({ draft: { level, report, viaRule }, changeSummary: summary });
   }
   set({ pendingRule: null, mode: 'authoring', ghost: GHOST_INITIAL, play: PLAY_INITIAL, repair: REPAIR_INITIAL, explain: EXPLAIN_INITIAL });
 }
@@ -270,6 +317,9 @@ export const useApp = create<AppState>()((set, get) => ({
   repairReplay: null,
   selection: [],
   protectedIds: [],
+  promptHistory: [],
+  changeSummary: null,
+  history: [],
   previousAccepted: null,
   draft: null,
   pendingRule: null,
@@ -331,6 +381,7 @@ export const useApp = create<AppState>()((set, get) => ({
     if (state.busy || prompt.trim().length === 0) return;
     set({ busy: true, error: null });
     const selection = state.selection;
+    const history = state.promptHistory;
     const base = state.draft?.level ?? state.acceptedLevel;
     // §11: every result binds to a base revision. If the scene changes while
     // the request is in flight (scene picker, reset), the result is stale and
@@ -340,7 +391,7 @@ export const useApp = create<AppState>()((set, get) => ({
       const response = await fetch('/api/compile', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ level: base, prompt, clarificationContext, selection }),
+        body: JSON.stringify({ level: base, prompt, clarificationContext, selection, history: history.map((h) => ({ prompt: h })) }),
       });
       const body: unknown = await response.json();
       if (!response.ok) {
@@ -368,6 +419,7 @@ export const useApp = create<AppState>()((set, get) => ({
         lastResult: result,
         lastPrompt: prompt,
         lastCompileMeta: { cached, totalCostUsd, attempts: attempts.length, model },
+        promptHistory: [...history, prompt].slice(-6),
       });
 
       if (result.type === 'patch') {
@@ -376,7 +428,11 @@ export const useApp = create<AppState>()((set, get) => ({
           set({ busy: false, error: `The proposed edit was rejected: ${applied.errors[0]}` });
           return;
         }
-        settleDraft(set, base, applied.level, false);
+        const priorHistory = get().history;
+        settleDraft(set, base, applied.level, false, summarizeOperations(result.operations));
+        if (get().acceptedLevel === applied.level) {
+          set({ history: [{ level: applied.level, label: lastPromptLabel(prompt) }, ...priorHistory].slice(0, 12) });
+        }
         set({ repairReplay: null, previewOps: null, selection: [] });
       } else if (result.type === 'rule_proposal') {
         set({ pendingRule: { proposal: result, base }, repairReplay: null, previewOps: null, selection: [] });
@@ -397,7 +453,15 @@ export const useApp = create<AppState>()((set, get) => ({
       return;
     }
     const level: Level = { ...applied.level, requirements: proposal.newRequirements };
-    settleDraft(set, base, level, true);
+    const priorHistory = get().history;
+    const summary =
+      proposal.newRequirements.length > 0
+        ? `Rule: ${proposal.newRequirements.map(requirementText).join('; ')}`
+        : summarizeOperations(proposal.operations);
+    settleDraft(set, base, level, true, summary);
+    if (get().acceptedLevel === level) {
+      set({ history: [{ level, label: summary }, ...priorHistory].slice(0, 12) });
+    }
     set({ pendingRule: null });
   },
 
@@ -522,7 +586,11 @@ export const useApp = create<AppState>()((set, get) => ({
     // scene — the same moves, no longer fatal.
     const failing =
       draft.report.checks.recovery.witness?.route ?? draft.report.checks.requirements.witness?.route ?? [];
-    settleDraft(set, acceptedLevel, applied.level, false);
+    const priorHistory = get().history;
+    settleDraft(set, acceptedLevel, applied.level, false, `Repair: ${candidate.description}`);
+    if (get().acceptedLevel === applied.level) {
+      set({ history: [{ level: applied.level, label: `Repair: ${candidate.description}` }, ...priorHistory].slice(0, 12) });
+    }
     set({ previewOps: null, repairReplay: failing.length > 0 ? failing : null });
   },
 
@@ -553,6 +621,27 @@ export const useApp = create<AppState>()((set, get) => ({
   },
 
   clearSelection: () => set({ selection: [] }),
+
+  loadLevel: (level) => {
+    set({
+      acceptedLevel: level,
+      previousAccepted: null,
+      draft: null,
+      pendingRule: null,
+      lastResult: null,
+      lastPrompt: null,
+      lastCompileMeta: null,
+      error: null,
+      mode: 'authoring',
+      ghost: GHOST_INITIAL,
+      play: PLAY_INITIAL,
+      repair: REPAIR_INITIAL,
+      explain: EXPLAIN_INITIAL,
+      previewOps: null,
+      repairReplay: null,
+      selection: [],
+    });
+  },
 
   keepSelected: () => {
     const { selection, protectedIds } = get();

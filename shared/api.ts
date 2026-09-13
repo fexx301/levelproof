@@ -11,6 +11,9 @@ export const compileRequestSchema = z.strictObject({
   /** Entity ids the author selected in the scene (§12): "this"/"that" refer
    * to these. Participates in the cache key via the service. */
   selection: z.array(idSchema).max(8).optional(),
+  /** Recent conversation turns (oldest first), for follow-ups like "raise
+   * the bridge" — the scene already reflects earlier applied edits. */
+  history: z.array(z.strictObject({ prompt: z.string().min(1).max(2000) })).max(6).optional(),
 });
 export type CompileRequest = z.infer<typeof compileRequestSchema>;
 

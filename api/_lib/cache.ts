@@ -62,6 +62,7 @@ export function compileCacheKey(input: {
   prompt: string;
   clarificationContext?: string;
   selection?: string[];
+  history?: string[];
   models: string;
   promptVersion: string;
 }): string {
@@ -72,7 +73,9 @@ export function compileCacheKey(input: {
       '\u0001' +
       (input.clarificationContext ?? '') +
       '\u0001' +
-      (input.selection?.join(',') ?? ''),
+      (input.selection?.join(',') ?? '') +
+      '\u0001' +
+      (input.history?.join('\u0002') ?? ''),
     models: input.models,
     promptVersion: input.promptVersion,
   });

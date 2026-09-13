@@ -29,7 +29,11 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json({ error: 'invalid_request', issues }, { status: 400 });
   }
 
-  const outcome = await compile(process.env, parsed.data);
+  const input = {
+    ...parsed.data,
+    history: parsed.data.history?.map((h) => h.prompt),
+  };
+  const outcome = await compile(process.env, input);
 
   if (outcome.result === null) {
     return Response.json(

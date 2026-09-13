@@ -33,6 +33,7 @@ export interface CompileInput {
   prompt: string;
   clarificationContext?: string;
   selection?: string[];
+  history?: string[];
 }
 
 export interface AttemptRecord {
@@ -90,6 +91,7 @@ export async function compile(
     prompt: input.prompt,
     clarificationContext: input.clarificationContext,
     selection: input.selection,
+    history: input.history,
     models: hasFallback ? `${primary.model},${fallbackModel}` : primary.model,
     promptVersion: PROMPT_VERSION,
   });
@@ -103,6 +105,9 @@ export async function compile(
     {
       role: 'user',
       content: [
+        input.history && input.history.length > 0
+          ? `(Earlier turns in this session, oldest first — the scene already reflects every applied edit; earlier turns are context only:\n${input.history.map((h) => `- "${h}"`).join('\n')})`
+          : null,
         input.prompt,
         input.selection && input.selection.length > 0
           ? `(The author selected these scene entities: ${input.selection.join(', ')}. References like "this door" or "that switch" mean these.)`

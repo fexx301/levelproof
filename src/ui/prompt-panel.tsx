@@ -11,6 +11,9 @@ export function PromptPanel() {
   const meta = useApp((s) => s.lastCompileMeta);
   const submitPrompt = useApp((s) => s.submitPrompt);
   const hasKey = useApp((s) => (s.draft?.level ?? s.acceptedLevel).keys.length > 0);
+  const changeSummary = useApp((s) => s.changeSummary);
+  const history = useApp((s) => s.history);
+  const loadSceneLevel = useApp((s) => s.loadLevel);
   const selection = useApp((s) => s.selection);
   const clearSelection = useApp((s) => s.clearSelection);
   const protectedIds = useApp((s) => s.protectedIds);
@@ -120,6 +123,11 @@ export function PromptPanel() {
           </button>
         ))}
       </div>
+      {changeSummary !== null && (
+        <p className="change-summary" aria-live="polite">
+          Changed: {changeSummary}
+        </p>
+      )}
       <p className="panel-note">
         {typeof navigator !== 'undefined' &&
         /Mac|iP/.test(
@@ -130,6 +138,20 @@ export function PromptPanel() {
           : 'Ctrl+⏎'}{' '}
         compiles
       </p>
+      {history.length > 0 && (
+        <details className="inspector">
+          <summary><DisclosureGlyph />History</summary>
+          <ol className="history-list">
+            {history.map((entry, index) => (
+              <li key={index}>
+                <button type="button" className="history-entry" onClick={() => loadSceneLevel(entry.level)}>
+                  {entry.label}
+                </button>
+              </li>
+            ))}
+          </ol>
+        </details>
+      )}
       {meta && !meta.cached && (
         <details className="inspector">
           <summary><DisclosureGlyph />Model</summary>

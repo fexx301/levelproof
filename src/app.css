@@ -948,6 +948,37 @@ details.inspector[open] summary .disclosure-glyph {
   padding-left: var(--space-2);
 }
 
+.change-summary {
+  color: var(--color-text);
+  font-size: var(--text-xs);
+  margin: 0;
+}
+
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  list-style: none;
+  margin: var(--space-1) 0 0;
+  padding: 0;
+}
+
+.history-entry {
+  background: none;
+  border: none;
+  color: var(--color-muted);
+  cursor: pointer;
+  font-family: var(--font-data);
+  font-size: var(--text-xs);
+  padding: 0;
+  text-align: left;
+}
+
+.history-entry:hover {
+  color: var(--color-text);
+  text-decoration: underline;
+}
+
 .check-note {
   color: var(--color-muted);
   font-size: var(--text-xs);

@@ -24,6 +24,7 @@ const API = 'https://levelproof.vercel.app/api/compile';
 
 type Category =
   | 'scratch'
+  | 'followup'
   | 'twist'
   | 'baseline'
   | 'trap'
@@ -379,19 +380,151 @@ async function runFixture(fixture: Fixture): Promise<RunRecord> {
       body !== null && typeof body === 'object' && 'error' in body
         ? String(body.error)
         : `HTTP ${response.status}`;
-    return { id: fixture.id, category: fixture.category, typeReturned: null, cached: false, attempts, costUsd, grade: null, error: note };
+    return { id: fixture.id, category: 'followup', typeReturned: null, cached: false, attempts, costUsd, grade: null, error: note };
   }
   const parsed = compileOkResponseSchema.safeParse(body);
   if (!parsed.success) {
-    return { id: fixture.id, category: fixture.category, typeReturned: null, cached: false, attempts: 0, costUsd: 0, grade: null, error: 'response failed validation' };
+    return { id: fixture.id, category: 'followup', typeReturned: null, cached: false, attempts: 0, costUsd: 0, grade: null, error: 'response failed validation' };
   }
   const { result, cached, attempts, totalCostUsd } = parsed.data;
   const grade = fixture.grade(result, fixture.base);
-  return { id: fixture.id, category: fixture.category, typeReturned: result.type, cached, attempts: attempts.length, costUsd: totalCostUsd, grade, error: null };
+  return { id: fixture.id, category: 'followup', typeReturned: result.type, cached, attempts: attempts.length, costUsd: totalCostUsd, grade, error: null };
+}
+
+/** Multi-turn conversation fixtures (§12): turn 1 builds, turn 2 refers
+ * back with anaphora. The follow-up is graded on the FINAL level after both
+ * turns, against the follow-up's own expectation. */
+interface FollowupFixture {
+  id: string;
+  first: string;
+  followup: string;
+  base: Level;
+  expect: ScratchExpect;
+}
+
+const FOLLOWUPS: FollowupFixture[] = [
+  {
+    id: 'f1-raise-bridge',
+    first: 'Build a small fort: a ramp up to a wall walk and a gate room at the top.',
+    followup: 'Now raise the wall walk one level higher.',
+    base: blankCanvasLevel,
+    expect: { ramps: 1, elevations: [0, 2] },
+  },
+  {
+    id: 'f2-move-key',
+    first: 'Make a puzzle with a key room and a locked vault.',
+    followup: 'Move the key somewhere farther from the vault.',
+    base: blankCanvasLevel,
+    expect: { keys: 1, keyedDoorCount: 1 },
+  },
+  {
+    id: 'f3-second-key',
+    first: 'Build a treasury with one silver key and a locked door.',
+    followup: 'Add a gold key too, and make the door need both.',
+    base: blankCanvasLevel,
+    expect: { keys: 2, multiKeyDoor: true },
+  },
+  {
+    id: 'f4-keep-courtyard',
+    first: 'Build a courtyard with a fountain room and a gate.',
+    followup: 'Keep the courtyard, but make reaching the gate harder.',
+    base: blankCanvasLevel,
+    expect: { doors: 1 },
+  },
+  {
+    id: 'f5-rename-theme',
+    first: 'Build a small watchtower with a lamp room.',
+    followup: 'Give the lamp room a better name.',
+    base: blankCanvasLevel,
+    expect: {},
+  },
+];
+
+async function runFollowup(fixture: FollowupFixture): Promise<RunRecord> {
+  // Turn 1
+  const firstResponse = await fetch(API, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ level: fixture.base, prompt: fixture.first }),
+  });
+  const firstBody: unknown = await firstResponse.json();
+  let level1: Level | null = null;
+  let cost = 0;
+  if (firstResponse.ok) {
+    const parsed = compileOkResponseSchema.safeParse(firstBody);
+    if (parsed.success) {
+      cost += parsed.data.totalCostUsd;
+      const { result } = parsed.data;
+      if (result.type === 'patch' || result.type === 'rule_proposal') {
+        const applied = applyOperations(fixture.base, result.operations);
+        if (applied.ok) {
+          level1 = result.type === 'rule_proposal' ? { ...applied.level, requirements: result.newRequirements } : applied.level;
+        }
+      }
+    }
+  }
+  if (level1 === null) {
+    return { id: fixture.id, category: 'followup', typeReturned: null, cached: false, attempts: 1, costUsd: cost, grade: { pass: false, note: 'turn 1 failed' }, error: 'turn1' };
+  }
+  // Turn 2 with history
+  const secondResponse = await fetch(API, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ level: level1, prompt: fixture.followup, history: [{ prompt: fixture.first }] }),
+  });
+  const secondBody: unknown = await secondResponse.json();
+  if (!secondResponse.ok) {
+    const note =
+      secondBody !== null && typeof secondBody === 'object' && 'error' in secondBody ? String(secondBody.error) : `HTTP ${secondResponse.status}`;
+    return { id: fixture.id, category: 'followup', typeReturned: null, cached: false, attempts: 2, costUsd: cost, grade: null, error: note };
+  }
+  const parsed2 = compileOkResponseSchema.safeParse(secondBody);
+  if (!parsed2.success) {
+    return { id: fixture.id, category: 'followup', typeReturned: null, cached: false, attempts: 2, costUsd: cost, grade: null, error: 'response failed validation' };
+  }
+  cost += parsed2.data.totalCostUsd;
+  const { result: result2 } = parsed2.data;
+  if (result2.type !== 'patch' && result2.type !== 'rule_proposal') {
+    return { id: fixture.id, category: 'followup', typeReturned: result2.type, cached: false, attempts: 2, costUsd: cost, grade: { pass: false, note: `follow-up returned "${result2.type}"` }, error: null };
+  }
+  const applied2 = applyOperations(level1, result2.operations);
+  if (!applied2.ok) {
+    return { id: fixture.id, category: 'followup', typeReturned: result2.type, cached: false, attempts: 2, costUsd: cost, grade: { pass: false, note: `follow-up rejected: ${applied2.errors[0]}` }, error: null };
+  }
+  const finalLevel = result2.type === 'rule_proposal' ? { ...applied2.level, requirements: result2.newRequirements } : applied2.level;
+  const grade = gradeScratchExpect(fixture.expect)(result2, level1);
+  // Re-verify the FINAL level end-state for greenness
+  const report = verify(finalLevel);
+  const note = report.accepted ? grade.note : `final level not accepted: sol=${report.checks.solution.status} req=${report.checks.requirements.status} rec=${report.checks.recovery.status}`;
+  return {
+    id: fixture.id,
+    category: 'followup',
+    typeReturned: result2.type,
+    cached: false,
+    attempts: 2,
+    costUsd: cost,
+    grade: { pass: grade.pass && report.accepted, note: grade.pass ? note : grade.note },
+    error: null,
+  };
 }
 
 async function main(): Promise<void> {
   const only = process.env.ONLY; // e.g. ONLY=scratch — run one class standalone
+  if (only === 'followup') {
+    const records: RunRecord[] = [];
+    let totalCost = 0;
+    for (const fixture of FOLLOWUPS) {
+      const record = await runFollowup(fixture);
+      records.push(record);
+      totalCost += record.costUsd;
+      const mark = record.error ? 'ERR ' : record.grade?.pass ? 'PASS' : 'FAIL';
+      console.log(`${mark}  ${fixture.id.padEnd(20)} ${record.typeReturned ?? '—'} ${record.costUsd.toFixed(5)}$  ${record.grade?.note ?? record.error ?? ''}`);
+      await new Promise((r) => setTimeout(r, 2500));
+    }
+    const passed = records.filter((r) => r.grade?.pass).length;
+    console.log(`\nfollowup: ${passed}/${records.length} · $${totalCost.toFixed(4)}`);
+    return;
+  }
   const fixtures = only !== undefined ? FIXTURES.filter((f) => f.category === only) : FIXTURES;
   const records: RunRecord[] = [];
   let totalCost = 0;
