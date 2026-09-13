@@ -34,10 +34,15 @@ against the scene's real ids before it is shown. The engine's verdict always
 stands on its own; the narration adds story, never authority.
 
 The header's scene picker also offers three verified showcase levels — **The
-Twin Keys** (two keys, two rules), **The Overpass** (a bridge crossing
-directly over a lower corridor — true floor-over-floor), and **The Gauntlet**
-(a winding climb with a sealing door the checker proves can never strand
-you). In every scene the checker's analysis is drawn on the floors: red
+Twin Keys** (silver unlocks the gold wing; a powered return loop opens the
+two-key vault), **The Overpass** (cross above the lower corridor, activate
+the relay, then descend to the lower vault), and **The Gauntlet** (collect
+the key and arm the gate before committing; the entrance seals behind you
+as the exit opens). The checker proves every reachable state can still win.
+Each scene has its own material palette, tracked retracting shutters, and
+architectural detailing. The camera holds the whole puzzle during play;
+orbit/zoom remain available and **Frame level** restores the overview.
+In every scene the checker's analysis is drawn on the floors: red
 tiles can strand a player, dimmed tiles are unreachable — the exhaustive
 search made visible (hidden while you play, so it never spoils the puzzle).
 

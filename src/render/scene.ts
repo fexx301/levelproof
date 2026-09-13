@@ -3,7 +3,10 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import type { MoveRecord } from '../core/movement.js';
 import { CARDINALS, type Cardinal, type Door, type LevelModule } from '../../shared/schema.js';
 import { GEOMETRY, centerPoint, dirDelta, portPoint, type Vec3 } from '../core/catalog.js';
-import { doorPassable, type GameState } from '../core/movement.js';
+import { doorPassable, initialState } from '../core/movement.js';
+import { craftedBox, rampGeometry, sceneBounds, framingPoints, fitOverview } from './craft.js';
+import { createMechanisms, type WorldVisuals } from './mechanisms.js';
+import { artDirection, switchSignature, type ArtDirection } from './art-direction.js';
 import { applyOperations } from '../core/level.js';
 import type { Operation } from '../../shared/schema.js';
 import { neighbor, type CompiledLevel } from '../core/topology.js';
@@ -19,17 +22,24 @@ import {
 /**
  * Imperative Three.js diorama built from the compiled level (§3, §12).
  * Rendering never decides movement legality — it consumes the same catalog
- * the core uses. Camera follows actors with a dt-normalized lerp and snaps
- * instantly under reduced motion.
+ * the core uses. The camera holds the full puzzle during play; users own
+ * orbit and zoom, with an explicit return to the framed overview.
  */
 
 const COLORS = {
   background: 0x101216,
-  floor: 0x8d8577,
-  bridge: 0x7c8a94,
-  ramp: 0x9a8f7d,
-  wall: 0x6a655a,
-  rail: 0x47433c,
+  floor: 0xb4aa94,
+  bridge: 0x849ca4,
+  ramp: 0xb4aa94,
+  wall: 0x827b6d,
+  rail: 0x53646b,
+  stage: 0x292e35,
+  sky: 0xd8e4ee,
+  groundLight: 0x82715e,
+  keyLight: 0xffecd1,
+  fillLight: 0xbad3ed,
+  silver: 0xc4d3df,
+  copper: 0xdc9870,
   // Brass family: the key and the door it opens share the accent (§12).
   doorKey: 0xc9a227,
   key: 0xd4af37,
@@ -45,12 +55,13 @@ const COLORS = {
   goal: 0x3fa66a,
 } as const;
 
-const WALL_HEIGHT_CM = 120;
+const WALL_HEIGHT_CM = 88;
 const RAIL_HEIGHT_CM = 60;
 const WALL_THICKNESS_CM = 24;
-const DOOR_POST_HEIGHT_CM = 170;
+const DOOR_POST_HEIGHT_CM = 200;
 
 interface Mats {
+  trim: THREE.MeshStandardMaterial;
   floor: THREE.MeshStandardMaterial;
   bridge: THREE.MeshStandardMaterial;
   ramp: THREE.MeshStandardMaterial;
@@ -69,24 +80,6 @@ interface Mats {
 
 /** Mutable per-entity visuals driven by engine state (§12): doors that
  * seal, plates that depress, keys that vanish into inventory. */
-interface DoorVisual {
-  group: THREE.Group;
-  openY: number;
-  closedY: number;
-  targetOpen: boolean;
-}
-
-interface SwitchVisual {
-  plate: THREE.Mesh;
-  rim: THREE.Mesh;
-}
-
-interface WorldVisuals {
-  keys: Map<string, THREE.Group>;
-  switches: Map<string, SwitchVisual>;
-  doors: Map<string, DoorVisual>;
-}
-
 function standard(color: number, metalness = 0): THREE.MeshStandardMaterial {
   return new THREE.MeshStandardMaterial({ color, metalness, roughness: 0.85 });
 }
@@ -101,13 +94,14 @@ function lit(color: number, emissive: number, intensity: number, metalness = 0):
   });
 }
 
-function buildMats(): Mats {
+function buildMats(direction: ArtDirection): Mats {
   return {
-    floor: standard(COLORS.floor),
-    bridge: standard(COLORS.bridge),
-    ramp: standard(COLORS.ramp),
-    wall: standard(COLORS.wall),
-    rail: standard(COLORS.rail),
+    trim: standard(direction.trim, 0.2),
+    floor: standard(direction.floor),
+    bridge: standard(direction.metal, 0.25),
+    ramp: standard(direction.floor),
+    wall: standard(direction.wall),
+    rail: standard(direction.metal, 0.4),
     doorKey: lit(COLORS.doorKey, 0x6b5312, 0.45, 0.55),
     doorSeal: lit(COLORS.doorSeal, 0x3a100e, 0.55),
     doorPlain: standard(COLORS.doorPlain),
@@ -122,6 +116,7 @@ function buildMats(): Mats {
 
 export interface SceneHandle {
   dispose(): void;
+  frameLevel(): void;
   spawnGhost(
     route: MoveRecord[],
     kind: 'solution' | 'bypass' | 'dead_end' | 'replay',
@@ -170,46 +165,62 @@ function addEdgeBlock(
   dir: Cardinal,
   height: number,
   material: THREE.MeshStandardMaterial,
+  trim: THREE.MeshStandardMaterial,
 ): void {
   const c = centerPoint(m);
   const half = GEOMETRY.cellPitchCm / 2;
   const { dx, dz } = dirDelta(dir);
   const alongX = dz !== 0;
-  const mesh = new THREE.Mesh(
-    new THREE.BoxGeometry(
-      alongX ? GEOMETRY.cellPitchCm : WALL_THICKNESS_CM,
-      height,
-      alongX ? WALL_THICKNESS_CM : GEOMETRY.cellPitchCm,
-    ),
-    material,
-  );
-  mesh.position.set(c.x + dx * half, c.y + height / 2, c.z + dz * half);
-  world.add(mesh);
+  const edge = new THREE.Group();
+  edge.position.set(c.x + dx * half, c.y, c.z + dz * half);
+  if (!alongX) edge.rotation.y = Math.PI / 2;
+  const part = (width: number, h: number, depth: number, x: number, y: number, mat: THREE.Material) => {
+    const mesh = new THREE.Mesh(craftedBox(width, h, depth), mat);
+    mesh.position.set(x, y, 0);
+    edge.add(mesh);
+  };
+  if (m.template === 'bridge') {
+    // Open railings reveal the lower route instead of hiding it behind a slab.
+    part(400, 12, 16, 0, height, trim);
+    part(400, 10, 14, 0, 12, material);
+    for (const x of [-184, 0, 184]) part(12, height, 12, x, height / 2, material);
+  } else {
+    part(400, height, WALL_THICKNESS_CM, 0, height / 2, material);
+    part(400, 10, WALL_THICKNESS_CM + 6, 0, height + 3, trim);
+    for (const x of [-184, 184]) part(24, height + 14, 30, x, (height + 14) / 2, material);
+  }
+  world.add(edge);
 }
 
 function addModule(world: THREE.Group, mats: Mats, compiled: CompiledLevel, m: LevelModule): void {
   const c = centerPoint(m);
   if (m.template === 'ramp') {
-    const slope = Math.hypot(GEOMETRY.cellPitchCm, GEOMETRY.floorSpacingCm);
     const mesh = new THREE.Mesh(
-      new THREE.BoxGeometry(GEOMETRY.cellPitchCm, GEOMETRY.floorSlabThicknessCm, slope),
+      rampGeometry(m),
       mats.ramp,
     );
-    const angle = Math.atan2(GEOMETRY.floorSpacingCm, GEOMETRY.cellPitchCm);
-    if (m.orientation === 'N') mesh.rotation.x = angle;
-    else if (m.orientation === 'S') mesh.rotation.x = -angle;
-    else if (m.orientation === 'E') mesh.rotation.z = angle;
-    else mesh.rotation.z = -angle;
     mesh.position.set(c.x, c.y, c.z);
     world.add(mesh);
-    return; // the slope form reads as closed sides; polished rails later
+    // Finished stringers sit inside the ramp footprint, outside the walking lane.
+    const alongZ = m.orientation === 'N' || m.orientation === 'S';
+    const angle = Math.atan2(GEOMETRY.floorSpacingCm, GEOMETRY.cellPitchCm);
+    for (const side of [-1, 1]) {
+      const rail = new THREE.Mesh(craftedBox(14, 18, 500), mats.rail);
+      rail.rotation.x = angle;
+      const group = new THREE.Group();
+      group.rotation.y = m.orientation === 'N' ? 0 : m.orientation === 'E' ? -Math.PI / 2 : m.orientation === 'S' ? Math.PI : Math.PI / 2;
+      group.add(rail);
+      group.position.set(c.x + (alongZ ? side * 185 : 0), c.y + 8, c.z + (alongZ ? 0 : side * 185));
+      world.add(group);
+    }
+    return;
   }
 
   const mesh = new THREE.Mesh(
-    new THREE.BoxGeometry(
-      GEOMETRY.cellPitchCm,
+    craftedBox(
+      GEOMETRY.cellPitchCm - 2,
       GEOMETRY.floorSlabThicknessCm,
-      GEOMETRY.cellPitchCm,
+      GEOMETRY.cellPitchCm - 2,
     ),
     m.template === 'bridge' ? mats.bridge : mats.floor,
   );
@@ -220,21 +231,56 @@ function addModule(world: THREE.Group, mats: Mats, compiled: CompiledLevel, m: L
   // protection — unmatched openings are legal but impassable (§4.1).
   for (const dir of CARDINALS) {
     if (!m.ports.includes(dir)) {
-      addEdgeBlock(world, m, dir, WALL_HEIGHT_CM, mats.wall);
+      addEdgeBlock(world, m, dir, m.template === 'bridge' ? RAIL_HEIGHT_CM : WALL_HEIGHT_CM, m.template === 'bridge' ? mats.rail : mats.wall, mats.trim);
     } else if (neighbor(compiled, m.id, dir) === null) {
-      addEdgeBlock(world, m, dir, RAIL_HEIGHT_CM, mats.rail);
+      addEdgeBlock(world, m, dir, RAIL_HEIGHT_CM, mats.rail, mats.trim);
     }
   }
+  if (m.template === 'bridge') {
+    // Riveted cross-members make bridges read as a distinct construction.
+    for (const offset of [-150, 150]) {
+      const beam = new THREE.Mesh(craftedBox(388, 22, 18), mats.rail);
+      beam.position.set(c.x, c.y - 38, c.z + offset);
+      world.add(beam);
+    }
+  } else if (m.ports.length >= 3 || m.id === compiled.goal) {
+    // Junctions and destination rooms have inset paving, rather than every
+    // tile carrying the same decoration. The walking surface stays at y=0.
+    const inlay = new THREE.Mesh(new THREE.RingGeometry(100, 104, m.id === compiled.goal ? 32 : 4), mats.trim);
+    inlay.rotation.x = -Math.PI / 2;
+    inlay.position.set(c.x, c.y + 0.6, c.z);
+    world.add(inlay);
+  }
+  if (m.h > 0 && m.template === 'flat' && m.ports.length <= 2 &&
+      !compiled.level.modules.some(other => other.id !== m.id && other.x === m.x && other.z === m.z && other.h < m.h)) {
+    // Piers exist only in empty space, never through a playable lower tile.
+    const height = c.y + 30;
+    for (const side of [-1, 1]) {
+      const pier = new THREE.Mesh(craftedBox(64, height, 64), mats.wall);
+      pier.position.set(c.x + side * 160, (c.y - 30 - 60) / 2, c.z + 160);
+      world.add(pier);
+      const foot = new THREE.Mesh(craftedBox(84, 20, 84), mats.trim);
+      foot.position.set(pier.position.x, -50, pier.position.z);
+      world.add(foot);
+    }
+  }
+}
+
+function keyStyle(compiled: CompiledLevel, id: string): { color: number; sides: number } {
+  const index = [...compiled.keyBit.keys()].sort().indexOf(id);
+  const colors = [COLORS.key, COLORS.silver, COLORS.copper];
+  return { color: id.includes('silver') ? COLORS.silver : id.includes('gold') || id.includes('brass') ? COLORS.key : colors[Math.max(0, index) % colors.length]!, sides: 4 + Math.max(0, index) * 2 };
 }
 
 function doorMaterial(mats: Mats, door: Door): THREE.MeshStandardMaterial {
   const conditions = door.conditions;
   if (conditions?.requiresKey !== undefined || conditions?.requiresKeys !== undefined) return mats.doorKey;
   if (conditions?.closesAfterSwitch !== undefined) return mats.doorSeal;
+  if (conditions?.requiresSwitch !== undefined) return mats.switchPad;
   return mats.doorPlain;
 }
 
-/** Door frame: two posts, a lintel, and a sill across the shared port. */
+/** Tracked shutter: side guides and a header cassette contain the moving leaf. */
 function addDoorFrames(
   world: THREE.Group,
   mats: Mats,
@@ -243,7 +289,18 @@ function addDoorFrames(
   tag?: (root: THREE.Object3D, id: string) => void,
 ): void {
   for (const door of compiled.level.doors) {
-    const material = doorMaterial(mats, door);
+    const material = doorMaterial(mats, door).clone();
+    const identity = door.conditions?.requiresKey ?? door.conditions?.requiresKeys?.[0];
+    if (identity !== undefined) {
+      material.color.setHex(keyStyle(compiled, identity).color);
+      material.emissive.copy(material.color);
+      material.emissiveIntensity = 0.12;
+      material.roughness = 0.4;
+    } else if (door.conditions?.requiresSwitch !== undefined) {
+      material.color.setHex(switchSignature(compiled, door.conditions.requiresSwitch).color);
+      material.emissive.copy(material.color);
+      material.emissiveIntensity = 0.12;
+    }
     const doorStart = world.children.length;
     for (const dir of CARDINALS) {
       if (neighbor(compiled, door.a, dir)?.toId !== door.b) continue;
@@ -251,10 +308,13 @@ function addDoorFrames(
       if (!a) continue;
       const p = portPoint(a, dir);
       const alongX = dir === 'N' || dir === 'S';
-      const offset = GEOMETRY.portWidthCm / 2 + WALL_THICKNESS_CM / 2;
+      // The gate spans the corridor; the catalog's narrower port remains
+      // the authoritative center crossing, not a visible gap around a door.
+      const aperture = GEOMETRY.cellPitchCm - 2 * WALL_THICKNESS_CM;
+      const offset = aperture / 2 + WALL_THICKNESS_CM / 2;
       for (const side of [-1, 1]) {
         const post = new THREE.Mesh(
-          new THREE.BoxGeometry(WALL_THICKNESS_CM, DOOR_POST_HEIGHT_CM, WALL_THICKNESS_CM),
+          craftedBox(WALL_THICKNESS_CM, DOOR_POST_HEIGHT_CM, WALL_THICKNESS_CM),
           material,
         );
         post.position.set(
@@ -264,7 +324,7 @@ function addDoorFrames(
         );
         world.add(post);
       }
-      const span = GEOMETRY.portWidthCm + 2 * WALL_THICKNESS_CM;
+      const span = aperture + 2 * WALL_THICKNESS_CM;
       const lintel = new THREE.Mesh(
         new THREE.BoxGeometry(
           alongX ? span : WALL_THICKNESS_CM,
@@ -275,8 +335,26 @@ function addDoorFrames(
       );
       lintel.position.set(p.x, p.y + DOOR_POST_HEIGHT_CM, p.z);
       world.add(lintel);
+      if (door.conditions !== undefined) {
+        const housing = new THREE.Mesh(craftedBox(alongX ? span + 18 : 54, 38, alongX ? 54 : span + 18), mats.rail);
+        housing.position.set(p.x, p.y + DOOR_POST_HEIGHT_CM + 13, p.z);
+        world.add(housing);
+        const switches = [door.conditions.requiresSwitch, door.conditions.closesAfterSwitch].filter((id): id is string => id !== undefined);
+        switches.forEach((id, index) => {
+          const signature = switchSignature(compiled, id);
+          const marker = new THREE.Mesh(new THREE.CylinderGeometry(16, 16, 5, signature.sides), standard(signature.color));
+          const offset = -span / 2 + 28 + index * 42;
+          marker.position.set(p.x + (alongX ? offset : 0), p.y + DOOR_POST_HEIGHT_CM + 35, p.z + (alongX ? 0 : offset));
+          world.add(marker);
+        });
+        for (const side of [-1, 1]) {
+          const guide = new THREE.Mesh(craftedBox(8, DOOR_POST_HEIGHT_CM, 8), mats.trim);
+          guide.position.set(p.x + (alongX ? side * (aperture / 2 + 3) : 0), p.y + DOOR_POST_HEIGHT_CM / 2, p.z + (alongX ? 0 : side * (aperture / 2 + 3)));
+          world.add(guide);
+        }
+      }
       const sill = new THREE.Mesh(
-        new THREE.BoxGeometry(alongX ? GEOMETRY.portWidthCm : 12, 10, alongX ? 12 : GEOMETRY.portWidthCm),
+        craftedBox(alongX ? aperture : 12, 10, alongX ? 12 : aperture),
         material,
       );
       sill.position.set(p.x, p.y + 5, p.z);
@@ -285,40 +363,35 @@ function addDoorFrames(
       // vault reads as locked); sealing doors rest OPEN and slam when their
       // switch fires. The engine decides openness — doorPassable() below.
       const conditions = door.conditions;
-      if (conditions?.requiresKey !== undefined || conditions?.requiresKeys !== undefined || conditions?.closesAfterSwitch !== undefined) {
+      if (conditions !== undefined) {
         const slab = new THREE.Group();
         const slabHeight = DOOR_POST_HEIGHT_CM - 14;
-        const barCount = 4;
+        const barCount = 7;
         for (let bar = 0; bar < barCount; bar++) {
-          const t = bar / (barCount - 1);
           const barMesh = new THREE.Mesh(
-            new THREE.BoxGeometry(10, slabHeight, 10),
+            craftedBox(alongX ? aperture : 14, 22, alongX ? 14 : aperture),
             material,
           );
-          barMesh.position.set(
-            (alongX ? (t - 0.5) * GEOMETRY.portWidthCm : 0),
-            slabHeight / 2,
-            (alongX ? 0 : (t - 0.5) * GEOMETRY.portWidthCm),
-          );
+          barMesh.position.y = 14 + bar * 26;
           slab.add(barMesh);
         }
         const rail = new THREE.Mesh(
           new THREE.BoxGeometry(
-            alongX ? GEOMETRY.portWidthCm + 8 : 12,
+            alongX ? aperture + 8 : 12,
             12,
-            alongX ? 12 : GEOMETRY.portWidthCm + 8,
+            alongX ? 12 : aperture + 8,
           ),
           material,
         );
         rail.position.y = slabHeight;
         slab.add(rail);
-        const keyed = conditions?.requiresKey !== undefined || conditions?.requiresKeys !== undefined;
-        const startsOpen = !keyed; // sealing doors start open; keyed start locked
-        slab.position.set(p.x, p.y + (startsOpen ? DOOR_POST_HEIGHT_CM + 10 : 0), p.z);
+        const startsOpen = doorPassable(compiled, door.id, initialState(compiled));
+        slab.userData.retracts = true;
+        slab.position.set(p.x, p.y, p.z);
         world.add(slab);
         visuals.doors.set(door.id, {
           group: slab,
-          openY: p.y + DOOR_POST_HEIGHT_CM + 10,
+          openY: p.y + slabHeight,
           closedY: p.y,
           targetOpen: startsOpen,
         });
@@ -330,23 +403,25 @@ function addDoorFrames(
         const span = Math.min(requiredKeys.length, 3);
         for (let i = 0; i < span; i++) {
           const gem = new THREE.Mesh(
-            new THREE.OctahedronGeometry(12),
-            new THREE.MeshBasicMaterial({ color: 0xe8c65a, transparent: true, opacity: 0.6 }),
+            new THREE.TorusGeometry(12, 4, 6, keyStyle(compiled, requiredKeys[i]!).sides),
+            new THREE.MeshStandardMaterial({ color: keyStyle(compiled, requiredKeys[i]!).color, roughness: 0.35, metalness: 0.4 }),
           );
           const offset = (i - (span - 1) / 2) * 34;
           gem.position.set(
             p.x + (alongX ? offset : 0),
-            p.y + DOOR_POST_HEIGHT_CM + 24,
+            p.y + DOOR_POST_HEIGHT_CM + 48,
             p.z + (alongX ? 0 : offset),
           );
+          if (!alongX) gem.rotation.y = Math.PI / 2;
           world.add(gem);
         }
-      } else if (conditions?.closesAfterSwitch !== undefined) {
+      }
+      if (conditions?.closesAfterSwitch !== undefined) {
         const bar = new THREE.Mesh(
           new THREE.BoxGeometry(alongX ? span * 0.72 : 14, 10, alongX ? 14 : span * 0.72),
           new THREE.MeshBasicMaterial({ color: 0x9e3d35, transparent: true, opacity: 0.85 }),
         );
-        bar.position.set(p.x, p.y + DOOR_POST_HEIGHT_CM + 22, p.z);
+        bar.position.set(p.x, p.y + DOOR_POST_HEIGHT_CM + 35, p.z);
         world.add(bar);
       }
       break; // exactly one direction joins the two endpoints
@@ -375,15 +450,21 @@ function addItems(
     if (!m) continue;
     const c = centerPoint(m);
     const group = new THREE.Group();
-    const bow = new THREE.Mesh(new THREE.TorusGeometry(26, 9, 10, 20), mats.key);
+    const style = keyStyle(compiled, key.id);
+    const keyMat = mats.key.clone();
+    keyMat.color.setHex(style.color);
+    keyMat.emissive.setHex(style.color);
+    keyMat.emissiveIntensity = 0.15;
+    keyMat.roughness = 0.35;
+    const bow = new THREE.Mesh(new THREE.TorusGeometry(26, 9, 10, style.sides), keyMat);
     bow.position.x = -36;
-    const shaft = new THREE.Mesh(new THREE.BoxGeometry(72, 12, 12), mats.key);
+    const shaft = new THREE.Mesh(craftedBox(72, 12, 12), keyMat);
     shaft.position.x = 8;
     for (const [x, h] of [
       [28, 24],
       [8, 18],
     ] as const) {
-      const tooth = new THREE.Mesh(new THREE.BoxGeometry(12, h, 12), mats.key);
+      const tooth = new THREE.Mesh(craftedBox(12, h, 12), keyMat);
       tooth.position.set(x, -6 - h / 2, 0);
       group.add(tooth);
     }
@@ -397,7 +478,7 @@ function addItems(
     tag?.(group, key.id);
     decorUpdates.push((dt, elapsed) => {
       if (reducedMotion()) return;
-      if (group.visible) {
+      if (group.visible && !group.userData.collected) {
         group.rotation.y += dt * 0.7;
         group.position.y = baseY + Math.sin(elapsed * 0.002) * 8;
       }
@@ -409,9 +490,16 @@ function addItems(
     const c = centerPoint(m);
     const base = new THREE.Mesh(new THREE.CylinderGeometry(78, 88, 12, 28), mats.wall);
     base.position.set(c.x, c.y + 6, c.z);
-    const plate = new THREE.Mesh(new THREE.CylinderGeometry(46, 50, 16, 24), mats.switchPad);
+    const signature = switchSignature(compiled, pad.id);
+    const plateMaterial = mats.switchPad.clone();
+    plateMaterial.color.setHex(signature.color);
+    plateMaterial.emissive.setHex(signature.color);
+    plateMaterial.emissiveIntensity = 0.15;
+    const plate = new THREE.Mesh(new THREE.CylinderGeometry(46, 50, 16, signature.sides), plateMaterial);
     plate.position.set(c.x, c.y + 14, c.z);
     const rim = new THREE.Mesh(new THREE.TorusGeometry(64, 6, 8, 32), mats.switchRim.clone());
+    rim.material.color.setHex(signature.color);
+    rim.material.emissive.setHex(signature.color);
     rim.rotation.x = Math.PI / 2;
     rim.position.set(c.x, c.y + 12, c.z);
     plate.userData.restY = plate.position.y;
@@ -458,18 +546,19 @@ function addItems(
 
 export function mountScene(host: HTMLElement, compiled: CompiledLevel): SceneHandle {
   const renderer = new THREE.WebGLRenderer({ antialias: true });
-  renderer.setPixelRatio(window.devicePixelRatio);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.setSize(host.clientWidth || 800, host.clientHeight || 600);
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.shadowMap.type = THREE.VSMShadowMap;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.12;
+  renderer.toneMappingExposure = 1.05;
   host.appendChild(renderer.domElement);
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(COLORS.background);
 
-  const mats = buildMats();
+  const direction = artDirection(compiled);
+  const mats = buildMats(direction);
   const world = new THREE.Group();
   scene.add(world);
   // mesh -> entity id, for click-to-select (§12 "select, then describe").
@@ -495,124 +584,59 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel): SceneHan
   });
 
   // Lighting: warm key light with real shadows, cool sky fill, faint ambient.
-  scene.add(new THREE.HemisphereLight(0x505662, 0x2a241c, 0.8));
-  scene.add(new THREE.AmbientLight(0xffffff, 0.2));
+  scene.add(new THREE.HemisphereLight(direction.sky, COLORS.groundLight, 1.4));
   const center = layoutCenter(compiled);
-  const sun = new THREE.DirectionalLight(0xfff2dd, 1.35);
-  sun.position.set(center.x - 2200, 5200, center.z + 1600);
+  const sun = new THREE.DirectionalLight(direction.light, 2.4);
+  sun.position.set(center.x - 1800, 6200, center.z + 1000);
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
   sun.shadow.camera.near = 500;
   sun.shadow.camera.far = 20000;
   sun.shadow.bias = -0.0004;
   sun.shadow.normalBias = 12;
+  sun.shadow.radius = 8;
+  sun.shadow.blurSamples = 12;
   scene.add(sun);
   scene.add(sun.target);
+  const fill = new THREE.DirectionalLight(COLORS.fillLight, 0.8);
+  fill.position.set(center.x + 2500, 1400, center.z - 1800);
+  fill.target.position.set(center.x, center.y, center.z);
+  scene.add(fill, fill.target);
 
-  // Fit-to-level framing: frame the level's bounding sphere so the diorama
-  // fills the viewport instead of floating in margins. The view direction
-  // keeps the original elevated southeast azimuth.
-  let boundsRadius = 800;
-  const boundsMin = new THREE.Vector3(-800, -300, -800);
-  const boundsMax = new THREE.Vector3(800, 300, 800);
-  {
-    let minX = Infinity;
-    let minY = Infinity;
-    let minZ = Infinity;
-    let maxX = -Infinity;
-    let maxY = -Infinity;
-    let maxZ = -Infinity;
-    const half = GEOMETRY.cellPitchCm / 2 + WALL_THICKNESS_CM;
-    for (const m of compiled.level.modules) {
-      const c = centerPoint(m);
-      minX = Math.min(minX, c.x - half);
-      maxX = Math.max(maxX, c.x + half);
-      minY = Math.min(minY, c.y);
-      maxY = Math.max(maxY, c.y + DOOR_POST_HEIGHT_CM + 60);
-      minZ = Math.min(minZ, c.z - half);
-      maxZ = Math.max(maxZ, c.z + half);
-    }
-    if (Number.isFinite(minX)) {
-      const home = new THREE.Vector3(
-        (minX + maxX) / 2,
-        (minY + maxY) / 2,
-        (minZ + maxZ) / 2,
-      );
-      boundsRadius = Math.max(
-        half,
-        home.distanceTo(new THREE.Vector3(minX, minY, minZ)),
-      );
-      boundsMin.set(minX, minY, minZ);
-      boundsMax.set(maxX, maxY, maxZ);
-      // Shadow camera covers the level with margin, centered on it.
-      const s = boundsRadius + 600;
-      sun.shadow.camera.left = -s;
-      sun.shadow.camera.right = s;
-      sun.shadow.camera.top = s;
-      sun.shadow.camera.bottom = -s;
-      sun.target.position.copy(home);
-      sun.target.updateMatrixWorld();
-    }
+  const bounds = sceneBounds(compiled.level.modules);
+  const shadowExtent = bounds.getSize(new THREE.Vector3()).length() / 2 + 600;
+  sun.shadow.camera.left = -shadowExtent;
+  sun.shadow.camera.right = shadowExtent;
+  sun.shadow.camera.top = shadowExtent;
+  sun.shadow.camera.bottom = -shadowExtent;
+  sun.target.position.copy(bounds.getCenter(new THREE.Vector3()));
+  sun.target.updateMatrixWorld();
+  // Follow the footprint rather than filling the negative space with a disc.
+  const stage = new THREE.Group();
+  const foundationMaterial = new THREE.MeshStandardMaterial({ color: direction.base, roughness: 0.9 });
+  const cells = new Set<string>();
+  for (const module of compiled.level.modules) {
+    const cell = `${module.x}:${module.z}`;
+    if (cells.has(cell)) continue;
+    cells.add(cell);
+    const c = centerPoint(module);
+    const block = new THREE.Mesh(craftedBox(398, 64, 398, 12), foundationMaterial);
+    block.position.set(c.x, -92, c.z);
+    block.receiveShadow = true;
+    stage.add(block);
   }
-  // A stage under the level: the diorama casts onto it, grounding the scene.
-  const stage = new THREE.Mesh(
-    new THREE.CircleGeometry(boundsRadius * 1.55, 48),
-    new THREE.MeshStandardMaterial({ color: 0x17191f, roughness: 0.95 }),
-  );
-  stage.rotation.x = -Math.PI / 2;
-  stage.position.set(center.x, -60, center.z);
-  stage.receiveShadow = true;
   scene.add(stage);
 
-  const viewDir = new THREE.Vector3(1500, 2600, 3900).normalize();
+  const viewDir = new THREE.Vector3(...direction.camera).normalize();
   const camera = new THREE.PerspectiveCamera(45, 16 / 9, 10, 60000);
   const controls = new OrbitControls(camera, renderer.domElement);
+  controls.minDistance = 800;
+  controls.maxDistance = 30000;
   controls.maxPolarAngle = Math.PI / 2.05;
-  const homeTarget = new THREE.Vector3(center.x, center.y, center.z);
-  const corners: THREE.Vector3[] = [];
+  const homeTarget = bounds.getCenter(new THREE.Vector3());
+  const corners = framingPoints(compiled.level.modules);
   const computeFit = (): number => {
-    corners.length = 0;
-    const half = GEOMETRY.cellPitchCm / 2 + WALL_THICKNESS_CM;
-    for (const m of compiled.level.modules) {
-      const c = centerPoint(m);
-      for (const dx of [-half, half]) {
-        for (const dz of [-half, half]) {
-          corners.push(new THREE.Vector3(c.x + dx, c.y, c.z + dz));
-          corners.push(new THREE.Vector3(c.x + dx, c.y + DOOR_POST_HEIGHT_CM + 60, c.z + dz));
-        }
-      }
-    }
-    if (corners.length === 0) {
-      for (const x of [boundsMin.x, boundsMax.x]) {
-        for (const y of [boundsMin.y, boundsMax.y]) {
-          for (const z of [boundsMin.z, boundsMax.z]) corners.push(new THREE.Vector3(x, y, z));
-        }
-      }
-    }
-    // Same ray, any distance: the camera quaternion stays valid while only
-    // the position slides along the view direction.
-    const saved = camera.position.clone();
-    const extentAt = (d: number): number => {
-      camera.position.copy(homeTarget).addScaledVector(viewDir, d);
-      camera.updateMatrixWorld();
-      let maxExt = 0;
-      for (const c of corners) {
-        const p = c.clone().project(camera);
-        maxExt = Math.max(maxExt, Math.abs(p.x), Math.abs(p.y));
-      }
-      return maxExt;
-    };
-    let lo = 400;
-    let hi = 60000;
-    for (let i = 0; i < 24; i++) {
-      const mid = (lo + hi) / 2;
-      if (extentAt(mid) > 0.92) lo = mid;
-      else hi = mid;
-    }
-    const d = (lo + hi) / 2;
-    camera.position.copy(saved);
-    camera.updateMatrixWorld();
-    return d;
+    return fitOverview(camera, homeTarget, viewDir, corners);
   };
   let cachedFit = 3000;
   const fitDistance = (): number => cachedFit;
@@ -636,8 +660,6 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel): SceneHan
   motionQuery.addEventListener('change', syncDamping);
 
   const actorUpdates = new Set<(dt: number, elapsed: number) => void>();
-  let followTarget: THREE.Object3D | null = null;
-  let distanceControl = false;
   let lastTime = performance.now();
   let frame = 0;
   const tick = () => {
@@ -646,31 +668,7 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel): SceneHan
     lastTime = now;
     for (const update of actorUpdates) update(dt, now);
     for (const update of decorUpdates) update(dt, now);
-    if (followTarget !== null) {
-      // Following an actor: keep it centered and pull in close enough that
-      // the actor reads — the route stays in frame, the ghost is the focus.
-      distanceControl = true;
-      const k = reducedMotion() ? 1 : 1 - Math.exp(-dt * 5);
-      controls.target.lerp(followTarget.position, k);
-      const desired = fitDistance() * 0.3;
-      const offset = camera.position.clone().sub(controls.target);
-      const current = offset.length() || 1;
-      offset.multiplyScalar(THREE.MathUtils.lerp(current, desired, k) / current);
-      camera.position.copy(controls.target).add(offset);
-    } else if (distanceControl) {
-      // Follow ended: glide back to the framed overview, then hand control
-      // back to the user (their zoom/orbit is never fought otherwise).
-      const k = reducedMotion() ? 1 : 1 - Math.exp(-dt * 4);
-      controls.target.lerp(homeTarget, k);
-      const desired = fitDistance();
-      const offset = camera.position.clone().sub(controls.target);
-      const current = offset.length() || 1;
-      offset.multiplyScalar(THREE.MathUtils.lerp(current, desired, k) / current);
-      camera.position.copy(controls.target).add(offset);
-      if (Math.abs(current - desired) < 2 && controls.target.distanceTo(homeTarget) < 2) {
-        distanceControl = false;
-      }
-    }
+    // No automatic chase: the full route remains spatially stable in play.
     controls.update();
     renderer.render(scene, camera);
     frame = requestAnimationFrame(tick);
@@ -685,6 +683,7 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel): SceneHan
     camera.updateProjectionMatrix();
     renderer.setSize(w, h);
     cachedFit = computeFit();
+    frameHome();
   };
   const observer = new ResizeObserver(resize);
   observer.observe(host);
@@ -714,15 +713,18 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel): SceneHan
     if (!m) return null;
     const c = centerPoint(m);
     const size = GEOMETRY.cellPitchCm - 16;
-    const quad = new THREE.Mesh(new THREE.PlaneGeometry(size, size), material);
-    quad.rotation.x = -Math.PI / 2;
+    const geometry = new THREE.PlaneGeometry(size, size);
+    geometry.rotateX(-Math.PI / 2);
     if (m.template === 'ramp') {
-      const angle = Math.atan2(GEOMETRY.floorSpacingCm, GEOMETRY.cellPitchCm);
-      if (m.orientation === 'N') quad.rotation.x = -Math.PI / 2 + angle;
-      else if (m.orientation === 'S') quad.rotation.x = -Math.PI / 2 - angle;
-      else if (m.orientation === 'E') quad.rotation.z = -angle;
-      else quad.rotation.z = angle;
+      const positions = geometry.getAttribute('position');
+      for (let i = 0; i < positions.count; i++) {
+        const x = positions.getX(i), z = positions.getZ(i);
+        const along = m.orientation === 'N' ? -z : m.orientation === 'S' ? z : m.orientation === 'E' ? x : -x;
+        positions.setY(i, along * GEOMETRY.floorSpacingCm / GEOMETRY.cellPitchCm);
+      }
+      geometry.computeVertexNormals();
     }
+    const quad = new THREE.Mesh(geometry, material);
     quad.position.set(c.x, c.y + 3, c.z);
     return quad;
   };
@@ -887,69 +889,8 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel): SceneHan
   // The engine decides openness: doorPassable() against the live actor
   // state. Keyed doors rest locked; sealing doors rest open and slam shut
   // the moment their switch fires — the viewer sees the trap happen.
-  let actorState: GameState | null = null;
-  const restOpen = (doorId: string): boolean => {
-    const door = compiled.level.doors.find((d) => d.id === doorId);
-    if (!door?.conditions) return true;
-    return door.conditions.requiresKey === undefined && door.conditions.requiresKeys === undefined;
-  };
-  const setDoorTargets = (): void => {
-    for (const [id, visual] of visuals.doors) {
-      visual.targetOpen = actorState === null ? restOpen(id) : doorPassable(compiled, id, actorState);
-    }
-  };
-  decorUpdates.push((dt: number) => {
-    for (const visual of visuals.doors.values()) {
-      const targetY = visual.targetOpen ? visual.openY : visual.closedY;
-      if (Math.abs(visual.group.position.y - targetY) < 0.5) continue;
-      const speed = visual.targetOpen ? 6 : 11; // closes slam faster than opens
-      const k = reducedMotion() ? 1 : 1 - Math.exp(-dt * speed);
-      visual.group.position.y += (targetY - visual.group.position.y) * k;
-    }
-  });
-  const worldEvents = {
-    updateState(state: GameState): void {
-      actorState = state;
-      setDoorTargets();
-    },
-    collectKey(keyId: string): void {
-      const group = visuals.keys.get(keyId);
-      if (!group || !group.visible) return;
-      if (reducedMotion()) {
-        group.visible = false;
-        return;
-      }
-      let progress = 0;
-      decorUpdates.push((dt: number) => {
-        if (!group.visible || progress >= 1) return;
-        progress = Math.min(1, progress + dt / 0.45);
-        const baseY = group.userData.baseY as number;
-        group.position.y = baseY + progress * 40;
-        group.scale.setScalar(1.6 * (1 - progress));
-        if (progress >= 1) group.visible = false;
-      });
-    },
-    activateSwitch(switchId: string): void {
-      const visual = visuals.switches.get(switchId);
-      if (!visual) return;
-      visual.plate.position.y = (visual.plate.userData.restY as number) - 6;
-      const rimMaterial = visual.rim.material as THREE.MeshStandardMaterial;
-      rimMaterial.emissiveIntensity = 1.7;
-    },
-    resetWorld(): void {
-      actorState = null;
-      for (const group of visuals.keys.values()) {
-        group.visible = true;
-        group.scale.setScalar(1.6);
-        group.position.y = group.userData.baseY as number;
-      }
-      for (const visual of visuals.switches.values()) {
-        visual.plate.position.y = visual.plate.userData.restY as number;
-        (visual.rim.material as THREE.MeshStandardMaterial).emissiveIntensity = 0.65;
-      }
-      setDoorTargets();
-    },
-  };
+  const mechanisms = createMechanisms(compiled, visuals, reducedMotion);
+  decorUpdates.push(mechanisms.update);
 
   const actorContext: ActorContext = {
     scene,
@@ -958,13 +899,12 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel): SceneHan
       actorUpdates.add(update);
       return () => actorUpdates.delete(update);
     },
-    follow: (target) => {
-      followTarget = target;
-    },
-    world: worldEvents,
+    follow: () => { /* overview is intentionally stable across actor moves */ },
+    world: mechanisms.events,
   };
 
   return {
+    frameLevel: frameHome,
     spawnGhost(route, kind, missingKeys, callbacks) {
       return new GhostActor(actorContext, route, kind, missingKeys, callbacks);
     },

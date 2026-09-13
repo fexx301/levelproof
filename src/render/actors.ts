@@ -290,7 +290,11 @@ export class GhostActor {
   restart(): void {
     this.index = 0;
     this.distance = 0;
+    this.stepClock = 0;
     this.finished = false;
+    const material = this.body.material as THREE.MeshStandardMaterial;
+    material.opacity = 0.95;
+    material.emissiveIntensity = 1;
     this.keys = [];
     this.switches = [];
     this.ctx.world.resetWorld();
@@ -339,6 +343,8 @@ export class GhostActor {
     while (this.index < this.steps.length && this.distance >= this.steps[this.index]!.length) {
       this.distance -= this.steps[this.index]!.length;
       const completed = this.steps[this.index]!;
+      const endpoint = completed.points[completed.points.length - 1]!;
+      this.mesh.position.set(endpoint.x, endpoint.y + ACTOR_CENTER_OFFSET_CM, endpoint.z);
       this.index++;
       this.arrive(completed.move);
       if (this.index >= this.steps.length) {
@@ -347,7 +353,9 @@ export class GhostActor {
       }
       if (this.stepMode) {
         this.playing = false;
-        break;
+        this.distance = 0;
+        this.emit();
+        return;
       }
     }
     const current = this.steps[Math.min(this.index, this.steps.length - 1)]!;
@@ -482,6 +490,8 @@ export class PlayerActor {
     this.animation.distance += WALK_SPEED_CM_S * dt;
     if (this.animation.distance >= this.animation.length) {
       const move = this.animation.move;
+      const endpoint = move.segments[move.segments.length - 1]!;
+      this.mesh.position.set(endpoint.x, endpoint.y + ACTOR_CENTER_OFFSET_CM, endpoint.z);
       this.animation = null;
       this.state = move.after;
       this.ctx.world.updateState(move.after);

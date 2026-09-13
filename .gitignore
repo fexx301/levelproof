@@ -3,6 +3,9 @@ levelBuild*.md
 newVRidea*.md
 taskproof.md
 
+# Tool-generated config (hosting project ids)
+.openai/
+
 # macOS
 .DS_Store
 

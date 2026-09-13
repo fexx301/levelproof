@@ -262,7 +262,7 @@ function Viewport({ level, mode, report }: { level: Level; mode: Mode; report: R
     const actor = scene.spawnGhost(option.route, option.kind, option.missingKeys, {
       onTick: (state) => {
         const current = useApp.getState().ghost;
-        useApp.setState({ ghost: { ...current, ...state, witnessKind } });
+        useApp.setState({ ghost: { ...current, ...state, witnessKind, endNote: state.finished ? current.endNote : null } });
       },
       onArrive: () => {},
       onFinish: (info) => {
@@ -319,6 +319,14 @@ function Viewport({ level, mode, report }: { level: Level; mode: Mode; report: R
     mode === 'playing'
       ? '3D view of the current level — WASD or arrows to move, R restart'
       : '3D view of the current level — drag to orbit, scroll to zoom, arrow keys orbit when focused';
-  return <div className="viewport" ref={hostRef} role="region" aria-label={viewportLabel} />;
+  return (
+    <div className="viewport" ref={hostRef} role="region" aria-label={viewportLabel}>
+      <button className="viewport-home" type="button" onClick={() => sceneRef.current?.frameLevel()}>
+        Frame level
+      </button>
+      {level.switches.length > 0 && (
+        <p className="viewport-legend">Hexagonal plates can open gates · Triangular plates can seal routes</p>
+      )}
+    </div>
+  );
 }
-

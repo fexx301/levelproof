@@ -6,6 +6,8 @@ import { trapLevel } from '../src/core/fixtures/trap';
 import { vaultEmptyLevel } from '../src/core/fixtures/vault-empty';
 import { verify } from '../src/core/verifier';
 import { twinKeysLevel, overpassLevel, gauntletLevel } from '../src/core/fixtures/gallery';
+import { compileLevel } from '../src/core/topology';
+import { doorPassable, step } from '../src/core/movement';
 
 describe('golden fixture expectations (§8)', () => {
   it('the empty vault: geometry, spawn, and goal only — accepted', () => {
@@ -45,7 +47,7 @@ describe('golden fixture expectations (§8)', () => {
 });
 
 describe('gallery scenes (§12 showcase levels)', () => {
-  it('twin keys: two keys, two rules, two keyed doors — all green', () => {
+  it('twin keys: ordered collection and a powered return loop — all green', () => {
     const report = verify(twinKeysLevel);
     expect(report.valid).toBe(true);
     expect(report.accepted).toBe(true);
@@ -63,11 +65,61 @@ describe('gallery scenes (§12 showcase levels)', () => {
     expect(report.recoveryMap).toEqual({ stranded: [], unreachable: [] });
   });
 
-  it('gauntlet: the sealing bonus door is provably safe — no stranded floors', () => {
+  it('gauntlet: the commitment gate is provably safe — no stranded floors', () => {
     const report = verify(gauntletLevel);
     expect(report.accepted).toBe(true);
     expect(report.recoveryMap?.stranded).toEqual([]);
     // The trap exists: a door that seals, and a switch that seals it.
     expect(gauntletLevel.doors.some((d) => d.conditions?.closesAfterSwitch === 'vault-seal')).toBe(true);
+  });
+
+  it('Twin Keys cannot reach gold first or skip the power room', () => {
+    const c = compileLevel(twinKeysLevel);
+    const empty = { moduleId: 'east-walk', keyMask: 0, switchMask: 0 };
+    expect(step(c, empty, 'E')).toBeNull();
+    expect(doorPassable(c, 'return-door', empty)).toBe(false);
+    const silver = c.keyBit.get('silver-key')!;
+    expect(step(c, { ...empty, keyMask: silver }, 'E')?.events.collectedKey).toBe('gold-key');
+    const route = verify(twinKeysLevel).checks.solution.witness!.route;
+    const eventIndex = (id: string) => route.findIndex(move => move.events.collectedKey === id || move.events.activatedSwitch === id);
+    expect(eventIndex('silver-key')).toBeLessThan(eventIndex('gold-key'));
+    expect(eventIndex('gold-key')).toBeLessThan(eventIndex('vault-power'));
+    const unpowered = structuredClone(twinKeysLevel);
+    unpowered.modules.find(m => m.id === 'east-return')!.ports = [];
+    expect(verify(unpowered).checks.solution.status).toBe('fail');
+  });
+
+  it('Overpass needs the upper relay; sealing the lower shortcut leaves a real descent', () => {
+    const c = compileLevel(overpassLevel);
+    const state = { moduleId: 'west-loft', keyMask: c.keyBit.get('pass-key')!, switchMask: 0 };
+    expect(doorPassable(c, 'relay-exit', state)).toBe(false);
+    expect(doorPassable(c, 'vault-shortcut', state)).toBe(false);
+    const activated = { ...state, switchMask: c.switchBit.get('bridge-relay')! };
+    expect(doorPassable(c, 'lower-seal', activated)).toBe(false);
+    const descent = step(c, activated, 'N')!;
+    expect(descent.destination).toBe('return-ramp');
+    const landing = step(c, descent.after, 'N')!;
+    expect(step(c, landing.after, 'E')?.events.reachedGoal).toBe(true);
+    const route = verify(overpassLevel).checks.solution.witness!.route;
+    expect(route.some(move => move.events.activatedSwitch === 'bridge-relay')).toBe(true);
+    expect(route.some(move => move.destination === 'under-passage')).toBe(true);
+    expect(route.some(move => move.destination === 'bridge-c')).toBe(true);
+  });
+
+  it('Gauntlet requires both preparations, then seals behind the player without trapping them', () => {
+    const c = compileLevel(gauntletLevel);
+    const base = { moduleId: 'vault-approach', keyMask: 0, switchMask: 0 };
+    const keyMask = c.keyBit.get('brass-key')!;
+    const switchMask = c.switchBit.get('gate-primer')!;
+    expect(step(c, { ...base, keyMask }, 'N')).toBeNull();
+    expect(step(c, { ...base, switchMask }, 'N')).toBeNull();
+    const commit = step(c, { ...base, keyMask, switchMask }, 'N')!;
+    expect(commit.events.activatedSwitch).toBe('vault-seal');
+    expect(step(c, commit.after, 'S')).toBeNull();
+    expect(step(c, commit.after, 'N')?.events.reachedGoal).toBe(true);
+    // Negative control: put the seal before preparation and the checker catches it.
+    const broken = structuredClone(gauntletLevel);
+    broken.switches.find(s => s.id === 'vault-seal')!.moduleId = 'gallery-mid';
+    expect(verify(broken).accepted).toBe(false);
   });
 });

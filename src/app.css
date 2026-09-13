@@ -1,3 +1,4 @@
+/* Hallmark · component: scene workbench · preserve existing tokens and information architecture */
 /*
  * The designed §12 shell — technical tone.
  * Tokens: surfaces, verdict hues (AA on their backgrounds), a four-step
@@ -36,6 +37,31 @@
   --radius-sm: 6px;
   --radius-md: 8px;
   --dur-fast: 120ms;
+  --color-rule-soft: color-mix(in oklab, var(--color-line) 35%, var(--color-panel));
+}
+
+.viewport-home {
+  position: absolute;
+  z-index: 1;
+  top: var(--space-4);
+  left: var(--space-4);
+  min-height: 44px;
+  background: var(--color-panel);
+  border-color: var(--color-rule-soft);
+}
+
+.viewport-legend {
+  position: absolute;
+  z-index: 1;
+  inset: auto var(--space-4) var(--space-3) var(--space-4);
+  margin: 0;
+  color: var(--color-muted);
+  background: var(--color-bg);
+  padding: var(--space-2);
+  width: fit-content;
+  max-width: calc(100% - 2 * var(--space-4));
+  font-size: var(--text-xs);
+  pointer-events: none;
 }
 
 * {
@@ -785,10 +811,10 @@ details.inspector[open] summary .disclosure-glyph {
 }
 
 .check {
-  border: 1px solid var(--color-line);
-  border-left-width: 3px;
-  border-radius: var(--radius-md);
-  padding: var(--space-2) var(--space-3);
+  border: 0;
+  border-top: 1px solid var(--color-rule-soft);
+  border-radius: 0;
+  padding: var(--space-3) 0;
 }
 
 .check--pass {
@@ -841,7 +867,8 @@ details.inspector[open] summary .disclosure-glyph {
 }
 
 .check-explanation {
-  font-size: var(--text-md);
+  color: var(--color-muted);
+  font-size: var(--text-sm);
   line-height: 1.5;
   margin: 0;
 }
