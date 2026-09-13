@@ -17,7 +17,7 @@ import { baselineLevel } from '../src/core/fixtures/baseline';
 import { blankCanvasLevel } from '../src/core/fixtures/blank-canvas';
 import { gauntletLevel, overpassLevel, twinKeysLevel } from '../src/core/fixtures/gallery';
 import { vaultEmptyLevel } from '../src/core/fixtures/vault-empty';
-import { applyOperations } from '../src/core/level';
+import { applyOperations, applyRuleProposal, type ApplyResult } from '../src/core/level';
 import { verify } from '../src/core/verifier';
 
 const API = 'https://levelproof.vercel.app/api/compile';
@@ -55,6 +55,13 @@ export const TWIST_PROMPT =
 const fail = (note: string): Grade => ({ pass: false, note });
 const pass = (note: string): Grade => ({ pass: true, note });
 
+type AppliedCompileResult = Extract<CompileResult, { type: 'patch' | 'rule_proposal' }>;
+
+/** Apply the same atomic transaction the product uses for approval. */
+function applyCompileResult(base: Level, result: AppliedCompileResult): ApplyResult {
+  return result.type === 'rule_proposal' ? applyRuleProposal(base, result) : applyOperations(base, result.operations);
+}
+
 function moduleByLabel(level: Level, label: string): string {
   return level.modules.find((m) => m.label === label)?.id ?? '';
 }
@@ -74,7 +81,7 @@ function gradeBaseline(result: CompileResult, base: Level): Grade {
   if (result.type !== 'patch' && result.type !== 'rule_proposal') {
     return fail(`expected patch or rule_proposal, got "${result.type}"`);
   }
-  const applied = applyOperations(base, result.operations);
+  const applied = applyCompileResult(base, result);
   if (!applied.ok) return fail(`operations rejected: ${applied.errors[0]}`);
   const key = applied.level.keys.find((k) => k.moduleId === balcony);
   if (!key) return fail('no key on the side balcony');
@@ -99,7 +106,7 @@ function gradeBaseline(result: CompileResult, base: Level): Grade {
 function gradeTrap(result: CompileResult, base: Level): Grade {
   // Geometry may ride either channel; the semantics are what matter.
   if (result.type !== 'patch' && result.type !== 'rule_proposal') return fail(`expected patch or rule_proposal, got "${result.type}"`);
-  const applied = applyOperations(base, result.operations);
+  const applied = applyCompileResult(base, result);
   if (!applied.ok) return fail(`operations rejected: ${applied.errors[0]}`);
   const report = verify(applied.level);
   if (report.checks.recovery.status !== 'fail') {
@@ -119,7 +126,7 @@ function gradeTrap(result: CompileResult, base: Level): Grade {
 /** Bypass (§8.3): new keyless route; requirements fail with the bypass witness. */
 function gradeBypass(result: CompileResult, base: Level): Grade {
   if (result.type !== 'patch' && result.type !== 'rule_proposal') return fail(`expected patch or rule_proposal, got "${result.type}"`);
-  const applied = applyOperations(base, result.operations);
+  const applied = applyCompileResult(base, result);
   if (!applied.ok) return fail(`operations rejected: ${applied.errors[0]}`);
   const report = verify(applied.level);
   if (report.checks.requirements.status !== 'fail') {
@@ -137,7 +144,7 @@ function gradeEdit(expected: {
 }): (result: CompileResult, base: Level) => Grade {
   return (result, base) => {
     if (result.type !== 'patch') return fail(`expected patch, got "${result.type}"`);
-    const applied = applyOperations(base, result.operations);
+    const applied = applyCompileResult(base, result);
     if (!applied.ok) return fail(`operations rejected: ${applied.errors[0]}`);
     const report = verify(applied.level);
     if (expected.keyOnModule) {
@@ -174,13 +181,11 @@ function gradeScratchExpect(expect: ScratchExpect): (result: CompileResult, base
     if (result.type !== 'patch' && result.type !== 'rule_proposal') {
       return fail(`expected patch or rule_proposal, got "${result.type}"`);
     }
-    const applied = applyOperations(base, result.operations);
+    const applied = applyCompileResult(base, result);
     if (!applied.ok) return fail(`operations rejected: ${applied.errors[0]}`);
     const level = applied.level;
-    const requirements: Requirement[] =
-      result.type === 'rule_proposal' ? [...level.requirements, ...result.newRequirements] : level.requirements;
-    const withRules: Level = { ...level, requirements };
-    const report = verify(withRules);
+    const requirements: Requirement[] = level.requirements;
+    const report = verify(level);
     if (!report.valid) return fail(`invalid: ${report.invalidReasons[0]}`);
     if (report.checks.solution.status !== 'pass') return fail('solution failed — built puzzle is unsolvable');
     if (report.checks.recovery.status !== 'pass') return fail('recovery failed — build traps the player');
@@ -235,7 +240,7 @@ function gradeTwist(result: CompileResult, base: Level): Grade {
   if (result.type !== 'patch' && result.type !== 'rule_proposal') {
     return fail(`expected patch or rule_proposal, got "${result.type}"`);
   }
-  const applied = applyOperations(base, result.operations);
+  const applied = applyCompileResult(base, result);
   if (!applied.ok) return fail(`operations rejected: ${applied.errors[0]}`);
   const report = verify(applied.level);
   const twistLanded =
@@ -456,9 +461,9 @@ async function runFollowup(fixture: FollowupFixture): Promise<RunRecord> {
       cost += parsed.data.totalCostUsd;
       const { result } = parsed.data;
       if (result.type === 'patch' || result.type === 'rule_proposal') {
-        const applied = applyOperations(fixture.base, result.operations);
+        const applied = applyCompileResult(fixture.base, result);
         if (applied.ok) {
-          level1 = result.type === 'rule_proposal' ? { ...applied.level, requirements: result.newRequirements } : applied.level;
+          level1 = applied.level;
         }
       }
     }
@@ -487,11 +492,11 @@ async function runFollowup(fixture: FollowupFixture): Promise<RunRecord> {
   if (result2.type !== 'patch' && result2.type !== 'rule_proposal') {
     return { id: fixture.id, category: 'followup', typeReturned: result2.type, cached: false, attempts: 2, costUsd: cost, grade: { pass: false, note: `follow-up returned "${result2.type}"` }, error: null };
   }
-  const applied2 = applyOperations(level1, result2.operations);
+  const applied2 = applyCompileResult(level1, result2);
   if (!applied2.ok) {
     return { id: fixture.id, category: 'followup', typeReturned: result2.type, cached: false, attempts: 2, costUsd: cost, grade: { pass: false, note: `follow-up rejected: ${applied2.errors[0]}` }, error: null };
   }
-  const finalLevel = result2.type === 'rule_proposal' ? { ...applied2.level, requirements: result2.newRequirements } : applied2.level;
+  const finalLevel = applied2.level;
   const grade = gradeScratchExpect(fixture.expect)(result2, level1);
   // Re-verify the FINAL level end-state for greenness
   const report = verify(finalLevel);

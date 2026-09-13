@@ -47,8 +47,12 @@ tiles can strand a player, dimmed tiles are unreachable — the exhaustive
 search made visible (hidden while you play, so it never spoils the puzzle).
 
 You can also play any scene yourself with the keyboard — the same movement
-engine the checker uses. **Save** stores your puzzle locally; **Share** copies
-a link that opens it directly in play mode, where a friend can press
+engine the checker uses. AI edits first arrive as a red/green before-and-after
+preview; **Apply edit** commits them and **Keep current** discards them. Choose
+an explicit architecture theme — limestone, ivory, patina, basalt, or
+futuristic — or leave it on Auto. **Save** stores the accepted checkpoint
+locally; **Share** copies a link that opens that accepted puzzle directly in
+play mode, where a friend can press
 **Remix this puzzle** to start editing their own copy.
 
 ## What the AI can edit
@@ -59,13 +63,15 @@ authoritative scene summary — add/move/remove modules (flat, ramp, bridge on a
 corridors), place keys and one-shot switches, set door conditions
 (`requiresKey`, `requiresKeys` — every listed key must be held —
 `requiresSwitch`, `closesAfterSwitch`), move the spawn or goal, and propose
-`collectBeforeGoal` design requirements (which you approve — the model cannot
-weaken your rules). Ambiguous or unsupported requests come back as a
+`collectBeforeGoal`, `passThrough`, and `switchNecessary` design requirements
+(which you approve — the model cannot weaken your rules). Ambiguous or
+unsupported requests come back as a
 clarifying question or an honest `unsupported` card, never a silent guess.
 
 Pick **Blank canvas** in the scene selector and describe a whole puzzle in one
-sentence — from-scratch generation is measured at 6/6 phrasings producing
-accepted, fully-verified levels. Or press **Suggest a twist** on any scene and
+sentence — from-scratch generation is measured at 15/16 fresh judge-voice
+phrasings producing accepted, fully-verified levels; the one miss was a
+provider-latency timeout and passed on retry. Or press **Suggest a twist** on any scene and
 let the model propose a mechanic the checker immediately judges (a twist that
 breaks recovery is the product working: red floors, witness, checked repair).
 
@@ -82,8 +88,10 @@ One successful route proves nothing, so every edit is verified three ways —
 each reported as `pass`, `fail`, `check incomplete`, or `not applicable`:
 
 - **Solution** — is any goal reachable, with a playable route?
-- **Design requirements** — does *every* winning route collect the required
-  key(s)? A keyless bypass alongside a keyed route still fails.
+- **Design requirements** — does *every* winning route satisfy the active
+  requirements? This includes collecting required key(s), crossing required
+  module(s), and activating necessary switch(es). A keyless bypass alongside
+  a keyed route still fails.
 - **Recovery** — can every reachable non-goal state still win? Reverse search
   finds dead ends and witnesses the earliest one.
 

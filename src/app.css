@@ -282,6 +282,40 @@ button:focus-visible {
   gap: var(--space-2);
 }
 
+.prompt-toolbar {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.theme-picker {
+  display: inline-flex;
+}
+
+.theme-picker select {
+  background: var(--color-panel-2);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-sm);
+  color: var(--color-text);
+  font: inherit;
+  font-family: var(--font-data);
+  font-size: var(--text-xs);
+  min-height: 28px;
+  max-width: 13rem;
+  padding: var(--space-05) var(--space-2);
+}
+
+.theme-picker select:hover,
+.theme-picker select:focus-visible {
+  border-color: var(--color-text);
+}
+
+.theme-picker select:focus-visible {
+  outline: 1px solid var(--color-text);
+  outline-offset: 2px;
+}
+
 .prompt-label {
   font-size: var(--text-xs);
   font-weight: 600;
@@ -441,6 +475,23 @@ details.inspector[open] summary .disclosure-glyph {
 
 .card--rule {
   border-left-color: var(--color-accent);
+}
+
+.card--preview {
+  border-left-color: var(--color-pass);
+}
+
+.card-heading-row {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.preview-badge {
+  color: var(--color-pass);
+  font-family: var(--font-data);
+  font-size: var(--text-xs);
 }
 
 .card--clarification {

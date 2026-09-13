@@ -8,7 +8,7 @@ import { artDirection, switchSignature } from '../src/render/art-direction';
 import { twinKeysLevel, overpassLevel, gauntletLevel } from '../src/core/fixtures/gallery';
 import { createMechanisms, type WorldVisuals } from '../src/render/mechanisms';
 import type { Cardinal } from '../shared/schema';
-import { GhostActor, PlayerActor, type ActorContext } from '../src/render/actors';
+import { GhostActor, PlayerActor, type ActorContext, type WorldEvents } from '../src/render/actors';
 import { step } from '../src/core/movement';
 
 function setup(reduced = false, switchOnly = false) {
@@ -30,6 +30,13 @@ function setup(reduced = false, switchOnly = false) {
 }
 
 describe('engine-driven mechanism visuals', () => {
+  it('resolves the explicit futuristic direction as a complete palette', () => {
+    const direction = artDirection(compileLevel(trapLevel), 'futuristic');
+    expect(direction.name).toBe('Future vault');
+    expect(direction.base).not.toBe(direction.floor);
+    expect(direction.camera).toHaveLength(3);
+  });
+
   it('gives harmless openers and sealing switches different shapes and colors', () => {
     const c = compileLevel(gauntletLevel);
     expect(switchSignature(c, 'gate-primer').sides).toBe(6);
@@ -153,6 +160,52 @@ describe('actor endpoint alignment', () => {
     advance();
     expect(player.mesh.position.z).toBe(move.segments.at(-1)!.z);
     expect(player.mesh.position.y).toBe(move.segments.at(-1)!.y + 80);
+    player.dispose();
+  });
+
+  it('reports a passThrough violation for a manual bypass route', () => {
+    const level = {
+      modules: [
+        { id: 'spawn-pad', template: 'flat' as const, x: 5, z: 8, h: 0, ports: ['N', 'E'] as Cardinal[] },
+        { id: 'mid', template: 'flat' as const, x: 5, z: 7, h: 0, ports: ['N', 'S', 'E'] as Cardinal[] },
+        { id: 'goal-pad', template: 'flat' as const, x: 5, z: 6, h: 0, ports: ['S', 'E'] as Cardinal[] },
+        { id: 'bypass-lane', template: 'flat' as const, x: 6, z: 8, h: 0, ports: ['W', 'N'] as Cardinal[] },
+        { id: 'bypass-join', template: 'flat' as const, x: 6, z: 7, h: 0, ports: ['N', 'S', 'W'] as Cardinal[] },
+        { id: 'bypass-end', template: 'flat' as const, x: 6, z: 6, h: 0, ports: ['S', 'W'] as Cardinal[] },
+      ],
+      keys: [],
+      switches: [],
+      spawn: 'spawn-pad',
+      goal: 'goal-pad',
+      doors: [],
+      requirements: [{ type: 'passThrough' as const, moduleId: 'mid' }],
+    };
+    const compiled = compileLevel(level);
+    const scene = new THREE.Scene();
+    const world: WorldEvents = {
+      updateState: () => {},
+      collectKey: () => {},
+      activateSwitch: () => {},
+      resetWorld: () => {},
+    };
+    let tick: (dt: number, elapsed: number) => void = () => {};
+    let state: { at: string; goalViolated: boolean } | null = null;
+    const ctx: ActorContext = {
+      scene,
+      compiled,
+      world,
+      follow: () => {},
+      register: update => {
+        tick = update;
+        return () => {};
+      },
+    };
+    const player = new PlayerActor(ctx, { onState: info => { state = { at: info.at, goalViolated: info.goalViolated }; } });
+    for (const action of ['E', 'N', 'N', 'W'] as Cardinal[]) {
+      player.move(action);
+      tick(10, 10000);
+    }
+    expect(state).toEqual({ at: 'goal-pad', goalViolated: true });
     player.dispose();
   });
 });

@@ -39,7 +39,7 @@ export function RepairPanel({ report }: { report: Report }) {
   const applyRepair = useApp((s) => s.applyRepair);
   const previewRepair = useApp((s) => s.previewRepair);
   const clearPreview = useApp((s) => s.clearPreview);
-  const previewOps = useApp((s) => s.previewOps);
+  const preview = useApp((s) => s.preview);
   const repairReplay = useApp((s) => s.repairReplay);
   const watchReplay = useApp((s) => s.watchReplay);
 
@@ -92,9 +92,9 @@ export function RepairPanel({ report }: { report: Report }) {
           )}
           {repair.candidates.map((candidate, index) => {
             const isPreviewing =
-              previewOps !== null &&
-              candidate.operations.length === previewOps.length &&
-              JSON.stringify(candidate.operations) === JSON.stringify(previewOps);
+              preview?.source === 'repair' &&
+              candidate.operations.length === preview.operations.length &&
+              JSON.stringify(candidate.operations) === JSON.stringify(preview.operations);
             return (
               <div key={candidate.key} className="repair-card">
                 <p className="repair-description">{candidate.description}</p>

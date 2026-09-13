@@ -4,6 +4,11 @@ import { idSchema, levelSchema } from './schema.js';
 
 /** Wire contract for POST /api/compile (§10). */
 
+/** Presentation themes are deliberately kept outside Level semantics. */
+export const THEME_KEYS = ['limestone', 'ivory', 'patina', 'basalt', 'futuristic'] as const;
+export const themeKeySchema = z.enum(THEME_KEYS);
+export type ThemeKey = z.infer<typeof themeKeySchema>;
+
 export const compileRequestSchema = z.strictObject({
   level: levelSchema,
   prompt: z.string().min(1).max(2000),
@@ -16,7 +21,7 @@ export const compileRequestSchema = z.strictObject({
   history: z.array(z.strictObject({ prompt: z.string().min(1).max(2000) })).max(6).optional(),
   /** Presentation theme the author asked for ("make it a stone ruin").
    * Presentation only — never part of level semantics. */
-  theme: z.enum(['limestone', 'ivory', 'patina', 'basalt']).optional(),
+  theme: themeKeySchema.optional(),
 });
 export type CompileRequest = z.infer<typeof compileRequestSchema>;
 
@@ -36,7 +41,7 @@ export const compileOkResponseSchema = z.strictObject({
    * Never model-emitted — the model cannot know it. */
   baseRevision: z.string(),
   /** Server-echoed presentation theme (the author's choice, not the model's). */
-  theme: z.enum(['limestone', 'ivory', 'patina', 'basalt']).optional(),
+  theme: themeKeySchema.optional(),
   cached: z.boolean(),
   attempts: z.array(attemptRecordSchema),
   totalCostUsd: z.number(),

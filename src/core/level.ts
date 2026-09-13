@@ -1,4 +1,13 @@
-import { BOUNDS, levelSchema, operationSchema, type Level, type LevelModule, type Operation, type Requirement } from '../../shared/schema.js';
+import {
+  BOUNDS,
+  levelSchema,
+  operationSchema,
+  type Level,
+  type LevelModule,
+  type Operation,
+  type Requirement,
+  type RuleProposal,
+} from '../../shared/schema.js';
 import { opposite } from './catalog.js';
 import { computeEdges, edgeKey, validateGeometry } from './topology.js';
 
@@ -271,6 +280,33 @@ export function applyOperations(base: Level, operations: Operation[]): ApplyResu
   const errors = validateLevel(draft);
   if (errors.length > 0) return { ok: false, errors };
   return { ok: true, level: draft };
+}
+
+/**
+ * Apply a rule revision as one transaction. The model's `oldRequirements`
+ * field is only a claim: it must match the authoritative base before any
+ * geometry is touched. Operations run against the proposed requirement set so
+ * an approved rule can remove a key/switch that the old rule protected, then
+ * the complete resulting level is validated.
+ */
+export function applyRuleProposal(
+  base: Level,
+  proposal: Pick<RuleProposal, 'oldRequirements' | 'newRequirements' | 'operations'>,
+): ApplyResult {
+  const actual = base.requirements.map(requirementId).sort().join('|');
+  const claimed = proposal.oldRequirements.map(requirementId).sort().join('|');
+  if (actual !== claimed) {
+    return { ok: false, errors: ['The rule proposal is stale: its old requirements do not match the current level.'] };
+  }
+
+  const operationBase: Level = {
+    ...structuredClone(base),
+    requirements: structuredClone(proposal.newRequirements),
+  };
+  const applied = applyOperations(operationBase, proposal.operations ?? []);
+  if (!applied.ok) return applied;
+  const errors = validateLevel(applied.level);
+  return errors.length > 0 ? { ok: false, errors } : applied;
 }
 
 /** Human phrasing for any requirement kind (single source of truth). */

@@ -11,6 +11,7 @@ import { PlaytesterPanel, witnessOptions } from './ui/playtester';
 import { PromptPanel } from './ui/prompt-panel';
 import { RepairPanel } from './ui/repair-panel';
 import { ResultCards } from './ui/result-cards';
+import { savedSceneOptionLabel } from './state/persistence';
 
 type Mode = 'authoring' | 'watching' | 'playing';
 
@@ -45,10 +46,12 @@ export function App() {
   const discardDraft = useApp((s) => s.discardDraft);
   const resetVault = useApp((s) => s.resetVault);
   const saveScene = useApp((s) => s.saveScene);
+  const deleteSaved = useApp((s) => s.deleteSaved);
   const shareCurrent = useApp((s) => s.shareCurrent);
   const savedScenes = useApp((s) => s.savedScenes);
   const viaShare = useApp((s) => s.viaShare);
   const headerNote = useApp((s) => s.headerNote);
+  const selectedSaved = savedScenes.find((saved) => `saved:${saved.recordKey}` === sceneId);
   const startPlay = useApp((s) => s.startPlay);
   const exitToAuthoring = useApp((s) => s.exitToAuthoring);
   const [resetArmed, setResetArmed] = useState(false);
@@ -94,7 +97,7 @@ export function App() {
               <span className="visually-hidden">Scene</span>
               <select
                 className="scene-select"
-                value={savedScenes.some((sv) => `saved:${sv.id}` === sceneId) ? sceneId : undefined}
+                value={sceneId}
                 onChange={(event) => loadScene(event.target.value)}
               >
                 <optgroup label="Scenes">
@@ -107,8 +110,8 @@ export function App() {
                 {savedScenes.length > 0 && (
                   <optgroup label="My puzzles">
                     {savedScenes.map((sv) => (
-                      <option key={sv.id} value={`saved:${sv.id}`}>
-                        {sv.name}
+                      <option key={sv.recordKey} value={`saved:${sv.recordKey}`}>
+                        {savedSceneOptionLabel(sv)}
                       </option>
                     ))}
                   </optgroup>
@@ -125,8 +128,13 @@ export function App() {
                 Save
               </button>
               <button type="button" onClick={shareCurrent}>
-                Share
+                {draft ? 'Share accepted' : 'Share'}
               </button>
+              {selectedSaved && (
+                <button type="button" onClick={() => deleteSaved(selectedSaved.recordKey)}>
+                  Remove saved
+                </button>
+              )}
               {headerNote !== null && <span className="control-status">{headerNote}</span>}
               {draft && (
                 <button type="button" onClick={discardDraft}>
@@ -210,23 +218,23 @@ function Viewport({ level, mode, report }: { level: Level; mode: Mode; report: R
       handle.dispose();
       sceneRef.current = null;
     };
-  }, [level]);
+  }, [level, theme]);
 
   // The engine's per-module recovery analysis renders as floor overlays —
   // the author's view of every dead-end zone and unreachable span. Hidden
   // while playing: it would spoil the trap.
   useEffect(() => {
     sceneRef.current?.setAnalysis(report.complete ? (report.recoveryMap ?? null) : null);
-  }, [report, level]);
+  }, [report, level, theme]);
   useEffect(() => {
     sceneRef.current?.setAnalysisVisible(mode !== 'playing');
-  }, [mode, level]);
+  }, [mode, level, theme]);
 
   // Repair preview markers follow the store (§9 before/after).
-  const previewOps = useApp((st) => st.previewOps);
+  const preview = useApp((st) => st.preview);
   useEffect(() => {
-    sceneRef.current?.previewOperations(previewOps);
-  }, [previewOps, level]);
+    sceneRef.current?.previewOperations(preview);
+  }, [preview, level, theme]);
 
   // Click-to-select (§12): picked entities toggle store selection; empty
   // space clears it. Selection rings follow the store.
@@ -234,19 +242,20 @@ function Viewport({ level, mode, report }: { level: Level; mode: Mode; report: R
   const toggleSelect = useApp((st) => st.toggleSelect);
   const clearSelection = useApp((st) => st.clearSelection);
   useEffect(() => {
-    sceneRef.current?.onPick((id) => {
+    const scene = sceneRef.current;
+    scene?.onPick((id) => {
       if (id === null) clearSelection();
       else toggleSelect(id);
     });
-    return () => sceneRef.current?.onPick(null);
-  }, [level, toggleSelect, clearSelection]);
+    return () => scene?.onPick(null);
+  }, [level, theme, toggleSelect, clearSelection]);
   useEffect(() => {
     sceneRef.current?.setSelection(selection);
-  }, [selection, level]);
+  }, [selection, level, theme]);
   const protectedIds = useApp((st) => st.protectedIds);
   useEffect(() => {
     sceneRef.current?.setProtected(protectedIds);
-  }, [protectedIds, level]);
+  }, [protectedIds, level, theme]);
 
   // Ghost: replays a verifier witness route — never a fabricated one.
   useEffect(() => {
@@ -285,7 +294,7 @@ function Viewport({ level, mode, report }: { level: Level; mode: Mode; report: R
       actorBridge.setGhost(null);
       actor.dispose();
     };
-  }, [level, mode, witnessKind, report]);
+  }, [level, mode, witnessKind, report, theme]);
 
   // Manual play: same core step as the checker; one move at a time.
   useEffect(() => {
@@ -314,7 +323,7 @@ function Viewport({ level, mode, report }: { level: Level; mode: Mode; report: R
       actorBridge.setPlayer(null);
       actor.dispose();
     };
-  }, [level, mode]);
+  }, [level, mode, theme]);
 
   const viewportLabel =
     mode === 'playing'

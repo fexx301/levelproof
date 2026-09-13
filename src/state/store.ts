@@ -1,16 +1,24 @@
 import { create } from 'zustand';
 import type { RuleProposalResult, CompileResult } from '../../shared/compile-result.js';
-import { compileOkResponseSchema, explainOkResponseSchema } from '../../shared/api.js';
-import type { Level, Operation } from '../../shared/schema.js';
+import { compileOkResponseSchema, explainOkResponseSchema, themeKeySchema, type ThemeKey } from '../../shared/api.js';
+import { levelSchema, type Level, type Operation } from '../../shared/schema.js';
 import { unfamiliarLevel } from '../core/fixtures/unfamiliar.js';
 import { vaultEmptyLevel } from '../core/fixtures/vault-empty.js';
 import { twinKeysLevel, overpassLevel, gauntletLevel } from '../core/fixtures/gallery.js';
 import { blankCanvasLevel } from '../core/fixtures/blank-canvas.js';
-import { applyOperations, requirementText } from '../core/level.js';
+import { applyOperations, applyRuleProposal, requirementText } from '../core/level.js';
 import { findRepairs, touchesProtected, type RepairCandidate } from '../core/search.js';
 import { verify, type Report } from '../core/verifier.js';
 import type { MoveRecord } from '../core/movement.js';
 import { decodeLevelShare, encodeLevelShare, revisionId } from '../core/serialize.js';
+import type { PreviewState } from '../core/preview.js';
+import {
+  prependSavedScene,
+  persistSavedScenes,
+  readSavedScenes,
+  type SavedScene,
+  type AcceptedSavedScene,
+} from './persistence.js';
 
 /** Gallery scenes (§12): the seeded vault plus three verified showcase levels. */
 export const SCENES = [
@@ -23,48 +31,45 @@ export const SCENES = [
 
 export type SceneId = (typeof SCENES)[number]['id'];
 
-interface SavedScene {
-  id: string;
-  name: string;
-  savedAt: number;
-  level: Level;
+let contextGeneration = 0;
+
+/** Invalidate any compile that was started against an older scene context. */
+function invalidateContext(): void {
+  contextGeneration += 1;
 }
 
-const SAVES_KEY = 'levelproof:saves';
-
-function loadSaves(): SavedScene[] {
-  if (typeof localStorage === 'undefined') return [];
-  try {
-    const raw = localStorage.getItem(SAVES_KEY);
-    if (raw === null) return [];
-    const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter(
-      (entry): entry is SavedScene =>
-        entry !== null && typeof entry === 'object' && 'id' in entry && 'name' in entry && 'level' in entry,
-    );
-  } catch {
-    return [];
-  }
+/** Only a fully verified green level may enter the accepted checkpoint. */
+export function isAcceptedCheckpoint(value: unknown): value is Level {
+  const parsed = levelSchema.safeParse(value);
+  return parsed.success && verify(parsed.data).accepted;
 }
 
-function persistSaves(saves: SavedScene[]): void {
-  if (typeof localStorage === 'undefined') return;
-  try {
-    localStorage.setItem(SAVES_KEY, JSON.stringify(saves));
-  } catch {
-    // Storage full or unavailable: the in-session list still works.
-  }
+function browserStorage(): Storage | undefined {
+  return typeof localStorage === 'undefined' ? undefined : localStorage;
 }
 
 /** One-time window state: a shared puzzle (?p=) opens directly in play
  * mode (its "Back to editing" is the remix); otherwise the scene seed. */
-function initialWindowState(): { level: Level; mode: Mode; viaShare: boolean } {
+export function decodeAcceptedShare(payload: string): Level | null {
+  const shared = decodeLevelShare(payload);
+  return shared !== null && isAcceptedCheckpoint(shared) ? shared : null;
+}
+
+function initialWindowState(): { level: Level; mode: Mode; viaShare: boolean; theme: ThemeKey | null } {
   if (typeof window !== 'undefined') {
-    const shared = decodeLevelShare(new URLSearchParams(window.location.search).get('p') ?? '');
-    if (shared !== null) return { level: shared, mode: 'playing', viaShare: true };
+    const params = new URLSearchParams(window.location.search);
+    const shared = decodeAcceptedShare(params.get('p') ?? '');
+    const parsedTheme = themeKeySchema.safeParse(params.get('theme'));
+    if (shared !== null) {
+      return {
+        level: shared,
+        mode: 'playing',
+        viaShare: true,
+        theme: parsedTheme.success ? parsedTheme.data : null,
+      };
+    }
   }
-  return { level: initialLevel(), mode: 'authoring', viaShare: false };
+  return { level: initialLevel(), mode: 'authoring', viaShare: false, theme: null };
 }
 
 /**
@@ -83,7 +88,46 @@ interface DraftState {
   level: Level;
   report: Report;
   viaRule: boolean;
+  /** Accepted checkpoint to return to when this draft was opened from a save. */
+  returnSceneId: string | null;
 }
+
+interface RevisionEntry {
+  level: Level;
+  label: string;
+  theme: ThemeKey | null;
+  promptHistory: string[];
+}
+
+interface Checkpoint {
+  level: Level;
+  theme: ThemeKey | null;
+  promptHistory: string[];
+  history: RevisionEntry[];
+  sceneId: string;
+}
+
+type PendingChange =
+  | {
+      kind: 'patch';
+      base: Level;
+      candidate: Level;
+      operations: Operation[];
+      rationale: string;
+      assumptions: string[];
+      prompt: string;
+      nextTheme: ThemeKey | null;
+      baseRevision: string;
+    }
+  | {
+      kind: 'rule';
+      base: Level;
+      candidate: Level;
+      proposal: RuleProposalResult;
+      prompt: string;
+      nextTheme: ThemeKey | null;
+      baseRevision: string;
+    };
 
 interface CompileMeta {
   cached: boolean;
@@ -133,8 +177,10 @@ interface AppState {
   acceptedLevel: Level;
   /** Current scene: a static scene id or "saved:<id>" for a saved puzzle. */
   sceneId: string;
-  /** Repair preview: the candidate's operations rendered as scene markers. */
-  previewOps: Operation[] | null;
+  /** The one complete, validated preview payload rendered as scene markers. */
+  preview: PreviewState | null;
+  /** Identity of the accepted checkpoint, independent from an open draft. */
+  acceptedSceneId: string;
   /** The failing witness route that existed before the applied repair. */
   repairReplay: MoveRecord[] | null;
   /** Entity ids selected in the scene (§12 "select, then describe"). */
@@ -144,9 +190,12 @@ interface AppState {
   /** One-line summary of the last applied change (§12 visible edit). */
   changeSummary: string | null;
   /** Presentation theme the author asked for (§12 visual expression). */
-  theme: 'limestone' | 'ivory' | 'patina' | 'basalt' | null;
+  theme: ThemeKey | null;
+  /** Theme and conversation belonging to the accepted checkpoint. */
+  acceptedTheme: ThemeKey | null;
+  acceptedPromptHistory: string[];
   /** Revision history entries (§11): every accepted checkpoint this session. */
-  history: { level: Level; label: string }[];
+  history: RevisionEntry[];
   /** Entities the creator marked "keep this" (§9): repairs that move or
    * remove them are excluded from the search. */
   protectedIds: string[];
@@ -155,9 +204,10 @@ interface AppState {
   viaShare: boolean;
   /** Transient header feedback (Saved ✓ / Link copied). */
   headerNote: string | null;
-  previousAccepted: Level | null;
+  previousAccepted: Checkpoint | null;
   draft: DraftState | null;
-  pendingRule: { proposal: RuleProposalResult; base: Level } | null;
+  /** One staged change at a time; its kind discriminates patch vs rule review. */
+  pendingRule: PendingChange | null;
   lastResult: CompileResult | null;
   lastPrompt: string | null;
   lastCompileMeta: CompileMeta | null;
@@ -172,6 +222,8 @@ interface AppState {
   submitPrompt: (prompt: string, clarificationContext?: string) => Promise<void>;
   approveRule: () => void;
   declineRule: () => void;
+  applyPatch: () => void;
+  declinePatch: () => void;
   discardDraft: () => void;
   undo: () => void;
   resetVault: () => void;
@@ -188,11 +240,12 @@ interface AppState {
   clearSelection: () => void;
   keepSelected: () => void;
   /** Restore a revision-history level as the accepted checkpoint. */
-  loadLevel: (level: Level) => void;
+  loadLevel: (level: Level, theme?: ThemeKey | null, promptHistory?: string[]) => void;
   unkeep: (id: string) => void;
   saveScene: () => void;
   deleteSaved: (id: string) => void;
   shareCurrent: () => void;
+  setTheme: (theme: ThemeKey | null) => void;
 }
 
 const GHOST_INITIAL: GhostSlice = {
@@ -255,8 +308,9 @@ function summarizeOperations(operations: Operation[]): string {
 }
 
 /** Theme words in a prompt → the theme side-channel (presentation only). */
-function themeFromPrompt(prompt: string): 'limestone' | 'ivory' | 'patina' | 'basalt' | undefined {
+function themeFromPrompt(prompt: string): ThemeKey | undefined {
   const p = prompt.toLowerCase();
+  if (/futuristic|sci-fi|science fiction|neon|cyber|future vault/.test(p)) return 'futuristic';
   if (/stone ruin|limestone|castle|crypt|dungeon/.test(p)) return 'limestone';
   if (/ivory|observatory|white tower|marble|moonlit/.test(p)) return 'ivory';
   if (/patina|verdigris|relay|steampunk|copper|factory|workshop/.test(p)) return 'patina';
@@ -298,18 +352,53 @@ function extractError(body: unknown): string {
  * the pre-update state). */
 function settleDraft(
   set: (partial: Partial<AppState>) => void,
+  get: () => AppState,
   base: Level,
   level: Level,
   viaRule: boolean,
   summary: string | null = null,
-): void {
+  nextTheme: ThemeKey | null = get().theme,
+  nextPromptHistory: string[] = get().promptHistory,
+): boolean {
+  const current = get();
   const report = verify(level);
   if (report.accepted) {
-    set({ acceptedLevel: level, previousAccepted: base, draft: null, changeSummary: summary });
+    set({
+      acceptedLevel: level,
+      acceptedSceneId: '',
+      sceneId: '',
+      acceptedTheme: nextTheme,
+      acceptedPromptHistory: [...nextPromptHistory],
+      previousAccepted: {
+        level: current.acceptedLevel,
+        theme: current.acceptedTheme,
+        promptHistory: [...current.acceptedPromptHistory],
+        history: current.history,
+        sceneId: current.acceptedSceneId,
+      },
+      draft: null,
+      theme: nextTheme,
+      promptHistory: [...nextPromptHistory],
+      changeSummary: summary,
+    });
   } else {
-    set({ draft: { level, report, viaRule }, changeSummary: summary });
+    // A failing draft is not an accepted checkpoint. Keep the real accepted
+    // snapshot untouched while the author explores the candidate.
+    set({
+      draft: {
+        level,
+        report,
+        viaRule,
+        returnSceneId: current.draft?.returnSceneId ?? current.acceptedSceneId,
+      },
+      theme: nextTheme,
+      promptHistory: [...nextPromptHistory],
+      changeSummary: summary,
+    });
   }
   set({ pendingRule: null, mode: 'authoring', ghost: GHOST_INITIAL, play: PLAY_INITIAL, repair: REPAIR_INITIAL, explain: EXPLAIN_INITIAL });
+  void base;
+  return report.accepted;
 }
 
 /** Seed scene: the empty vault, or the held-out unfamiliar layout via ?scene=unfamiliar (§8.4 gate). */
@@ -325,13 +414,16 @@ const initialWindow = initialWindowState();
 export const useApp = create<AppState>()((set, get) => ({
   acceptedLevel: initialWindow.level,
   sceneId: 'balcony-vault',
-  previewOps: null,
+  acceptedSceneId: initialWindow.viaShare ? '' : 'balcony-vault',
+  preview: null,
   repairReplay: null,
   selection: [],
   protectedIds: [],
   promptHistory: [],
   changeSummary: null,
-  theme: null,
+  theme: initialWindow.theme,
+  acceptedTheme: initialWindow.theme,
+  acceptedPromptHistory: [],
   history: [],
   previousAccepted: null,
   draft: null,
@@ -344,7 +436,7 @@ export const useApp = create<AppState>()((set, get) => ({
   mode: initialWindow.mode,
   viaShare: initialWindow.viaShare,
   headerNote: null,
-  savedScenes: loadSaves(),
+  savedScenes: readSavedScenes(browserStorage()),
   ghost: GHOST_INITIAL,
   play: PLAY_INITIAL,
   repair: REPAIR_INITIAL,
@@ -353,6 +445,7 @@ export const useApp = create<AppState>()((set, get) => ({
   explainCheck: async (kind) => {
     const state = get();
     if (state.explain.busy) return;
+    const generation = contextGeneration;
     const level = state.draft?.level ?? state.acceptedLevel;
     const boundRevision = revisionId(level);
     set({ explain: { ...state.explain, busy: true, error: null } });
@@ -365,7 +458,7 @@ export const useApp = create<AppState>()((set, get) => ({
       const body: unknown = await response.json();
       // Stale results are ignored: the level moved on while we asked.
       const stillCurrent = revisionId(get().draft?.level ?? get().acceptedLevel) === boundRevision;
-      if (!stillCurrent) return;
+      if (generation !== contextGeneration || !stillCurrent) return;
       if (!response.ok) {
         set({ explain: { ...get().explain, busy: false, error: explainErrorText(body) } });
         return;
@@ -391,11 +484,13 @@ export const useApp = create<AppState>()((set, get) => ({
 
   submitPrompt: async (prompt, clarificationContext) => {
     const state = get();
-    if (state.busy || prompt.trim().length === 0) return;
+    if (state.busy || state.pendingRule !== null || prompt.trim().length === 0) return;
+    const generation = ++contextGeneration;
     set({ busy: true, error: null });
     const selection = state.selection;
     const history = state.promptHistory;
     const base = state.draft?.level ?? state.acceptedLevel;
+    const requestedTheme = themeFromPrompt(prompt) ?? state.theme;
     // §11: every result binds to a base revision. If the scene changes while
     // the request is in flight (scene picker, reset), the result is stale and
     // is discarded instead of applied to the wrong level.
@@ -410,10 +505,11 @@ export const useApp = create<AppState>()((set, get) => ({
           clarificationContext,
           selection,
           history: history.map((h) => ({ prompt: h })),
-          ...(themeFromPrompt(prompt) !== undefined ? { theme: themeFromPrompt(prompt) } : {}),
+          ...(requestedTheme !== null ? { theme: requestedTheme } : {}),
         }),
       });
       const body: unknown = await response.json();
+      if (generation !== contextGeneration) return;
       if (!response.ok) {
         set({ busy: false, error: extractError(body), lastResult: null, lastCompileMeta: null });
         return;
@@ -425,7 +521,7 @@ export const useApp = create<AppState>()((set, get) => ({
       }
       const { result, baseRevision, cached, attempts, totalCostUsd, theme } = parsed.data;
       const stillCurrent = revisionId(get().draft?.level ?? get().acceptedLevel) === boundRevision;
-      if (!stillCurrent || baseRevision !== boundRevision) {
+      if (generation !== contextGeneration || !stillCurrent || baseRevision !== boundRevision) {
         set({
           busy: false,
           error: 'The scene changed while compiling; the result was discarded.',
@@ -439,79 +535,199 @@ export const useApp = create<AppState>()((set, get) => ({
         lastResult: result,
         lastPrompt: prompt,
         lastCompileMeta: { cached, totalCostUsd, attempts: attempts.length, model },
-        promptHistory: [...history, prompt].slice(-6),
-        ...(theme !== undefined ? { theme } : {}),
       });
+      const nextTheme = theme ?? requestedTheme;
 
       if (result.type === 'patch') {
         const applied = applyOperations(base, result.operations);
         if (!applied.ok) {
-          set({ busy: false, error: `The proposed edit was rejected: ${applied.errors[0]}` });
+          set({ busy: false, error: `The proposed edit was rejected: ${applied.errors[0]}`, lastResult: null });
           return;
         }
-        const priorHistory = get().history;
-        settleDraft(set, base, applied.level, false, summarizeOperations(result.operations));
-        if (get().acceptedLevel === applied.level) {
-          set({ history: [{ level: applied.level, label: lastPromptLabel(prompt) }, ...priorHistory].slice(0, 12) });
-        }
-        set({ repairReplay: null, previewOps: null, selection: [] });
+        set({
+          pendingRule: {
+            kind: 'patch',
+            base,
+            candidate: applied.level,
+            operations: result.operations,
+            rationale: result.rationale,
+            assumptions: result.assumptions,
+            prompt,
+            nextTheme,
+            baseRevision: boundRevision,
+          },
+          repairReplay: null,
+          preview: {
+            source: 'ai',
+            baseRevision: boundRevision,
+            before: base,
+            candidate: applied.level,
+            operations: result.operations,
+          },
+          selection: [],
+          busy: false,
+        });
       } else if (result.type === 'rule_proposal') {
-        set({ pendingRule: { proposal: result, base }, repairReplay: null, previewOps: null, selection: [] });
+        const applied = applyRuleProposal(base, result);
+        if (!applied.ok) {
+          set({ busy: false, error: `The rule proposal was rejected: ${applied.errors[0]}`, lastResult: null });
+          return;
+        }
+        set({
+          pendingRule: { kind: 'rule', base, candidate: applied.level, proposal: result, prompt, nextTheme, baseRevision: boundRevision },
+          repairReplay: null,
+          preview: {
+            source: 'ai',
+            baseRevision: boundRevision,
+            before: base,
+            candidate: applied.level,
+            operations: result.operations,
+          },
+          selection: [],
+          busy: false,
+        });
+      } else {
+        set({ pendingRule: null, preview: null, busy: false });
       }
-      set({ busy: false });
     } catch (error) {
-      set({ busy: false, error: error instanceof Error ? error.message : 'Network error.' });
+      if (generation === contextGeneration) {
+        set({ busy: false, error: error instanceof Error ? error.message : 'Network error.' });
+      }
     }
   },
 
   approveRule: () => {
     const { pendingRule } = get();
-    if (!pendingRule) return;
-    const { proposal, base } = pendingRule;
-    const applied = applyOperations(base, proposal.operations);
-    if (!applied.ok) {
-      set({ pendingRule: null, error: `The proposal was rejected: ${applied.errors[0]}` });
+    if (!pendingRule || pendingRule.kind !== 'rule') return;
+    const currentBase = get().draft?.level ?? get().acceptedLevel;
+    if (revisionId(currentBase) !== pendingRule.baseRevision) {
+      set({ pendingRule: null, preview: null, lastResult: null, error: 'The scene changed; review this rule again.' });
       return;
     }
-    const level: Level = { ...applied.level, requirements: proposal.newRequirements };
+    const { proposal, base } = pendingRule;
+    const applied = applyRuleProposal(currentBase, proposal);
+    if (!applied.ok) {
+      set({ pendingRule: null, preview: null, lastResult: null, error: `The proposal was rejected: ${applied.errors[0]}` });
+      return;
+    }
+    const level: Level = applied.level;
     const priorHistory = get().history;
+    const nextPromptHistory = [...get().promptHistory, pendingRule.prompt].slice(-6);
     const summary =
       proposal.newRequirements.length > 0
         ? `Rule: ${proposal.newRequirements.map(requirementText).join('; ')}`
         : summarizeOperations(proposal.operations);
-    settleDraft(set, base, level, true, summary);
-    if (get().acceptedLevel === level) {
-      set({ history: [{ level, label: summary }, ...priorHistory].slice(0, 12) });
+    const accepted = settleDraft(set, get, base, level, true, summary, pendingRule.nextTheme, nextPromptHistory);
+    if (accepted) {
+      set({
+        history: [{ level, label: summary, theme: pendingRule.nextTheme, promptHistory: nextPromptHistory }, ...priorHistory].slice(0, 12),
+      });
     }
-    set({ pendingRule: null });
+    set({ pendingRule: null, preview: null, selection: [] });
   },
 
-  declineRule: () => set({ pendingRule: null }),
+  declineRule: () => {
+    const pending = get().pendingRule;
+    if (!pending || pending.kind !== 'rule') return;
+    set({ pendingRule: null, preview: null, lastResult: null, lastPrompt: null });
+  },
 
-  discardDraft: () =>
-    set({ draft: null, pendingRule: null, ghost: GHOST_INITIAL, play: PLAY_INITIAL, repair: REPAIR_INITIAL, previewOps: null, repairReplay: null, selection: [] }),
+  applyPatch: () => {
+    const { pendingRule } = get();
+    if (!pendingRule || pendingRule.kind !== 'patch') return;
+    const currentBase = get().draft?.level ?? get().acceptedLevel;
+    if (revisionId(currentBase) !== pendingRule.baseRevision) {
+      set({ pendingRule: null, preview: null, lastResult: null, error: 'The scene changed; compile the edit again.' });
+      return;
+    }
+    const applied = applyOperations(currentBase, pendingRule.operations);
+    if (!applied.ok) {
+      set({ pendingRule: null, preview: null, lastResult: null, error: `The edit was rejected: ${applied.errors[0]}` });
+      return;
+    }
+    const priorHistory = get().history;
+    const nextPromptHistory = [...get().promptHistory, pendingRule.prompt].slice(-6);
+    const summary = summarizeOperations(pendingRule.operations);
+    const accepted = settleDraft(set, get, pendingRule.base, applied.level, false, summary, pendingRule.nextTheme, nextPromptHistory);
+    if (accepted) {
+      set({
+        history: [{ level: applied.level, label: lastPromptLabel(pendingRule.prompt), theme: pendingRule.nextTheme, promptHistory: nextPromptHistory }, ...priorHistory].slice(0, 12),
+      });
+    }
+    set({ pendingRule: null, preview: null, selection: [] });
+  },
+
+  declinePatch: () => {
+    const pending = get().pendingRule;
+    if (!pending || pending.kind !== 'patch') return;
+    set({ pendingRule: null, preview: null, lastResult: null, lastPrompt: null });
+  },
+
+  discardDraft: () => {
+    invalidateContext();
+    const { acceptedTheme, acceptedPromptHistory, draft, acceptedSceneId, sceneId } = get();
+    set({
+      draft: null,
+      pendingRule: null,
+      lastResult: null,
+      lastPrompt: null,
+      lastCompileMeta: null,
+      error: null,
+      busy: false,
+      theme: acceptedTheme,
+      promptHistory: [...acceptedPromptHistory],
+      changeSummary: null,
+      ghost: GHOST_INITIAL,
+      play: PLAY_INITIAL,
+      repair: REPAIR_INITIAL,
+      preview: null,
+      repairReplay: null,
+      selection: [],
+      sceneId: draft?.returnSceneId ?? (acceptedSceneId || sceneId),
+    });
+  },
 
   undo: () => {
     const { previousAccepted } = get();
     if (!previousAccepted) return;
+    invalidateContext();
     set({
-      acceptedLevel: previousAccepted,
+      acceptedLevel: previousAccepted.level,
+      acceptedSceneId: previousAccepted.sceneId,
+      sceneId: previousAccepted.sceneId,
+      acceptedTheme: previousAccepted.theme,
+      acceptedPromptHistory: [...previousAccepted.promptHistory],
+      theme: previousAccepted.theme,
+      promptHistory: [...previousAccepted.promptHistory],
+      history: previousAccepted.history,
       previousAccepted: null,
       draft: null,
       pendingRule: null,
+      lastResult: null,
+      lastPrompt: null,
+      lastCompileMeta: null,
+      error: null,
+      busy: false,
+      changeSummary: null,
       mode: 'authoring',
       ghost: GHOST_INITIAL,
       play: PLAY_INITIAL,
       repair: REPAIR_INITIAL,
-      previewOps: null,
+      preview: null,
       repairReplay: null,
       selection: [],
     });
   },
 
-  resetVault: () =>
+  resetVault: () => {
+    invalidateContext();
     set({
       acceptedLevel: initialLevel(),
+      acceptedTheme: null,
+      acceptedPromptHistory: [],
+      theme: null,
+      promptHistory: [],
+      history: [],
       previousAccepted: null,
       draft: null,
       pendingRule: null,
@@ -519,22 +735,92 @@ export const useApp = create<AppState>()((set, get) => ({
       lastPrompt: null,
       lastCompileMeta: null,
       error: null,
+      busy: false,
+      changeSummary: null,
       mode: 'authoring',
+      viaShare: false,
+      headerNote: null,
       ghost: GHOST_INITIAL,
       play: PLAY_INITIAL,
       repair: REPAIR_INITIAL,
       explain: EXPLAIN_INITIAL,
-      previewOps: null,
+      preview: null,
       repairReplay: null,
+      selection: [],
+      protectedIds: [],
       sceneId: 'balcony-vault',
-    }),
+      acceptedSceneId: 'balcony-vault',
+    });
+  },
 
   loadScene: (id) => {
     const scene = SCENES.find((s) => s.id === id);
-    const saved = id.startsWith('saved:') ? get().savedScenes.find((sv) => sv.id === id.slice('saved:'.length)) : undefined;
+    const saved = id.startsWith('saved:') ? get().savedScenes.find((sv) => sv.recordKey === id.slice('saved:'.length)) : undefined;
     if (!scene && !saved) return;
+
+    if (saved?.status === 'unavailable') {
+      set({ sceneId: id, error: `${saved.error} The entry remains available in My puzzles so you can remove or recover it.` });
+      return;
+    }
+
+    const level = scene ? scene.level : saved!.level;
+    const report = verify(level);
+    if (!report.valid) {
+      set({ sceneId: id, error: 'That saved scene is structurally invalid and cannot be rendered. Remove it from My puzzles.' });
+      return;
+    }
+    invalidateContext();
+    const savedTheme = saved?.theme ?? null;
+    const parsedTheme = themeKeySchema.safeParse(savedTheme);
+    const theme = parsedTheme.success ? parsedTheme.data : null;
+    const savedPrompts = Array.isArray(saved?.promptHistory) ? saved.promptHistory : [];
+    const promptHistory = savedPrompts.filter((prompt) => typeof prompt === 'string').slice(-6);
+
+    if (saved !== undefined && !report.accepted) {
+      const current = get();
+      set({
+        // Deliberately leave the accepted snapshot untouched. The saved
+        // failure is an editable draft with an explicit return lineage.
+        draft: {
+          level,
+          report,
+          viaRule: false,
+          returnSceneId: current.draft?.returnSceneId ?? current.acceptedSceneId,
+        },
+        theme,
+        promptHistory,
+        history: [],
+        previousAccepted: null,
+        pendingRule: null,
+        lastResult: null,
+        lastPrompt: null,
+        lastCompileMeta: null,
+        error: null,
+        busy: false,
+        mode: 'authoring',
+        ghost: GHOST_INITIAL,
+        play: PLAY_INITIAL,
+        repair: REPAIR_INITIAL,
+        explain: EXPLAIN_INITIAL,
+        changeSummary: `Opened ${saved.name} as a draft`,
+        preview: null,
+        repairReplay: null,
+        selection: [],
+        protectedIds: [],
+        viaShare: false,
+        sceneId: id,
+      });
+      return;
+    }
+
     set({
-      acceptedLevel: scene ? scene.level : saved!.level,
+      acceptedLevel: level,
+      acceptedSceneId: id,
+      acceptedTheme: theme,
+      acceptedPromptHistory: promptHistory,
+      theme,
+      promptHistory,
+      history: [],
       previousAccepted: null,
       draft: null,
       pendingRule: null,
@@ -542,13 +828,18 @@ export const useApp = create<AppState>()((set, get) => ({
       lastPrompt: null,
       lastCompileMeta: null,
       error: null,
+      busy: false,
       mode: 'authoring',
       ghost: GHOST_INITIAL,
       play: PLAY_INITIAL,
       repair: REPAIR_INITIAL,
       explain: EXPLAIN_INITIAL,
-      previewOps: null,
+      changeSummary: null,
+      preview: null,
       repairReplay: null,
+      selection: [],
+      protectedIds: [],
+      viaShare: false,
       sceneId: id,
     });
   },
@@ -561,7 +852,10 @@ export const useApp = create<AppState>()((set, get) => ({
     }),
 
 
-  startPlay: () => set({ mode: 'playing', ghost: GHOST_INITIAL, play: PLAY_INITIAL }),
+  startPlay: () => {
+    invalidateContext();
+    set({ mode: 'playing', ghost: GHOST_INITIAL, play: PLAY_INITIAL, pendingRule: null, preview: null, lastResult: null, lastPrompt: null, lastCompileMeta: null, busy: false });
+  },
 
   exitToAuthoring: () => set({ mode: 'authoring', ghost: GHOST_INITIAL, play: PLAY_INITIAL }),
 
@@ -608,20 +902,41 @@ export const useApp = create<AppState>()((set, get) => ({
     const failing =
       draft.report.checks.recovery.witness?.route ?? draft.report.checks.requirements.witness?.route ?? [];
     const priorHistory = get().history;
-    settleDraft(set, acceptedLevel, applied.level, false, `Repair: ${candidate.description}`);
-    if (get().acceptedLevel === applied.level) {
-      set({ history: [{ level: applied.level, label: `Repair: ${candidate.description}` }, ...priorHistory].slice(0, 12) });
+    const nextTheme = get().theme;
+    const nextPromptHistory = get().promptHistory;
+    const accepted = settleDraft(set, get, acceptedLevel, applied.level, false, `Repair: ${candidate.description}`, nextTheme, nextPromptHistory);
+    if (accepted) {
+      set({
+        history: [{ level: applied.level, label: `Repair: ${candidate.description}`, theme: nextTheme, promptHistory: nextPromptHistory }, ...priorHistory].slice(0, 12),
+      });
     }
-    set({ previewOps: null, repairReplay: failing.length > 0 ? failing : null });
+    set({ preview: null, repairReplay: failing.length > 0 ? failing : null });
   },
 
   previewRepair: (index) => {
-    const { repair } = get();
+    const { repair, draft } = get();
     const candidate = repair.candidates[index];
-    set({ previewOps: candidate ? candidate.operations : null });
+    if (!candidate || !draft) {
+      set({ preview: null });
+      return;
+    }
+    const applied = applyOperations(draft.level, candidate.operations);
+    if (!applied.ok) {
+      set({ preview: null, repair: { ...repair, applyError: `The repair preview was rejected: ${applied.errors[0]}` } });
+      return;
+    }
+    set({
+      preview: {
+        source: 'repair',
+        baseRevision: revisionId(draft.level),
+        before: draft.level,
+        candidate: applied.level,
+        operations: candidate.operations,
+      },
+    });
   },
 
-  clearPreview: () => set({ previewOps: null }),
+  clearPreview: () => set({ preview: null }),
 
   watchReplay: () => {
     const { repairReplay } = get();
@@ -630,7 +945,7 @@ export const useApp = create<AppState>()((set, get) => ({
       mode: 'watching',
       ghost: { ...GHOST_INITIAL, witnessKind: 'replay' },
       play: PLAY_INITIAL,
-      previewOps: null,
+      preview: null,
     });
   },
 
@@ -643,9 +958,23 @@ export const useApp = create<AppState>()((set, get) => ({
 
   clearSelection: () => set({ selection: [] }),
 
-  loadLevel: (level) => {
+  loadLevel: (level, theme = null, promptHistory = []) => {
+    if (!isAcceptedCheckpoint(level)) {
+      set({ error: 'Only a verified accepted level can become a checkpoint.' });
+      return;
+    }
+    invalidateContext();
+    const current = get();
+    const contextSceneId = current.draft?.returnSceneId ?? current.acceptedSceneId;
+    const nextPromptHistory = promptHistory.slice(-6);
     set({
       acceptedLevel: level,
+      acceptedSceneId: contextSceneId,
+      sceneId: contextSceneId,
+      acceptedTheme: theme,
+      acceptedPromptHistory: nextPromptHistory,
+      theme,
+      promptHistory: nextPromptHistory,
       previousAccepted: null,
       draft: null,
       pendingRule: null,
@@ -653,14 +982,18 @@ export const useApp = create<AppState>()((set, get) => ({
       lastPrompt: null,
       lastCompileMeta: null,
       error: null,
+      busy: false,
       mode: 'authoring',
       ghost: GHOST_INITIAL,
       play: PLAY_INITIAL,
       repair: REPAIR_INITIAL,
       explain: EXPLAIN_INITIAL,
-      previewOps: null,
+      changeSummary: null,
+      preview: null,
       repairReplay: null,
       selection: [],
+      protectedIds: [],
+      viaShare: false,
     });
   },
 
@@ -670,7 +1003,7 @@ export const useApp = create<AppState>()((set, get) => ({
     const merged = [...new Set([...protectedIds, ...selection])];
     // Protections change what the search may offer: stale candidates and
     // their preview markers are void until the creator searches again.
-    set({ protectedIds: merged, repair: REPAIR_INITIAL, previewOps: null });
+    set({ protectedIds: merged, repair: REPAIR_INITIAL, preview: null });
   },
 
   unkeep: (id) => {
@@ -678,37 +1011,90 @@ export const useApp = create<AppState>()((set, get) => ({
     set({
       protectedIds: protectedIds.filter((p) => p !== id),
       repair: REPAIR_INITIAL,
-      previewOps: null,
+      preview: null,
     });
   },
 
   saveScene: () => {
-    const { draft, acceptedLevel, savedScenes } = get();
-    const level = draft?.level ?? acceptedLevel;
-    const entry: SavedScene = {
-      id: `save-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-      name: `Puzzle ${savedScenes.length + 1}`,
-      savedAt: Date.now(),
-      level,
+    const { acceptedLevel, acceptedTheme, acceptedPromptHistory, savedScenes, draft, sceneId } = get();
+    if (!isAcceptedCheckpoint(acceptedLevel)) {
+      set({ error: 'Only a verified accepted level can be saved.' });
+      return;
+    }
+    const savedAt = Date.now();
+    let recordKey = `save-${savedAt}`;
+    let suffix = 2;
+    while (savedScenes.some((saved) => saved.recordKey === recordKey)) {
+      recordKey = `save-${savedAt}-${suffix}`;
+      suffix += 1;
+    }
+    const acceptedCount = savedScenes.filter((saved) => saved.status === 'accepted').length;
+    const entry: AcceptedSavedScene = {
+      recordKey,
+      id: recordKey,
+      name: `Puzzle ${acceptedCount + 1}`,
+      savedAt,
+      status: 'accepted',
+      level: acceptedLevel,
+      theme: acceptedTheme,
+      promptHistory: [...acceptedPromptHistory],
     };
-    const next = [entry, ...savedScenes].slice(0, 20);
-    persistSaves(next);
-    set({ savedScenes: next, headerNote: 'Saved ✓' });
-    window.setTimeout(() => {
-      if (get().headerNote === 'Saved ✓') set({ headerNote: null });
-    }, 2500);
+    const next = prependSavedScene(savedScenes, entry);
+    const persisted = persistSavedScenes(browserStorage(), next);
+    if (!persisted.ok) {
+      set({ error: persisted.error });
+      return;
+    }
+    const note = draft ? 'Accepted checkpoint saved ✓' : 'Saved ✓';
+    const savedSceneId = `saved:${entry.recordKey}`;
+    set({
+      savedScenes: next,
+      headerNote: note,
+      acceptedSceneId: savedSceneId,
+      sceneId: draft ? sceneId : savedSceneId,
+      draft: draft ? { ...draft, returnSceneId: savedSceneId } : null,
+      error: null,
+    });
+    if (typeof window !== 'undefined') {
+      window.setTimeout(() => {
+        if (get().headerNote === note) set({ headerNote: null });
+      }, 2500);
+    }
   },
 
-  deleteSaved: (id) => {
-    const next = get().savedScenes.filter((sv) => sv.id !== id);
-    persistSaves(next);
-    set({ savedScenes: next });
+  deleteSaved: (recordKey) => {
+    const current = get();
+    const next = current.savedScenes.filter((saved) => saved.recordKey !== recordKey);
+    if (next.length === current.savedScenes.length) return;
+    const persisted = persistSavedScenes(browserStorage(), next);
+    if (!persisted.ok) {
+      set({ error: persisted.error });
+      return;
+    }
+    const savedSceneId = `saved:${recordKey}`;
+    const acceptedWasDeleted = current.acceptedSceneId === savedSceneId;
+    const draftReturnSceneId = current.draft?.returnSceneId === savedSceneId ? null : current.draft?.returnSceneId ?? null;
+    let nextSceneId = current.sceneId;
+    if (current.sceneId === savedSceneId) {
+      nextSceneId = current.draft ? '' : acceptedWasDeleted ? '' : current.acceptedSceneId;
+    }
+    set({
+      savedScenes: next,
+      acceptedSceneId: acceptedWasDeleted ? '' : current.acceptedSceneId,
+      sceneId: nextSceneId,
+      draft: current.draft ? { ...current.draft, returnSceneId: draftReturnSceneId } : null,
+      error: null,
+    });
   },
 
   shareCurrent: () => {
-    const { draft, acceptedLevel } = get();
-    const level = draft?.level ?? acceptedLevel;
-    const url = `${window.location.origin}/?p=${encodeLevelShare(level)}`;
+    const { acceptedLevel, acceptedTheme } = get();
+    if (!isAcceptedCheckpoint(acceptedLevel)) {
+      set({ error: 'Only a verified accepted level can be shared.' });
+      return;
+    }
+    const themeParam = acceptedTheme === null ? '' : `&theme=${encodeURIComponent(acceptedTheme)}`;
+    const url = `${window.location.origin}/?p=${encodeLevelShare(acceptedLevel)}${themeParam}`;
     const done = (): void => {
       set({ headerNote: 'Share link copied' });
       window.setTimeout(() => {
@@ -721,5 +1107,21 @@ export const useApp = create<AppState>()((set, get) => ({
       set({ headerNote: url });
     }
   },
-}));
 
+  setTheme: (theme) => {
+    const current = get();
+    if (current.theme === theme) return;
+    invalidateContext();
+    set({
+      theme,
+      ...(current.draft === null ? { acceptedTheme: theme } : {}),
+      pendingRule: null,
+      preview: null,
+      lastResult: null,
+      lastPrompt: null,
+      lastCompileMeta: null,
+      error: null,
+      busy: false,
+    });
+  },
+}));

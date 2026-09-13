@@ -129,3 +129,27 @@ export function transitions(compiled: CompiledLevel, state: GameState): MoveReco
 export function step(compiled: CompiledLevel, state: GameState, action: Cardinal): MoveRecord | null {
   return transitions(compiled, state).find((m) => m.action === action) ?? null;
 }
+
+/**
+ * Live goal evaluation shared by manual play and any future actor. The
+ * terminal GameState carries item masks, while passThrough needs the path
+ * trace because plain module visits intentionally do not change the state.
+ */
+export function goalRequirementViolated(
+  compiled: CompiledLevel,
+  state: GameState,
+  visitedModules: ReadonlySet<string>,
+): boolean {
+  if (state.moduleId !== compiled.goal) return false;
+  return compiled.level.requirements.some((requirement) => {
+    if (requirement.type === 'collectBeforeGoal') {
+      const bit = compiled.keyBit.get(requirement.keyId);
+      return bit !== undefined && (state.keyMask & bit) === 0;
+    }
+    if (requirement.type === 'switchNecessary') {
+      const bit = compiled.switchBit.get(requirement.switchId);
+      return bit !== undefined && (state.switchMask & bit) === 0;
+    }
+    return !visitedModules.has(requirement.moduleId);
+  });
+}

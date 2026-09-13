@@ -7,9 +7,10 @@ import { doorPassable, initialState } from '../core/movement.js';
 import { craftedBox, rampGeometry, sceneBounds, framingPoints, fitOverview } from './craft.js';
 import { createMechanisms, type WorldVisuals } from './mechanisms.js';
 import { artDirection, switchSignature, type ArtDirection, type ThemeKey } from './art-direction.js';
-import { applyOperations } from '../core/level.js';
-import type { Operation } from '../../shared/schema.js';
+import type { Level } from '../../shared/schema.js';
 import { neighbor, type CompiledLevel } from '../core/topology.js';
+import { previewDiff } from './preview-diff.js';
+import type { PreviewState } from '../core/preview.js';
 import {
   GhostActor,
   PlayerActor,
@@ -123,9 +124,8 @@ export interface SceneHandle {
     missingKeys: string[],
     callbacks: GhostCallbacks,
   ): GhostActor;
-  /** Before/after markers for a repair candidate (§9): old positions in
-   * fail-red, proposed positions in pass-green; null clears. */
-  previewOperations(operations: Operation[] | null): void;
+  /** Before/after markers for one validated AI or repair candidate (§9). */
+  previewOperations(preview: PreviewState | null): void;
   /** Click-to-select: the scene reports picked entity ids (null = empty
    * space). "Select something, then describe the change" (§12). */
   onPick(handler: ((id: string | null) => void) | null): void;
@@ -744,8 +744,8 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel, theme?: T
     ring.scale.setScalar(scale);
     previewGroup.add(ring);
   };
-  const moduleCenter = (id: string): Vec3 | null => {
-    const m = compiled.moduleById.get(id);
+  const moduleCenter = (level: Level, id: string): Vec3 | null => {
+    const m = level.modules.find((module) => module.id === id);
     return m ? centerPoint(m) : null;
   };
 
@@ -757,41 +757,24 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel, theme?: T
     previewGroup.visible = false;
   };
 
-  const buildPreview = (operations: Operation[]): void => {
+  const buildPreview = (preview: PreviewState): void => {
     clearPreview();
-    const applied = applyOperations(compiled.level, operations);
-    if (!applied.ok) return;
-    const before = compiled.level;
-    const after = applied.level;
-    const markerForItem = (itemId: string, level: typeof before, material: THREE.Material): void => {
-      const key = level.keys.find((k) => k.id === itemId);
-      const pad = level.switches.find((sw) => sw.id === itemId);
-      const moduleId = key?.moduleId ?? pad?.moduleId;
-      if (moduleId === undefined) return;
-      const c = moduleCenter(moduleId);
-      if (c) ringAt(c.x, c.y, c.z, material);
-    };
-    for (const key of before.keys) {
-      const moved = after.keys.find((k) => k.id === key.id);
-      if (moved === undefined) markerForItem(key.id, before, previewMats.old);
-      else if (moved.moduleId !== key.moduleId) {
-        markerForItem(key.id, before, previewMats.old);
-        markerForItem(key.id, after, previewMats.fresh);
+    // The state layer validates the complete candidate before it reaches the
+    // renderer. A stale preview is ignored rather than re-applied locally;
+    // this is what keeps atomic rule changes (remove key + requirement) intact.
+    if (preview.baseRevision !== compiled.revisionId) return;
+    const { before, candidate: after } = preview;
+    for (const marker of previewDiff(before, after)) {
+      const level = marker.phase === 'old' ? before : after;
+      const a = moduleCenter(level, marker.moduleId);
+      if (!a) continue;
+      if (marker.kind === 'door' && marker.otherModuleId !== undefined) {
+        const b = moduleCenter(level, marker.otherModuleId);
+        if (!b) continue;
+        ringAt((a.x + b.x) / 2, (a.y + b.y) / 2, (a.z + b.z) / 2, marker.phase === 'old' ? previewMats.old : previewMats.fresh, 0.8);
+      } else {
+        ringAt(a.x, a.y, a.z, marker.phase === 'old' ? previewMats.old : previewMats.fresh);
       }
-    }
-    for (const pad of before.switches) {
-      const moved = after.switches.find((sw) => sw.id === pad.id);
-      if (moved === undefined) markerForItem(pad.id, before, previewMats.old);
-      else if (moved.moduleId !== pad.moduleId) {
-        markerForItem(pad.id, before, previewMats.old);
-        markerForItem(pad.id, after, previewMats.fresh);
-      }
-    }
-    for (const door of after.doors) {
-      if (before.doors.some((d) => d.id === door.id)) continue;
-      const a = moduleCenter(door.a);
-      const b = moduleCenter(door.b);
-      if (a && b) ringAt((a.x + b.x) / 2, (a.y + b.y) / 2, (a.z + b.z) / 2, previewMats.fresh, 0.8);
     }
     previewGroup.visible = previewGroup.children.length > 0;
   };
@@ -931,12 +914,12 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel, theme?: T
       analysisVisible = visible;
       analysisGroup.visible = visible && analysisGroup.children.length > 0;
     },
-    previewOperations(operations) {
-      if (operations === null) {
+    previewOperations(preview) {
+      if (preview === null) {
         clearPreview();
         return;
       }
-      buildPreview(operations);
+      buildPreview(preview);
     },
     onPick(handler) {
       pickHandler = handler;
@@ -992,9 +975,11 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel, theme?: T
       };
       disposeAll(world);
       disposeAll(stage);
-      for (const child of [...analysisGroup.children]) {
-        analysisGroup.remove(child);
-        if (child instanceof THREE.Mesh) child.geometry.dispose();
+      for (const overlay of [analysisGroup, previewGroup, selectionGroup, protectedGroup]) {
+        for (const child of [...overlay.children]) {
+          overlay.remove(child);
+          if (child instanceof THREE.Mesh) child.geometry.dispose();
+        }
       }
       analysisMats.stranded.dispose();
       analysisMats.unreachable.dispose();

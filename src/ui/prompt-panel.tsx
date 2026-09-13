@@ -2,11 +2,21 @@ import { useState } from 'react';
 import { DisclosureGlyph } from './check-strip.js';
 import { EXAMPLE_PROMPTS, TWIST_PROMPT } from './example-prompts.js';
 import { useApp } from '../state/store.js';
+import { themeKeySchema, type ThemeKey } from '../../shared/api.js';
+
+const THEME_LABELS: Record<ThemeKey, string> = {
+  limestone: 'Limestone ruin',
+  ivory: 'Ivory observatory',
+  patina: 'Patina relay works',
+  basalt: 'Basalt lockhouse',
+  futuristic: 'Futuristic vault',
+};
 
 /** The prompt panel (§12): describe a change, watch it compile. */
 export function PromptPanel() {
   const [text, setText] = useState('');
   const busy = useApp((s) => s.busy);
+  const pendingChange = useApp((s) => s.pendingRule);
   const error = useApp((s) => s.error);
   const meta = useApp((s) => s.lastCompileMeta);
   const submitPrompt = useApp((s) => s.submitPrompt);
@@ -19,6 +29,9 @@ export function PromptPanel() {
   const protectedIds = useApp((s) => s.protectedIds);
   const keepSelected = useApp((s) => s.keepSelected);
   const unkeep = useApp((s) => s.unkeep);
+  const theme = useApp((s) => s.theme);
+  const setTheme = useApp((s) => s.setTheme);
+  const locked = busy || pendingChange !== null;
 
   const submit = () => {
     void submitPrompt(text);
@@ -45,6 +58,26 @@ export function PromptPanel() {
 
   return (
     <section className="prompt-panel" aria-label="Describe a change">
+      <div className="prompt-toolbar">
+        <span className="panel-note">Architecture</span>
+        <label className="theme-picker">
+          <span className="visually-hidden">Architecture theme</span>
+          <select
+            aria-label="Architecture theme"
+            value={theme ?? ''}
+            onChange={(event) => {
+              const value = event.target.value;
+              const parsed = value === '' ? null : themeKeySchema.safeParse(value);
+              setTheme(parsed === null ? null : parsed.success ? parsed.data : null);
+            }}
+          >
+            <option value="">Auto</option>
+            {Object.entries(THEME_LABELS).map(([value, label]) => (
+              <option key={value} value={value}>{label}</option>
+            ))}
+          </select>
+        </label>
+      </div>
       <label className="prompt-label" htmlFor="prompt-input">
         Describe a change
       </label>
@@ -59,14 +92,14 @@ export function PromptPanel() {
         }
         onChange={(event) => setText(event.target.value)}
         onKeyDown={(event) => {
-          if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) submit();
+          if (event.key === 'Enter' && (event.metaKey || event.ctrlKey) && !locked) submit();
         }}
       />
       <div className="prompt-actions">
         <button
           type="button"
           className="prompt-submit"
-          disabled={busy || text.trim().length === 0}
+          disabled={locked || text.trim().length === 0}
           onClick={submit}
         >
           {busy ? 'Compiling…' : 'Compile'}
@@ -116,7 +149,7 @@ export function PromptPanel() {
             key={example.label}
             type="button"
             className="example-chip"
-            disabled={busy}
+            disabled={locked}
             onClick={() => runExample(example.prompt)}
           >
             {example.label}
@@ -144,7 +177,7 @@ export function PromptPanel() {
           <ol className="history-list">
             {history.map((entry, index) => (
               <li key={index}>
-                <button type="button" className="history-entry" onClick={() => loadSceneLevel(entry.level)}>
+                <button type="button" className="history-entry" onClick={() => loadSceneLevel(entry.level, entry.theme, entry.promptHistory)}>
                   {entry.label}
                 </button>
               </li>

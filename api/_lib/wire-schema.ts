@@ -42,13 +42,35 @@ const conditionsJson = {
 } as const;
 
 const requirementJson = {
-  type: 'object',
-  additionalProperties: false,
-  required: ['type', 'keyId'],
-  properties: {
-    type: { type: 'string', enum: ['collectBeforeGoal'] },
-    keyId: idJson,
-  },
+  anyOf: [
+    {
+      type: 'object',
+      additionalProperties: false,
+      required: ['type', 'keyId'],
+      properties: {
+        type: { type: 'string', enum: ['collectBeforeGoal'] },
+        keyId: idJson,
+      },
+    },
+    {
+      type: 'object',
+      additionalProperties: false,
+      required: ['type', 'moduleId'],
+      properties: {
+        type: { type: 'string', enum: ['passThrough'] },
+        moduleId: idJson,
+      },
+    },
+    {
+      type: 'object',
+      additionalProperties: false,
+      required: ['type', 'switchId'],
+      properties: {
+        type: { type: 'string', enum: ['switchNecessary'] },
+        switchId: idJson,
+      },
+    },
+  ],
 } as const;
 
 const operationJson = {
@@ -99,6 +121,7 @@ const operationJson = {
       },
     },
     {
+      type: 'object',
       additionalProperties: false,
       required: ['kind', 'itemType', 'id', 'moduleId'],
       properties: {

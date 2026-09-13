@@ -1,5 +1,6 @@
 import { compileResultSchema, normalizeWirePayload, type CompileResult } from '../../shared/compile-result.js';
-import { applyOperations } from '../../src/core/level.js';
+import { applyOperations, applyRuleProposal } from '../../src/core/level.js';
+import type { ThemeKey } from '../../shared/api.js';
 import type { Level } from '../../shared/schema.js';
 import { revisionId } from '../../src/core/serialize.js';
 import { compileCache, compileCacheKey } from './cache.js';
@@ -34,7 +35,7 @@ export interface CompileInput {
   clarificationContext?: string;
   selection?: string[];
   history?: string[];
-  theme?: 'limestone' | 'ivory' | 'patina' | 'basalt';
+  theme?: ThemeKey;
 }
 
 export interface AttemptRecord {
@@ -50,7 +51,7 @@ export interface CompileOutcome {
   /** Server-attached (§11): the revision the result was computed against. */
   baseRevision: string;
   /** Server-echoed presentation theme. */
-  theme?: 'limestone' | 'ivory' | 'patina' | 'basalt';
+  theme?: ThemeKey;
   cached: boolean;
   attempts: AttemptRecord[];
   totalCostUsd: number;
@@ -168,7 +169,9 @@ export async function compile(
         // Pre-apply with the same core the client uses: a patch the engine
         // would reject never reaches the user — it gets one correction turn
         // with the engine's exact reasons instead.
-        const applied = applyOperations(input.level, parsed.operations);
+        const applied = parsed.type === 'rule_proposal'
+          ? applyRuleProposal(input.level, parsed)
+          : applyOperations(input.level, parsed.operations);
         if (applied.ok) {
           outcome = 'schema_valid';
         } else {

@@ -14,7 +14,7 @@ beforeEach(() => {
   useApp.setState({
     acceptedLevel: baselineLevel,
     previousAccepted: null,
-    draft: { level: trapLevel, report: verify(trapLevel), viaRule: false },
+    draft: { level: trapLevel, report: verify(trapLevel), viaRule: false, returnSceneId: 'balcony-vault' },
     pendingRule: null,
     lastResult: null,
     lastPrompt: null,
@@ -26,7 +26,7 @@ beforeEach(() => {
     play: { at: '', keys: [], switches: [], trapped: false, atGoal: false, goalViolated: false },
     repair: { status: 'idle', candidates: [], explored: 0, durationMs: 0, note: null, applyError: null },
     explain: { byCheck: {}, busy: false, error: null },
-    previewOps: null,
+    preview: null,
     repairReplay: null,
     selection: [],
     protectedIds: [],
@@ -45,14 +45,14 @@ describe('keep-this invalidation and apply guard (§9)', () => {
     );
     expect(relocation).toBeGreaterThanOrEqual(0);
     useApp.getState().previewRepair(relocation);
-    expect(useApp.getState().previewOps).not.toBeNull();
+    expect(useApp.getState().preview).not.toBeNull();
 
     // Now keep the switch: candidates and preview must void.
     useApp.setState({ selection: ['seal-switch'] });
     useApp.getState().keepSelected();
     expect(useApp.getState().repair.status).toBe('idle');
     expect(useApp.getState().repair.candidates).toHaveLength(0);
-    expect(useApp.getState().previewOps).toBeNull();
+    expect(useApp.getState().preview).toBeNull();
 
     // Re-search under the protection: only the door removal remains.
     useApp.getState().runRepairs(verify(trapLevel));

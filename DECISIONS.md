@@ -2,6 +2,24 @@
 
 Build-window decisions and measured evidence, newest first. Dates are 2026.
 
+## Sep 13 (integrity pass — staged edits, parity, and accepted checkpoints)
+
+- AI patches now stop at a visible before/after review. The author can apply or
+  keep the current scene; prompt history and inferred themes commit exactly
+  once on apply, so clarification, unsupported, and declined responses do not
+  pollute the conversation.
+- Rule proposals are one atomic transaction: the claimed old requirements are
+  checked against the authoritative level, operations run against the proposed
+  requirement set, and the final level is fully validated.
+- Manual play now evaluates `passThrough` through the same shared goal helper
+  as the verifier's semantics, with an explicit visited-module trace. Saves
+  and share links serialize accepted checkpoints only; shared links carry a
+  validated theme side-channel.
+- Preview markers are derived from independent before/after module maps, so
+  added and moved geometry is shown at its real destination. Architecture now
+  has five selectable themes, including futuristic, with a theme-triggered
+  scene remount so materials, lighting, and camera framing stay coherent.
+
 ## Sep 13 (composition guidance — generated scenes match gallery quality)
 
 - **The gap**: generated builds were mechanically green but visually dull
@@ -54,7 +72,7 @@ Build-window decisions and measured evidence, newest first. Dates are 2026.
   enters the level schema or verifier (the art-direction module's own
   contract); the system prompt tells the model never to encode visual
   style in operations. Live-verified through the API (theme echo) and
-  unit-verified in the renderer (all four themes resolve correctly after
+  unit-verified in the renderer (all five themes resolve correctly after
   fixing a key-mapping bug the first live test caught).
 - **Tooling note**: the long-lived headless browser session eventually
   degrades beyond single tabs (blank loads on fresh tabs that reload

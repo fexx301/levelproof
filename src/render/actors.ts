@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { Cardinal } from '../../shared/schema.js';
 import { centerPoint } from '../core/catalog.js';
-import { initialState, step, transitions, type GameState, type MoveRecord } from '../core/movement.js';
+import { goalRequirementViolated, initialState, step, transitions, type GameState, type MoveRecord } from '../core/movement.js';
 import type { CompiledLevel } from '../core/topology.js';
 
 /**
@@ -404,12 +404,14 @@ export class PlayerActor {
   private state: GameState;
   private keys: string[] = [];
   private switches: string[] = [];
+  private visitedModules: Set<string>;
   private animation: { points: THREE.Vector3[]; length: number; distance: number; move: MoveRecord } | null = null;
 
   constructor(ctx: ActorContext, callbacks: PlayerCallbacks) {
     this.ctx = ctx;
     this.callbacks = callbacks;
     this.state = initialState(ctx.compiled);
+    this.visitedModules = new Set([this.state.moduleId]);
     this.mesh = new THREE.Group();
     this.mesh.add(actorBody(0xd7d2c4, 0x6e6a5e, 1), underRing(0xf2eee4));
     this.placeAtSpawn();
@@ -429,6 +431,7 @@ export class PlayerActor {
     if (reducedMotion()) {
       // Reduced motion: instant transition, no interpolation.
       this.state = move.after;
+      this.visitedModules.add(move.after.moduleId);
       this.ctx.world.updateState(move.after);
       if (move.events.collectedKey) {
         this.keys = [...this.keys, move.events.collectedKey];
@@ -458,6 +461,7 @@ export class PlayerActor {
     this.state = initialState(this.ctx.compiled);
     this.keys = [];
     this.switches = [];
+    this.visitedModules = new Set([this.state.moduleId]);
     this.ctx.world.resetWorld();
     this.ctx.world.updateState(this.state);
     this.placeAtSpawn();
@@ -494,6 +498,7 @@ export class PlayerActor {
       this.mesh.position.set(endpoint.x, endpoint.y + ACTOR_CENTER_OFFSET_CM, endpoint.z);
       this.animation = null;
       this.state = move.after;
+      this.visitedModules.add(move.after.moduleId);
       this.ctx.world.updateState(move.after);
       if (move.events.collectedKey) {
         this.keys = [...this.keys, move.events.collectedKey];
@@ -523,19 +528,7 @@ export class PlayerActor {
   private emit(): void {
     const atGoal = this.state.moduleId === this.ctx.compiled.goal;
     const trapped = !atGoal && transitions(this.ctx.compiled, this.state).length === 0;
-    const goalViolated =
-      atGoal &&
-      this.ctx.compiled.level.requirements.some((requirement) => {
-        if (requirement.type === 'collectBeforeGoal') {
-          const bit = this.ctx.compiled.keyBit.get(requirement.keyId);
-          return bit !== undefined && (this.state.keyMask & bit) === 0;
-        }
-        if (requirement.type === 'switchNecessary') {
-          const bit = this.ctx.compiled.switchBit.get(requirement.switchId);
-          return bit !== undefined && (this.state.switchMask & bit) === 0;
-        }
-        return false; // passThrough cannot be judged from the terminal state alone
-      });
+    const goalViolated = goalRequirementViolated(this.ctx.compiled, this.state, this.visitedModules);
     this.callbacks.onState({
       at: this.state.moduleId,
       keys: this.keys,
