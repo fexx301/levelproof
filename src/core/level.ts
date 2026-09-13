@@ -1,4 +1,4 @@
-import { BOUNDS, levelSchema, operationSchema, type Level, type LevelModule, type Operation } from '../../shared/schema.js';
+import { BOUNDS, levelSchema, operationSchema, type Level, type LevelModule, type Operation, type Requirement } from '../../shared/schema.js';
 import { opposite } from './catalog.js';
 import { computeEdges, edgeKey, validateGeometry } from './topology.js';
 
@@ -46,8 +46,16 @@ export function validateLevel(level: Level): string[] {
   }
   const requiredKeyIds = new Set<string>();
   for (const r of lvl.requirements) {
-    if (requiredKeyIds.has(r.keyId)) errors.push(`Requirement on key "${r.keyId}" appears more than once.`);
-    requiredKeyIds.add(r.keyId);
+    if (r.type === 'collectBeforeGoal') {
+      if (requiredKeyIds.has(r.keyId)) errors.push(`Requirement on key "${r.keyId}" appears more than once.`);
+      requiredKeyIds.add(r.keyId);
+    }
+    if (r.type === 'passThrough' && !moduleIds.has(r.moduleId)) {
+      errors.push(`Requirement references unknown module "${r.moduleId}".`);
+    }
+    if (r.type === 'switchNecessary' && !switchIds.has(r.switchId)) {
+      errors.push(`Requirement references unknown switch "${r.switchId}".`);
+    }
   }
 
   // Template rules: ports, ramp orientation, ramp elevation bound.
@@ -98,6 +106,7 @@ export function validateLevel(level: Level): string[] {
     }
   }
   for (const r of lvl.requirements) {
+    if (r.type !== 'collectBeforeGoal') continue;
     if (!keyIds.has(r.keyId)) errors.push(`Requirement references unknown key "${r.keyId}".`);
   }
 
@@ -212,7 +221,7 @@ export function applyOperations(base: Level, operations: Operation[]): ApplyResu
       case 'removeItem': {
         const keyIndex = draft.keys.findIndex((i) => i.id === op.id);
         if (keyIndex >= 0) {
-          if (draft.requirements.some((r) => r.keyId === op.id)) {
+          if (draft.requirements.some((r) => r.type === 'collectBeforeGoal' && r.keyId === op.id)) {
             return fail(
               `Key "${op.id}" is required by an active rule; removing it needs an approved rule revision.`,
             );
@@ -256,4 +265,28 @@ export function applyOperations(base: Level, operations: Operation[]): ApplyResu
   const errors = validateLevel(draft);
   if (errors.length > 0) return { ok: false, errors };
   return { ok: true, level: draft };
+}
+
+/** Human phrasing for any requirement kind (single source of truth). */
+export function requirementText(requirement: Requirement): string {
+  switch (requirement.type) {
+    case 'collectBeforeGoal':
+      return `Collect “${requirement.keyId}” before the goal`;
+    case 'passThrough':
+      return `Every winning route crosses “${requirement.moduleId}”`;
+    case 'switchNecessary':
+      return `Every winning route activates “${requirement.switchId}”`;
+  }
+}
+
+/** A stable identity string for deduping/diffing requirements. */
+export function requirementId(requirement: Requirement): string {
+  switch (requirement.type) {
+    case 'collectBeforeGoal':
+      return `collectBeforeGoal:${requirement.keyId}`;
+    case 'passThrough':
+      return `passThrough:${requirement.moduleId}`;
+    case 'switchNecessary':
+      return `switchNecessary:${requirement.switchId}`;
+  }
 }

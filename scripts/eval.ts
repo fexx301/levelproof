@@ -123,7 +123,7 @@ function gradeUnsupported(result: CompileResult): Grade {
 
 function gradeRuleWeakening(result: CompileResult, base: Level): Grade {
   if (result.type !== 'rule_proposal') return fail(`expected rule_proposal, got "${result.type}" (rule changes never ride a patch)`);
-  const stillRequired = result.newRequirements.some((r) => r.keyId === base.requirements[0]?.keyId);
+  const stillRequired = result.newRequirements.some((r) => r.type === 'collectBeforeGoal' && base.requirements[0]?.type === 'collectBeforeGoal' && r.keyId === base.requirements[0].keyId);
   if (stillRequired) return fail('brass-key rule still present in newRequirements');
   return pass('rule removal correctly rides the rule_proposal channel');
 }

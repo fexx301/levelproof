@@ -2,6 +2,43 @@
 
 Build-window decisions and measured evidence, newest first. Dates are 2026.
 
+## Sep 13 (strategic pass — judge-prompt reliability, extended requirements)
+
+- **Judge-prompt reliability, measured honestly** (reviewer-advised
+  upgrade): the scratch battery expanded to 16 judge-voice phrasings
+  (courtyard with vault underneath, twin towers, island chains, zigzag
+  descents, lighthouses…), and — after a blocker advisory correctly noted
+  the old grader only checked "valid + green" — every fixture gained
+  **per-prompt semantic assertions** (module/key/door/bridge/ramp counts,
+  elevations present, keyed-gate relationships; e.g. "four islands" now
+  requires ≥3 bridges and exactly 7 modules). **Result: 15/16 fresh
+  (94%), with the single failure a provider-latency timeout, not a model
+  error** — the same prompt passes on retry with a 13-op accepted build.
+  Cost ~$0.23 per full battery run.
+- **Latency root-caused**: deployed compiles for compound builds run
+  15–32s wall while identical direct provider calls run 1.5–3s — the gap
+  is serverless egress/provider routing variance, not model thinking.
+  Mitigation: `LLM_TIMEOUT_MS` raised to 45000 (fits the 52s service
+  deadline; per-attempt clamps unchanged). Residual variance accepted and
+  recorded; chasing OpenRouter routing is out of scope. The UI's Compiling
+  state and stale-discard guard keep slow compiles safe.
+- **Extended verified requirements shipped** (§5, the moat-deepener):
+  `passThrough(moduleId)` — every winning route must cross a module — and
+  `switchNecessary(switchId)` — every winning route must activate a
+  switch. Soundness design (reviewer-advised): goal states record
+  `(module, keyMask, switchMask)`; because item collection is automatic
+  and permanent, masks DO encode item-module visits — so collectBeforeGoal
+  and switchNecessary (switches are one-shot monotonic) are sound on goal
+  states. **passThrough is NOT** — plain modules leave no state trace and
+  routes merge at shared states — so it is checked by a counterexample
+  search (goal reachable while never arriving at the module), with the
+  witness replay-verified to actually avoid the module. Tests pin the
+  merging-route trap case explicitly. Wire schema, system prompt (with
+  kind-selection guidance: "must cross" → passThrough, "must matter" →
+  switchNecessary), rule chips/diffs (via shared requirementText/
+  requirementId helpers), explain-service facts, and level validation all
+  updated. Suite at 121.
+
 ## Sep 13 (art-direction and craft pass — external session, verified)
 
 - **A second session's art/craft pass was reviewed and shipped** (`ea38d70`):

@@ -526,8 +526,15 @@ export class PlayerActor {
     const goalViolated =
       atGoal &&
       this.ctx.compiled.level.requirements.some((requirement) => {
-        const bit = this.ctx.compiled.keyBit.get(requirement.keyId);
-        return bit !== undefined && (this.state.keyMask & bit) === 0;
+        if (requirement.type === 'collectBeforeGoal') {
+          const bit = this.ctx.compiled.keyBit.get(requirement.keyId);
+          return bit !== undefined && (this.state.keyMask & bit) === 0;
+        }
+        if (requirement.type === 'switchNecessary') {
+          const bit = this.ctx.compiled.switchBit.get(requirement.switchId);
+          return bit !== undefined && (this.state.switchMask & bit) === 0;
+        }
+        return false; // passThrough cannot be judged from the terminal state alone
       });
     this.callbacks.onState({
       at: this.state.moduleId,

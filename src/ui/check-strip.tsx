@@ -1,4 +1,5 @@
 import type { Level } from '../../shared/schema.js';
+import { requirementId, requirementText } from '../core/level.js';
 import type { CheckedResult, Report } from '../core/verifier.js';
 import type { CheckKind } from '../state/store.js';
 import { useApp } from '../state/store.js';
@@ -11,8 +12,8 @@ export function RuleChips({ level }: { level: Level }) {
   return (
     <>
       {level.requirements.map((requirement) => (
-        <span key={requirement.keyId} className="rule-chip">
-          Collect “{requirement.keyId}” before the goal
+        <span key={requirementId(requirement)} className="rule-chip">
+          {requirementText(requirement)}
         </span>
       ))}
     </>

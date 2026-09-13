@@ -1,5 +1,6 @@
 import type { CompileResult } from '../../shared/compile-result.js';
 import { useApp } from '../state/store.js';
+import { requirementId, requirementText } from '../core/level.js';
 
 /**
  * Result cards (§12): rule review with explicit approval, clarification
@@ -17,10 +18,10 @@ export function ResultCards() {
 
   if (pendingRule) {
     const removed = pendingRule.proposal.oldRequirements.filter(
-      (r) => !pendingRule.proposal.newRequirements.some((n) => n.keyId === r.keyId),
+      (r) => !pendingRule.proposal.newRequirements.some((n) => requirementId(n) === requirementId(r)),
     );
     const added = pendingRule.proposal.newRequirements.filter(
-      (r) => !pendingRule.proposal.oldRequirements.some((n) => n.keyId === r.keyId),
+      (r) => !pendingRule.proposal.oldRequirements.some((n) => requirementId(n) === requirementId(r)),
     );
     return (
       <section className="card card--rule" aria-label="Rule proposal">
@@ -28,13 +29,13 @@ export function ResultCards() {
         <p className="card-text">{pendingRule.proposal.reason}</p>
         <ul className="rule-diff">
           {removed.map((r) => (
-            <li key={`remove-${r.keyId}`} className="rule-removed">
-              Remove: collect “{r.keyId}” before the goal
+            <li key={`remove-${requirementId(r)}`} className="rule-removed">
+              Remove: {requirementText(r)}
             </li>
           ))}
           {added.map((r) => (
-            <li key={`add-${r.keyId}`} className="rule-added">
-              Add: collect “{r.keyId}” before the goal
+            <li key={`add-${requirementId(r)}`} className="rule-added">
+              Add: {requirementText(r)}
             </li>
           ))}
           {removed.length === 0 && added.length === 0 && <li>No requirement changes</li>}

@@ -1,4 +1,5 @@
-import { CARDINALS, levelSchema, type Level, type LevelModule } from '../../shared/schema.js';
+import { CARDINALS, levelSchema, type Level, type LevelModule, type Requirement } from '../../shared/schema.js';
+import { requirementId } from './level.js';
 import { CATALOG_VERSION } from './catalog.js';
 
 /**
@@ -33,8 +34,8 @@ export function canonicalJson(level: Level): string {
     .sort(byId)
     .map((d) => ({ id: d.id, a: d.a, b: d.b, conditions: d.conditions ?? {} }));
   const requirements = [...level.requirements]
-    .sort((a, b) => (a.keyId < b.keyId ? -1 : a.keyId > b.keyId ? 1 : 0))
-    .map((r) => ({ type: r.type, keyId: r.keyId }));
+    .sort((a, b) => (requirementId(a) < requirementId(b) ? -1 : requirementId(a) > requirementId(b) ? 1 : 0))
+    .map(canonicalRequirement);
   return JSON.stringify({
     catalogVersion: CATALOG_VERSION,
     modules,
@@ -80,8 +81,8 @@ export function encodeLevelShare(level: Level): string {
       .sort(byId)
       .map((d) => ({ id: d.id, a: d.a, b: d.b, ...(d.conditions !== undefined ? { conditions: d.conditions } : {}) })),
     requirements: [...level.requirements]
-      .sort((a, b) => (a.keyId < b.keyId ? -1 : a.keyId > b.keyId ? 1 : 0))
-      .map((r) => ({ type: r.type, keyId: r.keyId })),
+      .sort((a, b) => (requirementId(a) < requirementId(b) ? -1 : requirementId(a) > requirementId(b) ? 1 : 0))
+      .map(canonicalRequirement),
   });
   const b64 =
     typeof btoa === 'function' ? b64UrlEncodeBrowser(json) : Buffer.from(json, 'utf8').toString('base64');
@@ -111,5 +112,16 @@ export function decodeLevelShare(payload: string): Level | null {
     return parsed.success ? parsed.data : null;
   } catch {
     return null;
+  }
+}
+
+function canonicalRequirement(r: Requirement) {
+  switch (r.type) {
+    case 'collectBeforeGoal':
+      return { type: r.type, keyId: r.keyId };
+    case 'passThrough':
+      return { type: r.type, moduleId: r.moduleId };
+    case 'switchNecessary':
+      return { type: r.type, switchId: r.switchId };
   }
 }

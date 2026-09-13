@@ -73,7 +73,7 @@ KIT RULES:
 - Every cell (x, z, h) holds at most ONE module. Before addModule, scan the scene's modules and choose a cell that is FREE at that elevation — patches placing a module on an occupied cell are rejected as overlaps. Bridge chains must step through free cells, port by port.
 - Reference EXISTING modules only by their exact "id" from the scene; "label" is descriptive prose, never an id (for example "upper gallery" is the label of module "bridge-landing"). addDoor's a/b and addItem's moduleId must be exact existing ids, or the patch is rejected.
 - Items, spawn, and goal sit on flat modules only; at most one item per module. Spawn and goal always exist.
-- The only supported requirement type is collectBeforeGoal(keyId).
+- Supported design requirements (at most ${BOUNDS.maxRequirements}, each used once): collectBeforeGoal(keyId) — every winning route must have collected that key; passThrough(moduleId) — every winning route must pass through that module; switchNecessary(switchId) — every winning route must have activated that switch. Choose the kind that matches the author's words: "must collect/grab X" → collectBeforeGoal; "must cross/use/go through X" or "the only way" → passThrough; "X must matter / be required" → switchNecessary.
 
 OPERATIONS (at most ${BOUNDS.maxOpsPerPatch} per result; ids match ^[a-z][a-z0-9-]{1,31}$; reference only ids that exist in the scene unless you are creating new ones):
 - {"kind":"addModule","module":{"id","template","x","z","h","orientation"?,"label"?,"ports"}}

@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { normalizeWirePayload } from '../../shared/compile-result.js';
 import type { Level } from '../../shared/schema.js';
 import { verify, type Report } from '../../src/core/verifier.js';
+import { requirementText } from '../../src/core/level.js';
 import { cacheKey, explainCache } from './cache.js';
 import { sceneSummary } from './prompt.js';
 import { callOptionsFor } from './model-options.js';
@@ -92,7 +93,7 @@ function witnessFacts(report: Report, check: ExplainCheck): string {
   const lines: string[] = [
     `- check: ${CHECK_NAMES[check]} — status: ${result.status}`,
     `- engine explanation: "${result.explanation}"`,
-    `- active requirements: ${report.requirements.length === 0 ? 'none' : report.requirements.map((r) => `collect ${r.keyId} before the goal`).join('; ')}`,
+    `- active requirements: ${report.requirements.length === 0 ? 'none' : report.requirements.map((r) => requirementText(r).replace(/[“”]/g, '"')).join('; ')}`,
   ];
   const witness = 'witness' in result ? result.witness : undefined;
   if (witness) {
@@ -111,6 +112,9 @@ function witnessFacts(report: Report, check: ExplainCheck): string {
     lines.push(`- route ends at: ${witness.endState.moduleId} (goal is ${report.checks.solution.status === 'pass' ? 'reachable elsewhere' : 'the goal module'})`);
     if (witness.missingKeys && witness.missingKeys.length > 0) {
       lines.push(`- missing keys on this route: ${witness.missingKeys.join(', ')}`);
+    }
+    if (witness.violationText !== undefined) {
+      lines.push(`- requirement violated: this winning route reaches the goal ${witness.violationText}`);
     }
   }
   return lines.join('\n');

@@ -79,11 +79,15 @@ export const doorSchema = z.strictObject({
 });
 export type Door = z.infer<typeof doorSchema>;
 
-/** The only supported requirement type in the first slice (§5). */
-export const requirementSchema = z.strictObject({
-  type: z.literal('collectBeforeGoal'),
-  keyId: idSchema,
-});
+/** Supported requirement kinds (§5, extended): collect a key before the
+ * goal; every winning route must pass through a module; every winning route
+ * must have activated a switch. All are checked exhaustively against every
+ * reachable goal state. */
+export const requirementSchema = z.discriminatedUnion('type', [
+  z.strictObject({ type: z.literal('collectBeforeGoal'), keyId: idSchema }),
+  z.strictObject({ type: z.literal('passThrough'), moduleId: idSchema }),
+  z.strictObject({ type: z.literal('switchNecessary'), switchId: idSchema }),
+]);
 export type Requirement = z.infer<typeof requirementSchema>;
 
 export const levelSchema = z.strictObject({

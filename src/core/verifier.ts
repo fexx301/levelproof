@@ -29,6 +29,10 @@ export interface Witness {
   route: MoveRecord[];
   endState: GameState;
   missingKeys?: string[];
+  /** For bypass witnesses: the violated requirement and a short display
+   * phrase ("without the brass-key") for labels and narration. */
+  requirement?: Requirement;
+  violationText?: string;
 }
 
 export interface CheckedResult extends CheckResult {
@@ -99,6 +103,25 @@ function replayWitness(compiled: CompiledLevel, witness: Witness): string | unde
         const bit = compiled.keyBit.get(keyId);
         if (bit !== undefined && (state.keyMask & bit) !== 0) {
           return `Bypass witness claims "${keyId}" is missing, but it was collected.`;
+        }
+      }
+      if (witness.requirement !== undefined) {
+        const requirement = witness.requirement;
+        if (requirement.type === 'collectBeforeGoal') {
+          const bit = compiled.keyBit.get(requirement.keyId);
+          if (bit !== undefined && (state.keyMask & bit) !== 0) {
+            return `Bypass witness claims "${requirement.keyId}" is missing, but it was collected.`;
+          }
+        } else if (requirement.type === 'switchNecessary') {
+          const bit = compiled.switchBit.get(requirement.switchId);
+          if (bit !== undefined && (state.switchMask & bit) !== 0) {
+            return `Bypass witness claims "${requirement.switchId}" is inactive, but it was activated.`;
+          }
+        } else if (
+          witness.route.some((move) => move.destination === requirement.moduleId) ||
+          initialState(compiled).moduleId === requirement.moduleId
+        ) {
+          return `Bypass witness claims to avoid "${requirement.moduleId}", but it crosses it.`;
         }
       }
     }
@@ -172,15 +195,47 @@ export function verify(level: Level, config: VerifierConfig = {}): Report {
     }
   }
 
-  const routeTo = (visit: Visit): MoveRecord[] => {
+  const routeTo = (visit: Visit, map: Map<string, Visit> = visited): MoveRecord[] => {
     const route: MoveRecord[] = [];
     let node: Visit | undefined = visit;
     while (node !== undefined && node.parentKey !== null && node.viaMove !== null) {
       route.push(node.viaMove);
-      node = visited.get(node.parentKey);
+      node = map.get(node.parentKey);
     }
     route.reverse();
     return route;
+  };
+
+  /**
+   * passThrough counterexample search (§5): can the goal be reached without
+   * EVER arriving at the forbidden module? Goal states cannot answer this —
+   * they record location and item masks, not visited plain modules, and
+   * routes merge at shared states. (Key/switch masks DO record visits to
+   * item modules, because collection is automatic and permanent — which is
+   * why collectBeforeGoal and switchNecessary are sound on goal states.)
+   * Runs only after complete exploration, so it stays inside the bound.
+   */
+  const goalAvoiding = (forbidden: string): { visit: Visit; map: Map<string, Visit> } | null => {
+    if (start.moduleId === forbidden) return null; // every route starts there
+    const local = new Map<string, Visit>();
+    const queue: GameState[] = [start];
+    local.set(stateKey(start), { order: 0, parentKey: null, viaMove: null, state: start });
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      if (current.moduleId === compiled.goal) {
+        return { visit: local.get(stateKey(current))!, map: local };
+      }
+      const fromKey = stateKey(current);
+      for (const move of transitions(compiled, current)) {
+        if (move.destination === forbidden) continue;
+        const toKey = stateKey(move.after);
+        if (!local.has(toKey)) {
+          local.set(toKey, { order: local.size, parentKey: fromKey, viaMove: move, state: move.after });
+          queue.push(move.after);
+        }
+      }
+    }
+    return null;
   };
 
   const goalVisits = [...visited.values()]
@@ -235,30 +290,58 @@ export function verify(level: Level, config: VerifierConfig = {}): Report {
   } else if (goalVisits.length === 0) {
     requirementsCheck = { status: 'not_applicable', explanation: 'No winning route.' };
   } else {
-    let violation: { requirement: Requirement; visit: Visit } | null = null;
+    let violation: { requirement: Requirement; visit: Visit; map: Map<string, Visit> } | null = null;
     for (const requirement of level.requirements) {
-      const bit = compiled.keyBit.get(requirement.keyId) ?? 0;
-      const bad = goalVisits.find((v) => (v.state.keyMask & bit) === 0);
-      if (bad) {
-        violation = { requirement, visit: bad };
-        break;
+      if (requirement.type === 'collectBeforeGoal') {
+        const bit = compiled.keyBit.get(requirement.keyId) ?? 0;
+        const bad = goalVisits.find((v) => (v.state.keyMask & bit) === 0);
+        if (bad) {
+          violation = { requirement, visit: bad, map: visited };
+          break;
+        }
+      } else if (requirement.type === 'switchNecessary') {
+        // Sound on goal states: switches are one-shot and permanent, so a
+        // state's switchMask is exactly the set its route activated.
+        const bit = compiled.switchBit.get(requirement.switchId) ?? 0;
+        const bad = goalVisits.find((v) => (v.state.switchMask & bit) === 0);
+        if (bad) {
+          violation = { requirement, visit: bad, map: visited };
+          break;
+        }
+      } else {
+        // passThrough: plain modules leave no state trace — restricted search.
+        const bad = goalAvoiding(requirement.moduleId);
+        if (bad !== null) {
+          violation = { requirement, visit: bad.visit, map: bad.map };
+          break;
+        }
       }
     }
     if (violation) {
+      const text =
+        violation.requirement.type === 'collectBeforeGoal'
+          ? `without the required key "${violation.requirement.keyId}"`
+          : violation.requirement.type === 'switchNecessary'
+            ? `without activating "${violation.requirement.switchId}"`
+            : `without crossing "${violation.requirement.moduleId}"`;
       requirementsCheck = {
         status: 'fail',
-        explanation: `A winning route reaches the goal without the required key "${violation.requirement.keyId}".`,
+        explanation: `A winning route reaches the goal ${text}.`,
         witness: {
           kind: 'bypass',
-          route: routeTo(violation.visit),
+          route: routeTo(violation.visit, violation.map),
           endState: violation.visit.state,
-          missingKeys: [violation.requirement.keyId],
+          ...(violation.requirement.type === 'collectBeforeGoal'
+            ? { missingKeys: [violation.requirement.keyId] }
+            : {}),
+          requirement: violation.requirement,
+          violationText: text,
         },
       };
     } else {
       requirementsCheck = {
         status: 'pass',
-        explanation: 'Every reachable winning state contains the required key(s).',
+        explanation: 'Every reachable winning state satisfies every rule.',
       };
     }
   }

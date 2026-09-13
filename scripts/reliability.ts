@@ -153,31 +153,80 @@ function gradeEdit(expected: {
   };
 }
 
-/** From-scratch build: applies, any proposed rule approved, accepted green. */
-function gradeScratch(result: CompileResult, base: Level): Grade {
-  if (result.type !== 'patch' && result.type !== 'rule_proposal') {
-    return fail(`expected patch or rule_proposal, got "${result.type}"`);
-  }
-  const applied = applyOperations(base, result.operations);
-  if (!applied.ok) return fail(`operations rejected: ${applied.errors[0]}`);
-  const level = applied.level;
-  const requirements: Requirement[] =
-    result.type === 'rule_proposal' ? [...level.requirements, ...result.newRequirements] : level.requirements;
-  const withRules: Level = { ...level, requirements };
-  const report = verify(withRules);
-  const added = applied.level.modules.length - base.modules.length;
-  if (!report.valid) return fail(`invalid level: ${report.invalidReasons[0]}`);
-  if (report.checks.solution.status !== 'pass') {
-    return fail(`solution ${report.checks.solution.status} — the built puzzle is unsolvable (${added} modules added)`);
-  }
-  if (report.checks.recovery.status !== 'pass') {
-    return fail(`recovery ${report.checks.recovery.status} — the build traps the player (${added} modules added)`);
-  }
-  if (requirements.length > 0 && report.checks.requirements.status === 'fail') {
-    return fail('requirements fail after approving the proposed rule — the build bypasses its own rule');
-  }
-  return pass(`${added} modules added; accepted with ${requirements.length} rule(s)`);
+/** From-scratch build with semantic expectations: the patch must apply, be
+ * accepted green, AND honor the prompt's specific asks (counts, templates,
+ * elevations, gate relationships) — not merely produce some valid level. */
+interface ScratchExpect {
+  modules?: number; // total modules after the build
+  keys?: number;
+  switches?: number;
+  doors?: number;
+  bridges?: number; // at least this many bridge modules
+  ramps?: number; // at least this many ramps
+  elevations?: number[]; // these h values must appear among modules
+  keyedDoorCount?: number; // doors with requiresKey/requiresKeys
+  multiKeyDoor?: boolean; // at least one requiresKeys door
 }
+
+function gradeScratchExpect(expect: ScratchExpect): (result: CompileResult, base: Level) => Grade {
+  return (result, base) => {
+    if (result.type !== 'patch' && result.type !== 'rule_proposal') {
+      return fail(`expected patch or rule_proposal, got "${result.type}"`);
+    }
+    const applied = applyOperations(base, result.operations);
+    if (!applied.ok) return fail(`operations rejected: ${applied.errors[0]}`);
+    const level = applied.level;
+    const requirements: Requirement[] =
+      result.type === 'rule_proposal' ? [...level.requirements, ...result.newRequirements] : level.requirements;
+    const withRules: Level = { ...level, requirements };
+    const report = verify(withRules);
+    if (!report.valid) return fail(`invalid: ${report.invalidReasons[0]}`);
+    if (report.checks.solution.status !== 'pass') return fail('solution failed — built puzzle is unsolvable');
+    if (report.checks.recovery.status !== 'pass') return fail('recovery failed — build traps the player');
+    if (requirements.length > 0 && report.checks.requirements.status === 'fail') return fail('requirements fail — the build bypasses its own rule');
+    // Semantic assertions
+    if (expect.modules !== undefined && level.modules.length !== expect.modules) {
+      return fail(`prompt asked for a specific layout; got ${level.modules.length} modules`);
+    }
+    if (expect.keys !== undefined && level.keys.length < expect.keys) {
+      return fail(`prompt asked for ${expect.keys} keys; got ${level.keys.length}`);
+    }
+    if (expect.switches !== undefined && level.switches.length < expect.switches) {
+      return fail(`prompt asked for ${expect.switches} switches; got ${level.switches.length}`);
+    }
+    if (expect.doors !== undefined && level.doors.length < expect.doors) {
+      return fail(`prompt asked for ${expect.doors} doors; got ${level.doors.length}`);
+    }
+    if (expect.bridges !== undefined && level.modules.filter((m) => m.template === 'bridge').length < expect.bridges) {
+      return fail(`prompt asked for bridges; got ${level.modules.filter((m) => m.template === 'bridge').length}`);
+    }
+    if (expect.ramps !== undefined && level.modules.filter((m) => m.template === 'ramp').length < expect.ramps) {
+      return fail(`prompt asked for ramps; got ${level.modules.filter((m) => m.template === 'ramp').length}`);
+    }
+    if (expect.elevations !== undefined) {
+      const present = new Set(level.modules.map((m) => m.h));
+      for (const h of expect.elevations) {
+        if (!present.has(h)) return fail(`prompt asked for elevation ${h}; none of the modules use it`);
+      }
+    }
+    const keyedDoors = level.doors.filter((d) => d.conditions?.requiresKey !== undefined || d.conditions?.requiresKeys !== undefined).length;
+    if (expect.keyedDoorCount !== undefined && keyedDoors < expect.keyedDoorCount) {
+      return fail(`prompt asked for gated doors; got ${keyedDoors}`);
+    }
+    if (expect.multiKeyDoor === true && !level.doors.some((d) => d.conditions?.requiresKeys !== undefined)) {
+      return fail('prompt asked for a door needing both keys; no requiresKeys door');
+    }
+    const bits = [
+      `modules=${level.modules.length}`,
+      `keys=${level.keys.length}`,
+      `doors=${level.doors.length}`,
+      keyedDoors > 0 ? `keyedDoors=${keyedDoors}` : null,
+      requirements.length > 0 ? `rules=${requirements.length}` : null,
+    ].filter((b): b is string => b !== null);
+    return pass(`accepted; ${bits.join(' ')}`);
+  };
+}
+
 
 /** Twist: the patch lands and the engine judges it either way — a twist
  * that breaks recovery is the product working (red floors + witness). */
@@ -216,7 +265,7 @@ function gradeUnsupported(result: CompileResult): Grade {
 
 function gradeRuleWeakening(result: CompileResult, base: Level): Grade {
   if (result.type !== 'rule_proposal') return fail(`expected rule_proposal, got "${result.type}"`);
-  const stillRequired = result.newRequirements.some((r) => r.keyId === base.requirements[0]?.keyId);
+  const stillRequired = result.newRequirements.some((r) => r.type === 'collectBeforeGoal' && base.requirements[0]?.type === 'collectBeforeGoal' && r.keyId === base.requirements[0].keyId);
   if (stillRequired) return fail('brass-key rule still present');
   return pass('rule removal rides the rule_proposal channel');
 }
@@ -268,15 +317,25 @@ const FIXTURES: Fixture[] = [
   { id: 'u3', category: 'unsupported', prompt: 'Add a timer: the player has 30 seconds to reach the treasure.', base: baselineLevel, grade: gradeUnsupported },
   { id: 'w1', category: 'rule_weakening', prompt: 'Remove the rule about collecting the brass key first — the key should just be an optional bonus. Keep everything else as is.', base: baselineLevel, grade: gradeRuleWeakening },
 
-  // From-scratch generation: describe a whole puzzle against the blank
-  // canvas. Pass = the build applies, any proposed rule is approved, and the
-  // result is a fully accepted puzzle.
-  { id: 's1-gated-vault', category: 'scratch', prompt: 'Build a puzzle: a ramp up to a raised gallery, a brass key on a side balcony, and a vault door that needs the key before the treasure.', base: blankCanvasLevel, grade: gradeScratch },
-  { id: 's2-two-floor', category: 'scratch', prompt: 'Make a two-floor maze: a lower corridor, a ramp up, and an upper bridge leading to the goal, with a silver key required at the bridge door.', base: blankCanvasLevel, grade: gradeScratch },
-  { id: 's3-safe-trap', category: 'scratch', prompt: 'Create a trap: a switch that seals a door behind the player on the way to the goal, but keep a winning route alive.', base: blankCanvasLevel, grade: gradeScratch },
-  { id: 's4-heist', category: 'scratch', prompt: 'Design a small heist: two keys on opposite balconies and a vault door that needs one of them.', base: blankCanvasLevel, grade: gradeScratch },
-  { id: 's5-sky-bridge', category: 'scratch', prompt: 'Add a long sky bridge from the start to a distant treasure platform, with a keyed gate in the middle.', base: blankCanvasLevel, grade: gradeScratch },
-  { id: 's6-over-under', category: 'scratch', prompt: 'Build something fun with a ramp, a bridge over it, and a key hidden underneath.', base: blankCanvasLevel, grade: gradeScratch },
+  // From-scratch generation: judge-voice phrasings — compound structures,
+  // explicit counts, spatial relationships, varied vocabulary. Engine-graded:
+  // applies, any proposed rule approved, accepted green.
+  { id: 's2-two-floor', category: 'scratch', prompt: 'Make a two-floor maze: a lower corridor, a ramp up, and an upper bridge leading to the goal, with a silver key required at the bridge door.', base: blankCanvasLevel, grade: gradeScratchExpect({ ramps: 1, bridges: 1, keys: 1, elevations: [0, 1], keyedDoorCount: 1 }) },
+  { id: 's4-heist', category: 'scratch', prompt: 'Design a small heist: two keys on opposite balconies and a vault door that needs one of them.', base: blankCanvasLevel, grade: gradeScratchExpect({ keys: 2, keyedDoorCount: 1 }) },
+  { id: 's5-sky-bridge', category: 'scratch', prompt: 'Add a long sky bridge from the start to a distant treasure platform, with a keyed gate in the middle.', base: blankCanvasLevel, grade: gradeScratchExpect({ bridges: 2, keys: 1, keyedDoorCount: 1 }) },
+  { id: 's6-over-under', category: 'scratch', prompt: 'Build something fun with a ramp, a bridge over it, and a key hidden underneath.', base: blankCanvasLevel, grade: gradeScratchExpect({ ramps: 1, bridges: 1, keys: 1 }) },
+  { id: 'j1-courtyard', category: 'scratch', prompt: 'Build a courtyard with an elevated bridge, two key rooms, and a vault underneath.', base: blankCanvasLevel, grade: gradeScratchExpect({ bridges: 1, elevations: [0, 1], keys: 2 }) },
+  { id: 'j2-twin-towers', category: 'scratch', prompt: 'Create twin towers connected by a high walkway, with a locked chamber at the top of one and the key at the top of the other.', base: blankCanvasLevel, grade: gradeScratchExpect({ bridges: 1, keys: 1, elevations: [1], keyedDoorCount: 1 }) },
+  { id: 'j3-spiral', category: 'scratch', prompt: 'Make a winding tower: rooms that spiral upward with ramps, a key room halfway up, and the goal at the very top.', base: blankCanvasLevel, grade: gradeScratchExpect({ ramps: 1, keys: 1, elevations: [1] }) },
+  { id: 'j4-island-hop', category: 'scratch', prompt: 'Build a chain of four small islands connected by bridges, where the far island holds the treasure and one bridge needs a key.', base: blankCanvasLevel, grade: gradeScratchExpect({ bridges: 3, keys: 1, keyedDoorCount: 1, modules: 7 }) },
+  { id: 'j5-safe-room', category: 'scratch', prompt: 'Design a puzzle where the treasure is in a safe room behind two doors in a row, each needing a different key.', base: blankCanvasLevel, grade: gradeScratchExpect({ doors: 2, keys: 2, keyedDoorCount: 2 }) },
+  { id: 'j6-moat', category: 'scratch', prompt: 'Make a castle keep with an outer wall entrance, a courtyard, and the keep itself reached by a bridge over a lower passage, with the key in the courtyard.', base: blankCanvasLevel, grade: gradeScratchExpect({ bridges: 1, keys: 1, elevations: [0, 1] }) },
+  { id: 'j7-workshop', category: 'scratch', prompt: 'Build a mechanic workshop: a lower storage area with a key, a ramp up to the workshop floor, and a locked parts cabinet as the goal.', base: blankCanvasLevel, grade: gradeScratchExpect({ ramps: 1, keys: 1, elevations: [0, 1], keyedDoorCount: 1 }) },
+  { id: 'j8-lighthouse', category: 'scratch', prompt: 'Create a lighthouse: a spiral of small rooms climbing to a lamp room at the top, with the lamp room locked and the key in the base.', base: blankCanvasLevel, grade: gradeScratchExpect({ ramps: 1, keys: 1, keyedDoorCount: 1 }) },
+  { id: 'j9-zigzag', category: 'scratch', prompt: 'Make a zigzag descent: start high, cross a bridge, take a ramp down, then another ramp back up to the treasure room.', base: blankCanvasLevel, grade: gradeScratchExpect({ bridges: 1, ramps: 2, elevations: [0, 1] }) },
+  { id: 'j10-observatory', category: 'scratch', prompt: 'Build an observatory with a ground-level entrance hall, an elevated viewing gallery reached by a ramp, and the telescope room locked behind a brass key found on the gallery.', base: blankCanvasLevel, grade: gradeScratchExpect({ ramps: 1, keys: 1, elevations: [0, 1], keyedDoorCount: 1 }) },
+  { id: 'j11-bridge-gate', category: 'scratch', prompt: 'Two platforms at different heights connected by a ramp and a bridge, with a gate at the bridge that needs a key kept on the lower platform.', base: blankCanvasLevel, grade: gradeScratchExpect({ bridges: 1, ramps: 1, keys: 1, elevations: [0, 1], keyedDoorCount: 1 }) },
+  { id: 'j12-vault-below', category: 'scratch', prompt: 'Put a small vault below a raised walkway: the walkway crosses over the vault entrance, and the vault key sits at the walkway end.', base: blankCanvasLevel, grade: gradeScratchExpect({ bridges: 1, keys: 1, elevations: [0, 1] }) },
 
   // Suggest-a-twist: the canned twist prompt against completed gallery
   // levels. Pass = a twist lands (patch applies) and the engine judges it —
