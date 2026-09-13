@@ -116,6 +116,7 @@ export const operationSchema = z.discriminatedUnion('kind', [
     orientation: cardinalSchema.optional(),
   }),
   z.strictObject({ kind: z.literal('setModulePorts'), id: idSchema, ports: z.array(cardinalSchema).max(4) }),
+  z.strictObject({ kind: z.literal('setModuleLabel'), id: idSchema, label: z.string().min(1).max(60) }),
   z.strictObject({
     kind: z.literal('addItem'),
     itemType: z.enum(['key', 'switch']),

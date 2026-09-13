@@ -202,6 +202,12 @@ export function applyOperations(base: Level, operations: Operation[]): ApplyResu
         m.ports = [...op.ports];
         break;
       }
+      case 'setModuleLabel': {
+        const m = findModule(op.id);
+        if (!m) return fail(`Unknown module "${op.id}".`);
+        m.label = op.label;
+        break;
+      }
       case 'addItem': {
         const list = op.itemType === 'key' ? draft.keys : draft.switches;
         const other = op.itemType === 'key' ? draft.switches : draft.keys;

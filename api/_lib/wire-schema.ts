@@ -91,6 +91,15 @@ const operationJson = {
     {
       type: 'object',
       additionalProperties: false,
+      required: ['kind', 'id', 'label'],
+      properties: {
+        kind: { type: 'string', enum: ['setModuleLabel'] },
+        id: idJson,
+        label: { type: 'string', minLength: 1, maxLength: 60 },
+      },
+    },
+    {
+      additionalProperties: false,
       required: ['kind', 'itemType', 'id', 'moduleId'],
       properties: {
         kind: { type: 'string', enum: ['addItem'] },
