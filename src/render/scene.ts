@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { playSound } from './sound.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import type { MoveRecord } from '../core/movement.js';
 import { CARDINALS, type Cardinal, type Door, type LevelModule } from '../../shared/schema.js';
@@ -1225,7 +1226,7 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel, theme?: T
   // The engine decides openness: doorPassable() against the live actor
   // state. Keyed doors rest locked; sealing doors rest open and slam shut
   // the moment their switch fires — the viewer sees the trap happen.
-  const mechanisms = createMechanisms(compiled, visuals, reducedMotion);
+  const mechanisms = createMechanisms(compiled, visuals, reducedMotion, playSound);
   decorUpdates.push(mechanisms.update);
 
   const actorContext: ActorContext = {

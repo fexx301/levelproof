@@ -3,6 +3,7 @@ import type { Cardinal } from '../../shared/schema.js';
 import { centerPoint } from '../core/catalog.js';
 import { goalRequirementViolated, initialState, step, transitions, type GameState, type MoveRecord } from '../core/movement.js';
 import { nextStep, type Hint } from '../core/hint.js';
+import { playSound } from './sound.js';
 import type { CompiledLevel } from '../core/topology.js';
 import type { GhostMotion } from './ghost-visual.js';
 import { CharacterGhostVisual, type ActorVisual } from './ghost-character.js';
@@ -505,6 +506,7 @@ export class GhostActor {
     // The cheer or head shake plays toward the viewer.
     const facing = towardViewer(this.ctx, this.mesh.position);
     if (facing !== null) this.visual.setDirection(facing);
+    playSound(this.kind === 'dead_end' || this.kind === 'bypass' ? 'fail' : 'win');
     this.visual.trigger({ type: 'finish', kind: this.kind });
     this.emit();
     this.callbacks.onFinish({ endState: this.endState, kind: this.kind, missingKeys: this.missingKeys });
@@ -589,6 +591,7 @@ export class PlayerActor {
   private moves = 0;
   private hints = 0;
   private hintedAt: string | null = null;
+  private failCued = false;
   private hintTrail: THREE.Group | null = null;
   private celebrated = false;
 
@@ -709,6 +712,7 @@ export class PlayerActor {
     this.clearHint();
     this.hints = 0;
     this.hintedAt = null;
+    this.failCued = false;
     this.animation = null;
     this.queued = null;
     this.turnTarget = null;
@@ -763,7 +767,7 @@ export class PlayerActor {
       });
       this.fallback = null;
     }
-    this.rig = new CharacterRig(asset);
+    this.rig = new CharacterRig(asset, { onFootstep: () => playSound('step') });
     this.rig.object.position.y = -ACTOR_CENTER_OFFSET_CM;
     this.figure.add(this.rig.object);
   }
@@ -823,6 +827,7 @@ export class PlayerActor {
     if (this.celebrated || this.state.moduleId !== this.ctx.compiled.goal) return;
     if (goalRequirementViolated(this.ctx.compiled, this.state, this.visitedModules)) return;
     this.celebrated = true;
+    playSound('win');
     if (reducedMotion()) return;
     const count = 140;
     const positions = new Float32Array(count * 3);
@@ -950,6 +955,10 @@ export class PlayerActor {
     const trapped = !atGoal && transitions(this.ctx.compiled, this.state).length === 0;
     const goalViolated = goalRequirementViolated(this.ctx.compiled, this.state, this.visitedModules);
     const doomed = !atGoal && !trapped && nextStep(this.ctx.compiled, this.state, this.visitedModules).kind === 'stranded';
+    if ((doomed || trapped || goalViolated) && !this.failCued) {
+      this.failCued = true;
+      playSound('fail');
+    }
     this.callbacks.onState({
       at: this.state.moduleId,
       keys: this.keys,

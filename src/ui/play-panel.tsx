@@ -4,6 +4,7 @@ import { actorBridge } from '../render/bridge.js';
 import { compileLevel } from '../core/topology.js';
 import type { Report } from '../core/verifier.js';
 import type { Level } from '../../shared/schema.js';
+import { playSound } from '../render/sound.js';
 import { useApp, type PlayHint } from '../state/store.js';
 import { CARDINAL_NAMES, relativeCardinal, type MoveIntent } from './relative-direction.js';
 
@@ -18,6 +19,7 @@ export function requestHint(): void {
       ? { kind: 'move', direction: result.move.action, destination: result.move.destination, movesToGoal: result.movesToGoal }
       : { kind: result.kind };
   useApp.setState({ playHint: hint });
+  if (result.kind === 'move') playSound('hint');
 }
 
 const ARROWS: Record<MoveIntent, string> = { forward: '↑', back: '↓', left: '←', right: '→' };

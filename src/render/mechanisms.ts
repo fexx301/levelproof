@@ -20,8 +20,16 @@ export interface WorldVisuals {
 /** How far the goal beacon rises while an actor stands on the goal (cm). */
 export const GOAL_LIFT_CM = 85;
 
+/** A state change worth a sound; resets never report. */
+export type MechanismEvent = 'key' | 'switch' | 'doorOpen' | 'doorSeal';
+
 /** One bounded update loop. Reset cancels transitions rather than leaving callbacks alive. */
-export function createMechanisms(compiled: CompiledLevel, visuals: WorldVisuals, reduced: () => boolean) {
+export function createMechanisms(
+  compiled: CompiledLevel,
+  visuals: WorldVisuals,
+  reduced: () => boolean,
+  onEvent: (event: MechanismEvent) => void = () => {},
+) {
   let state = initialState(compiled);
   const collections = new Map<string, number>();
   const retract = (door: DoorVisual) => {
@@ -34,13 +42,17 @@ export function createMechanisms(compiled: CompiledLevel, visuals: WorldVisuals,
       visuals.goal.userData.targetLift = state.moduleId === compiled.goal ? GOAL_LIFT_CM : 0;
       if (snap || reduced()) visuals.goal.userData.lift = visuals.goal.userData.targetLift;
     }
+    const cues = new Set<MechanismEvent>();
     for (const [id, door] of visuals.doors) {
-      door.targetOpen = doorPassable(compiled, id, state);
+      const open = doorPassable(compiled, id, state);
+      if (!snap && open !== door.targetOpen) cues.add(open ? 'doorOpen' : 'doorSeal');
+      door.targetOpen = open;
       if (snap || reduced()) door.group.position.y = door.targetOpen ? door.openY : door.closedY;
       retract(door);
     }
     for (const [id, key] of visuals.keys) {
       const collected = (state.keyMask & (compiled.keyBit.get(id) ?? 0)) !== 0;
+      if (collected && !key.userData.collected && !snap) cues.add('key');
       if (collected && !key.userData.collected && !snap && !reduced()) collections.set(id, 0);
       key.userData.collected = collected;
       if (snap || !collected || reduced()) {
@@ -52,10 +64,13 @@ export function createMechanisms(compiled: CompiledLevel, visuals: WorldVisuals,
     }
     for (const [id, pad] of visuals.switches) {
       const active = (state.switchMask & (compiled.switchBit.get(id) ?? 0)) !== 0;
+      if (!snap && active && !pad.plate.userData.active) cues.add('switch');
+      pad.plate.userData.active = active;
       pad.plate.userData.targetY = (pad.plate.userData.restY as number) - (active ? 9 : 0);
       if (snap || reduced()) pad.plate.position.y = pad.plate.userData.targetY as number;
       (pad.rim.material as THREE.MeshStandardMaterial).emissiveIntensity = active ? 1.7 : 0.65;
     }
+    for (const cue of cues) onEvent(cue);
   };
   const events = {
     updateState(next: GameState) { state = next; sync(false); },

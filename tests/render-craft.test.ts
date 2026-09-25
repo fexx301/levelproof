@@ -11,7 +11,7 @@ import type { Cardinal } from '../shared/schema';
 import { GhostActor, PlayerActor, type ActorContext, type WorldEvents } from '../src/render/actors';
 import { step } from '../src/core/movement';
 
-function setup(reduced = false, switchOnly = false) {
+function setup(reduced = false, switchOnly = false, onEvent?: (event: string) => void) {
   const level = structuredClone(trapLevel);
   if (switchOnly) level.doors[0]!.conditions = { requiresSwitch: 'seal-switch' };
   const compiled = compileLevel(level);
@@ -25,7 +25,7 @@ function setup(reduced = false, switchOnly = false) {
     switches: new Map([['seal-switch', { plate, rim }]]),
     doors: new Map(level.doors.map(door => [door.id, { group: new THREE.Group(), closedY: 0, openY: 180, targetOpen: false }])),
   };
-  const controller = createMechanisms(compiled, visuals, () => reduced);
+  const controller = createMechanisms(compiled, visuals, () => reduced, onEvent);
   return { compiled, visuals, controller, key, plate };
 }
 
@@ -53,6 +53,20 @@ describe('engine-driven mechanism visuals', () => {
     expect(plate.position.y).toBeCloseTo(5);
     expect(visuals.doors.get('vault-door')!.group.position.y).toBe(180);
     expect(visuals.doors.get('gallery-door')!.group.position.y).toBe(0);
+  });
+  it('reports each sound-worthy change once, and nothing on reset', () => {
+    const heard: string[] = [];
+    const { compiled, controller } = setup(false, false, (event) => heard.push(event));
+    expect(heard).toEqual([]);
+    controller.events.updateState({ ...initialState(compiled), keyMask: 1 });
+    expect(heard.sort()).toEqual(['doorOpen', 'key']);
+    heard.length = 0;
+    controller.events.updateState({ ...initialState(compiled), keyMask: 1, switchMask: 1 });
+    expect(heard.sort()).toEqual(['doorSeal', 'switch']);
+    heard.length = 0;
+    controller.events.updateState({ ...initialState(compiled), keyMask: 1, switchMask: 1 });
+    controller.events.resetWorld();
+    expect(heard).toEqual([]);
   });
   it('cancels an in-flight collection on restart', () => {
     const { compiled, controller, key } = setup();

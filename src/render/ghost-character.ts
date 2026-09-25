@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { playSound } from './sound.js';
 import { CharacterRig, characterIfLoaded, preloadCharacter, type CharacterAsset } from './character.js';
 import { createGhostVisual, type GhostFinishKind, type GhostMotion, type GhostVisual, type GhostVisualEvent } from './ghost-visual.js';
 
@@ -117,7 +118,9 @@ export class CharacterGhostVisual implements ActorVisual {
       this.fallback = null;
     }
     const failure = this.kind === 'dead_end' || this.kind === 'bypass';
-    this.rig = new CharacterRig(asset, { ghost: { color: failure ? FAILURE_TINT : ROUTE_TINT, opacity: GHOST_OPACITY } });
+    this.rig = new CharacterRig(asset, { ghost: { color: failure ? FAILURE_TINT : ROUTE_TINT, opacity: GHOST_OPACITY },
+      onFootstep: () => playSound('ghostStep'),
+    });
     this.rig.object.position.y = -this.floorOffsetCm;
     this.yaw = this.targetYaw;
     this.rig.object.rotation.y = this.yaw;

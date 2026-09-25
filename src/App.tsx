@@ -8,6 +8,7 @@ import { SCENES, useApp } from './state/store';
 import { CheckStrip, RuleChips } from './ui/check-strip';
 import { useLevelIsBlank } from './ui/prompt-panel';
 import { PlayPanel, requestHint } from './ui/play-panel';
+import { SoundToggle } from './ui/sound-toggle';
 import { PlaytesterPanel, witnessOptions } from './ui/playtester';
 import { PromptPanel } from './ui/prompt-panel';
 import { RepairPanel } from './ui/repair-panel';
@@ -498,6 +499,7 @@ function Viewport({ level, mode, report, theme, previewing }: { level: Level; mo
         >
           Frame level
         </button>
+        <SoundToggle />
         <div className="viewport-rules" id="rules" tabIndex={-1} role="group" aria-label="Active rules">
           <RuleChips level={level} />
         </div>

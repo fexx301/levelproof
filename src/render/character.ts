@@ -62,7 +62,12 @@ export function characterIfLoaded(): CharacterAsset | null {
 export interface CharacterStyle {
   /** Translucent tint for replay ghosts; omitted for the player. */
   ghost?: { color: number; opacity: number };
+  /** Called at each footfall of the run cycle (for footstep sounds). */
+  onFootstep?: () => void;
 }
+
+/** Where the Run clip's feet touch down, as fractions of the cycle (measured). */
+const RUN_FOOTFALLS = [0.175, 0.658];
 
 /**
  * A view-angle rim (fresnel) so the silhouette reads against any floor,
@@ -102,6 +107,8 @@ export class CharacterRig {
   private base: CharacterClip = 'Idle';
   private speed = 0;
   private stoppedFor = 0;
+  private runPhase = 0;
+  private readonly onFootstep: (() => void) | undefined;
   private current: THREE.AnimationAction | null = null;
   private gesture: { action: THREE.AnimationAction; then: CharacterClip | null } | null = null;
 
@@ -136,6 +143,7 @@ export class CharacterRig {
       child.material = Array.isArray(child.material) ? cloned : cloned[0]!;
     });
     this.object.add(model);
+    this.onFootstep = style.onFootstep;
     this.mixer = new THREE.AnimationMixer(model);
     for (const [name, clip] of asset.clips) this.actions.set(name, this.mixer.clipAction(clip));
     // Match the run cycle to the actor's ground speed so feet do not slide.
@@ -192,6 +200,22 @@ export class CharacterRig {
       if (this.stoppedFor >= STOP_GRACE_S || dt === 0) this.setBase('Idle');
     }
     this.mixer.update(dt);
+    this.footfalls();
+  }
+
+  private footfalls(): void {
+    const run = this.actions.get('Run');
+    if (this.onFootstep === undefined || run === undefined) return;
+    const duration = run.getClip().duration;
+    const phase = duration > 0 ? (run.time % duration) / duration : 0;
+    const audible = this.base === 'Run' && this.gesture === null && run.getEffectiveWeight() > 0.5;
+    if (audible) {
+      for (const at of RUN_FOOTFALLS) {
+        const crossed = this.runPhase <= phase ? this.runPhase < at && at <= phase : this.runPhase < at || at <= phase;
+        if (crossed) this.onFootstep();
+      }
+    }
+    this.runPhase = phase;
   }
 
   dispose(): void {
