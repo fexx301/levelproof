@@ -143,7 +143,10 @@ export function PlaytesterPanel({ report }: { report: Report }) {
         ))}
       </div>
       {ghost.endNote && (
-        <p className="ghost-endnote" role="status">
+        <p
+          className={`ghost-endnote${ghost.witnessKind === 'dead_end' || ghost.witnessKind === 'bypass' ? '' : ' ghost-endnote--pass'}`}
+          role="status"
+        >
           {ghost.endNote}
         </p>
       )}

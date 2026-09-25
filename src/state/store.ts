@@ -786,6 +786,7 @@ export const useApp = create<AppState>()((set, get) => ({
     }
     set({
       mode: 'watching',
+      followCamera: true,
       evidence,
       ghost: { ...GHOST_INITIAL, witnessKind: evidence.witnessKind },
       play: PLAY_INITIAL,
@@ -1332,6 +1333,7 @@ export const useApp = create<AppState>()((set, get) => ({
 
   watchWitness: (kind) =>
     set({
+      followCamera: true,
       mode: 'watching',
       ghost: { ...GHOST_INITIAL, witnessKind: kind },
       play: PLAY_INITIAL,
@@ -1341,7 +1343,7 @@ export const useApp = create<AppState>()((set, get) => ({
 
   startPlay: () => {
     invalidateContext();
-    set({ mode: 'playing', ghost: GHOST_INITIAL, play: PLAY_INITIAL, pendingRule: null, preview: null, lastResult: null, lastPrompt: null, lastCompileMeta: null, busy: false, compileProgress: null, evidence: null });
+    set({ mode: 'playing', followCamera: true, ghost: GHOST_INITIAL, play: PLAY_INITIAL, pendingRule: null, preview: null, lastResult: null, lastPrompt: null, lastCompileMeta: null, busy: false, compileProgress: null, evidence: null });
   },
 
   exitToAuthoring: () => set({ mode: 'authoring', ghost: GHOST_INITIAL, play: PLAY_INITIAL, evidence: null }),
@@ -1445,6 +1447,7 @@ export const useApp = create<AppState>()((set, get) => ({
     }
     set({
       mode: 'watching',
+      followCamera: true,
       ghost: { ...GHOST_INITIAL, witnessKind: 'replay' },
       play: PLAY_INITIAL,
       preview: null,

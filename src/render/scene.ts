@@ -7,6 +7,7 @@ import { doorPassable, initialState } from '../core/movement.js';
 import { craftedBox, rampGeometry, sceneBounds, framingPoints, fitOverview } from './craft.js';
 import { createMechanisms, type WorldVisuals } from './mechanisms.js';
 import { buildKeyLook } from './props.js';
+import { preloadCharacter } from './character.js';
 import { atmosphere, buildScenery, FOUNDATION_TOP_Y, GROUND_Y } from './scenery.js';
 import type { PreviewMarker } from './preview-diff.js';
 import { revisionId } from '../core/serialize.js';
@@ -540,9 +541,13 @@ function addItems(
   const goal = compiled.moduleById.get(compiled.goal);
   if (goal) {
     const c = centerPoint(goal);
-    const pedestal = new THREE.Mesh(new THREE.CylinderGeometry(50, 62, 36, 24), mats.wall);
-    pedestal.position.set(c.x, c.y + 18, c.z);
-    world.add(pedestal);
+    // A low dais the character can stand on, ringed in the goal color.
+    const pedestal = new THREE.Mesh(new THREE.CylinderGeometry(66, 74, 8, 32), mats.wall);
+    pedestal.position.set(c.x, c.y + 4, c.z);
+    const inlay = new THREE.Mesh(new THREE.TorusGeometry(58, 3.5, 6, 40), mats.goalHalo);
+    inlay.rotation.x = Math.PI / 2;
+    inlay.position.set(c.x, c.y + 8.5, c.z);
+    world.add(pedestal, inlay);
     const beacon = new THREE.Group();
     const gem = new THREE.Mesh(new THREE.OctahedronGeometry(40), mats.goal);
     const halo = new THREE.Mesh(new THREE.TorusGeometry(72, 5, 8, 40), mats.goalHalo);
@@ -550,6 +555,8 @@ function addItems(
     beacon.add(gem, halo);
     const baseY = c.y + 130;
     beacon.position.set(c.x, baseY, c.z);
+    beacon.userData.lift = 0;
+    visuals.goal = beacon;
     // Three.js >= r155 uses physical light units; at cm scale, decay-1 with
     // intensity ~= desired illuminance at 1 unit keeps pools readable.
     beacon.add(new THREE.PointLight(COLORS.goal, 320, 1700, 1));
@@ -557,14 +564,17 @@ function addItems(
     tag?.(pedestal, compiled.goal);
     tag?.(beacon, compiled.goal);
     decorUpdates.push((dt, elapsed) => {
-      if (reducedMotion()) return;
-      beacon.rotation.y += dt * 0.6;
-      beacon.position.y = baseY + Math.sin(elapsed * 0.0016) * 10;
+      // The lift always applies; only the spin and bob respect reduced motion.
+      const still = reducedMotion();
+      if (!still) beacon.rotation.y += dt * 0.6;
+      beacon.position.y = baseY + (beacon.userData.lift as number) + (still ? 0 : Math.sin(elapsed * 0.0016) * 10);
     });
   }
 }
 
 export function mountScene(host: HTMLElement, compiled: CompiledLevel, theme?: ThemeKey): SceneHandle {
+  // Start the character download early so play and replays have it ready.
+  void preloadCharacter().catch(() => undefined);
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.setSize(host.clientWidth || 800, host.clientHeight || 600);
@@ -705,7 +715,7 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel, theme?: T
   // plane costs nothing and quadruples depth precision over a 10 cm one.
   const camera = new THREE.PerspectiveCamera(45, 16 / 9, 40, 60000);
   const controls = new OrbitControls(camera, renderer.domElement);
-  controls.minDistance = 800;
+  controls.minDistance = 700;
   controls.maxDistance = 30000;
   controls.maxPolarAngle = Math.PI / 2.05;
   const homeTarget = bounds.getCenter(new THREE.Vector3());
@@ -748,22 +758,27 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel, theme?: T
   const chaseFrom = { target: new THREE.Vector3(), position: new THREE.Vector3() };
   const chaseTo = { target: new THREE.Vector3(), position: new THREE.Vector3() };
   let chaseProgress = 1;
-  const CHASE_DISTANCE_CM = 1900;
-  const CHASE_ELEVATION = THREE.MathUtils.degToRad(42);
+  // Play sits close enough to read the character; replays pull back so the
+  // route trail ahead stays in view.
+  const chaseFraming = (): { distance: number; elevation: number } =>
+    followTarget?.userData.chase === 'replay'
+      ? { distance: 2100, elevation: THREE.MathUtils.degToRad(46) }
+      : { distance: 1250, elevation: THREE.MathUtils.degToRad(34) };
   const beginChase = (): void => {
     if (followTarget === null) return;
     const focus = followTarget.position.clone();
+    const { distance, elevation } = chaseFraming();
     const view = camera.position.clone().sub(controls.target);
     const horizontal = Math.hypot(view.x, view.z) || 1;
     const chaseDir = new THREE.Vector3(
-      (view.x / horizontal) * Math.cos(CHASE_ELEVATION),
-      Math.sin(CHASE_ELEVATION),
-      (view.z / horizontal) * Math.cos(CHASE_ELEVATION),
+      (view.x / horizontal) * Math.cos(elevation),
+      Math.sin(elevation),
+      (view.z / horizontal) * Math.cos(elevation),
     );
     chaseFrom.target.copy(controls.target);
     chaseFrom.position.copy(camera.position);
     chaseTo.target.copy(focus);
-    chaseTo.position.copy(focus).addScaledVector(chaseDir, CHASE_DISTANCE_CM);
+    chaseTo.position.copy(focus).addScaledVector(chaseDir, distance);
     followLast.copy(focus);
     chaseProgress = reducedMotion() ? 1 : 0;
     if (chaseProgress === 1) {
@@ -1221,11 +1236,19 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel, theme?: T
       return () => actorUpdates.delete(update);
     },
     follow: (target) => {
+      // Actors opt in: the player (close) and verifier replays (wider).
+      if (target !== null && target.userData.chase === undefined) return;
+      if (target === null) {
+        // Leaving play returns to the overview; a replay ending changes nothing.
+        if (followTarget !== null) frameHome();
+        followTarget = null;
+        return;
+      }
       followTarget = target;
-      if (target !== null && followEnabled) beginChase();
-      else if (target === null) frameHome();
+      if (followEnabled) beginChase();
     },
     world: mechanisms.events,
+    viewer: () => camera.position,
   };
 
   return {

@@ -13,7 +13,12 @@ export interface WorldVisuals {
   keys: Map<string, THREE.Group>;
   switches: Map<string, { plate: THREE.Mesh; rim: THREE.Mesh }>;
   doors: Map<string, DoorVisual>;
+  /** The goal beacon; it lifts clear of the character standing on the goal. */
+  goal?: THREE.Group;
 }
+
+/** How far the goal beacon rises while an actor stands on the goal (cm). */
+export const GOAL_LIFT_CM = 85;
 
 /** One bounded update loop. Reset cancels transitions rather than leaving callbacks alive. */
 export function createMechanisms(compiled: CompiledLevel, visuals: WorldVisuals, reduced: () => boolean) {
@@ -25,6 +30,10 @@ export function createMechanisms(compiled: CompiledLevel, visuals: WorldVisuals,
     door.group.scale.y = Math.max(0.025, 1 - progress);
   };
   const sync = (snap: boolean) => {
+    if (visuals.goal !== undefined) {
+      visuals.goal.userData.targetLift = state.moduleId === compiled.goal ? GOAL_LIFT_CM : 0;
+      if (snap || reduced()) visuals.goal.userData.lift = visuals.goal.userData.targetLift;
+    }
     for (const [id, door] of visuals.doors) {
       door.targetOpen = doorPassable(compiled, id, state);
       if (snap || reduced()) door.group.position.y = door.targetOpen ? door.openY : door.closedY;
@@ -66,6 +75,11 @@ export function createMechanisms(compiled: CompiledLevel, visuals: WorldVisuals,
         door.group.position.y += (target - door.group.position.y) * k;
         if (Math.abs(target - door.group.position.y) < 0.1) door.group.position.y = target;
         retract(door);
+      }
+      if (visuals.goal !== undefined) {
+        const lift = visuals.goal.userData.lift as number;
+        const target = visuals.goal.userData.targetLift as number;
+        visuals.goal.userData.lift = lift + (target - lift) * (instant ? 1 : 1 - Math.exp(-dt * 6));
       }
       for (const pad of visuals.switches.values()) {
         const target = pad.plate.userData.targetY as number;

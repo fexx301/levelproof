@@ -32,6 +32,6 @@ your rules. Ambiguous requests get one clarifying question; mechanics the kit
 cannot simulate get an honest “unsupported” with alternatives. Every compile
 discloses fresh vs cached, model, cost, and attempts.
 
-**Built with:** Three.js (all 3D procedural — no imported or AI-generated
-assets), React, Zustand, Zod, Vite, Vercel serverless, OpenRouter
-(`gemini-3.8-flash`).
+**Built with:** Three.js (all 3D procedural except the animated character,
+Quaternius' CC0 “Characters Matt”; no AI-generated assets), React, Zustand,
+Zod, Vite, Vercel serverless, OpenRouter (`gemini-3.8-flash`).

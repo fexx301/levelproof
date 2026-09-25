@@ -44,12 +44,14 @@ says so.
 ## Play it
 
 **Play the level** drops you into the world you just made: the camera eases
-in behind a small adventurer and follows it, W / ↑ always walks away from you
+in behind an animated adventurer and follows it as it runs, W / ↑ always walks away from you
 (controls are relative to the camera; drag to look around, **Camera:
 overview** to see everything), keys vanish into your inventory, doors open
 and seal as the engine says, and reaching the goal without breaking a rule
 ends in a **Level complete** card. It is the same movement engine the
-checker explored — nothing the player can do was left unchecked.
+checker explored — nothing the player can do was left unchecked. The
+verifier's replays use the same character as a translucent ghost: blue for a
+winning route, red for the route that fails.
 
 ## Watch it break
 
@@ -154,7 +156,7 @@ The example chips are prewarmed after each deploy (`scripts/prewarm.ts`).
 npm install
 cp .env.example .env   # add your OpenRouter key (and optionally Upstash)
 npm run dev            # Vite dev server; also serves /api/compile and /api/explain
-npm run verify         # typecheck, lint, 248 unit tests, production build
+npm run verify         # typecheck, lint, 253 unit tests, production build
 npm run test:e2e       # Playwright browser journeys (fixture-backed, no model calls)
 ```
 
@@ -179,10 +181,12 @@ terrain shadows and particles). Details: [architecture](docs/architecture.md),
 
 Submission code is MIT. Built with Three.js, React, Zustand, Zod, Vite, and
 Vitest (all MIT); typography is Space Grotesk Variable and IBM Plex Mono (SIL
-OFL 1.1, via Fontsource). Every 3D asset — terrain, trees, the dragon, the
-props — is built procedurally from Three.js primitives; no imported or
-AI-generated assets are used. The model only ever compiles typed operations at
-runtime. Pre-window planning notes are private and excluded from this
+OFL 1.1, via Fontsource). The playable character is "Characters Matt" by
+[Quaternius](https://quaternius.com) (CC0 1.0; see
+[`public/models/LICENSE.md`](public/models/LICENSE.md)). Every other 3D asset
+— terrain, trees, the dragon, the props — is built procedurally from Three.js
+primitives. No AI-generated assets are used; the model only ever compiles
+typed operations at runtime. Pre-window planning notes are private and excluded from this
 repository.
 
 > Built for the [AI Builder Hackathon 2026](https://www.victoriavr.com/news/ai-builder-hackathon-2026-build-the-future-of-ai-native-3d-experiences-5915194b) (Victoria VR).

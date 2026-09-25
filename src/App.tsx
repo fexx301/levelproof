@@ -433,7 +433,7 @@ function Viewport({ level, mode, report, theme, previewing }: { level: Level; mo
       const intent = KEY_INTENTS[event.key];
       if (intent) {
         event.preventDefault();
-        actor.move(relativeCardinal(useApp.getState().facing, intent));
+        actor.move(relativeCardinal(useApp.getState().facing, intent), !event.repeat);
       }
     };
     window.addEventListener('keydown', onKey);
@@ -462,7 +462,7 @@ function Viewport({ level, mode, report, theme, previewing }: { level: Level; mo
           className="viewport-home"
           type="button"
           onClick={() => {
-            if (mode === 'playing') useApp.setState({ followCamera: false });
+            if (mode !== 'authoring') useApp.setState({ followCamera: false });
             sceneRef.current?.frameLevel();
           }}
         >

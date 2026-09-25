@@ -979,6 +979,10 @@ details.inspector[open] summary .disclosure-glyph {
   padding-left: var(--space-2);
 }
 
+.ghost-endnote--pass {
+  border-left-color: var(--color-pass);
+}
+
 .dpad {
   display: grid;
   gap: var(--space-1);

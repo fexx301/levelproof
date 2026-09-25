@@ -2,6 +2,38 @@
 
 Build-window decisions and measured evidence, newest first. Dates are 2026.
 
+## Sep 25 (the character — a real animated adventurer)
+
+- **Why**: the procedural adventurer had no arms and a bob instead of a run
+  cycle, and the replay ghost was still the old sheet ghost. Play mode is the
+  payoff, so the character has to move like a game character.
+- **Asset**: "Characters Matt" by Quaternius (CC0 1.0, via poly.pizza), one
+  666 KB GLB with Idle, Run, Jump, Wave, Yes, and No clips; its knife is
+  removed at runtime. This is the one imported 3D asset — everything else
+  stays procedural, and nothing is AI-generated. Chosen over Quaternius'
+  realistic "Animated Men" (too thin to read at diorama scale) and the
+  RobotExpressive sample (less fitting for an explorer).
+- **One rig for everyone**: the player and every verifier replay use the same
+  skinned model, each with its own clone and animation mixer. Ghosts are the
+  same character, translucent and tinted (blue for a winning route, red for a
+  failure), with a fresnel rim so the silhouette reads over red evidence
+  beams and switch plates. The procedural figure remains the stand-in while
+  the model downloads and the fallback if it cannot load.
+- **Movement feel**: the run cycle's playback rate is matched to ground speed
+  (measured 1.84 model units per clip-second) so feet do not slide; turns are
+  frame-rate independent; a press during a move is buffered and taken through
+  the same engine `step()` when the move lands, so chained moves are one
+  continuous run (key auto-repeat never buffers, so releasing a key never adds
+  a move); stopping waits 0.14 s before settling into idle.
+- **Reactions**: a nod on key or switch, and at the end the character turns
+  to the camera — jump then wave on a win, head shake when trapped or when a
+  rule was broken. Replays end the same way.
+- **Goal marker**: the 36 cm pedestal became a low dais with a goal-colored
+  inlay (a 150 cm character was standing inside it), and the beacon lifts
+  clear of whoever reaches the goal.
+- **Camera**: play follows at 12.5 m, replays at 21 m so the trail ahead
+  stays in view; each play or replay starts in follow mode.
+
 ## Sep 25 (UI pass — the chrome catches up with the world)
 
 - **Play mode** is now the payoff instead of a debugger: a follow camera that

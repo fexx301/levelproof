@@ -33,6 +33,7 @@ src/core/          The deterministic engine — zero DOM/renderer/React/network
 src/render/        Imperative Three.js diorama (scene, actors, overlays)
   scenery.ts       Terrain, sky, fog, scatter, particles, lighting presets
   props.ts         Procedural landmark props and key looks (no imported assets)
+  character.ts     The animated CC0 character (player and replay ghosts)
 src/state/         Zustand store: one accepted level + at most one draft
 src/ui/            React chrome (prompt panel, checks, playtester, repairs)
 ```

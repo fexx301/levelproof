@@ -3,7 +3,9 @@ import type { Cardinal } from '../../shared/schema.js';
 import { centerPoint } from '../core/catalog.js';
 import { goalRequirementViolated, initialState, step, transitions, type GameState, type MoveRecord } from '../core/movement.js';
 import type { CompiledLevel } from '../core/topology.js';
-import { createGhostVisual, type GhostMotion, type GhostVisual } from './ghost-visual.js';
+import type { GhostMotion } from './ghost-visual.js';
+import { CharacterGhostVisual, type ActorVisual } from './ghost-character.js';
+import { CharacterRig, characterIfLoaded, preloadCharacter, type CharacterAsset } from './character.js';
 
 /**
  * Actors walk catalog-owned polylines at a constant speed (§12). Rendering
@@ -74,6 +76,16 @@ export interface ActorContext {
   register: (update: (dt: number, elapsed: number) => void) => () => void;
   follow: (target: THREE.Object3D | null) => void;
   world: WorldEvents;
+  /** Where the camera is, so a finishing actor can turn to the viewer. */
+  viewer?: () => THREE.Vector3;
+}
+
+/** Horizontal direction from an actor to the camera (null without one). */
+function towardViewer(ctx: ActorContext, from: THREE.Vector3): THREE.Vector3 | null {
+  const viewer = ctx.viewer?.();
+  if (viewer === undefined) return null;
+  const direction = new THREE.Vector3(viewer.x - from.x, 0, viewer.z - from.z);
+  return direction.lengthSq() < 1 ? null : direction.normalize();
 }
 
 interface PathStep {
@@ -216,7 +228,7 @@ export class GhostActor {
   private readonly kind: GhostFinishInfo['kind'];
   private readonly missingKeys: string[];
   private readonly unregister: () => void;
-  private readonly visual: GhostVisual;
+  private readonly visual: ActorVisual;
   private readonly trail: THREE.Group;
   private readonly pauseAfterMoveIndex: number | null;
   private readonly previousPosition = new THREE.Vector3();
@@ -263,7 +275,7 @@ export class GhostActor {
     this.breakpointPending = this.pauseAfterMoveIndex !== null;
     this.endState = route.length > 0 ? route[route.length - 1]!.after : initialState(ctx.compiled);
     this.mesh = new THREE.Group();
-    this.visual = createGhostVisual({ reducedMotion });
+    this.visual = new CharacterGhostVisual(kind, ACTOR_CENTER_OFFSET_CM, reducedMotion);
     this.mesh.add(this.visual.object);
     if (this.steps.length > 0) {
       const start = this.steps[0]!.points[0]!;
@@ -279,6 +291,7 @@ export class GhostActor {
     // sees the doomed path, not just a pawn in the dark.
     this.trail = buildTrail(this.steps, kind);
     ctx.scene.add(this.trail);
+    this.mesh.userData.chase = 'replay';
     ctx.follow(this.mesh);
     this.unregister = ctx.register(this.update);
     this.emit();
@@ -466,6 +479,9 @@ export class GhostActor {
     this.finishVisualPlaying = true;
     this.finishVisualClock = 0;
     this.velocity.set(0, 0, 0);
+    // The cheer or head shake plays toward the viewer.
+    const facing = towardViewer(this.ctx, this.mesh.position);
+    if (facing !== null) this.visual.setDirection(facing);
     this.visual.trigger({ type: 'finish', kind: this.kind });
     this.emit();
     this.callbacks.onFinish({ endState: this.endState, kind: this.kind, missingKeys: this.missingKeys });
@@ -529,8 +545,14 @@ export class PlayerActor {
   private switches: string[] = [];
   private visitedModules: Set<string>;
   private animation: { points: THREE.Vector3[]; length: number; distance: number; move: MoveRecord } | null = null;
+  private queued: Cardinal | null = null;
+  /** A standing turn (toward the viewer for a cheer), applied between moves. */
+  private turnTarget: number | null = null;
 
   private readonly figure: THREE.Group;
+  private rig: CharacterRig | null = null;
+  private fallback: THREE.Group | null = null;
+  private disposed = false;
   private yaw = 0;
   private moves = 0;
   private celebrated = false;
@@ -541,8 +563,20 @@ export class PlayerActor {
     this.state = initialState(ctx.compiled);
     this.visitedModules = new Set([this.state.moduleId]);
     this.mesh = new THREE.Group();
-    this.figure = playerFigure();
+    // Only the player's own avatar asks the camera to chase it.
+    this.mesh.userData.chase = true;
+    this.figure = new THREE.Group();
     this.mesh.add(this.figure, underRing(0xf2eee4));
+    const asset = characterIfLoaded();
+    if (asset !== null) this.attachRig(asset);
+    else {
+      // The procedural figure stands in until the animated character arrives.
+      this.fallback = playerFigure();
+      this.figure.add(this.fallback);
+      preloadCharacter().then((loaded) => {
+        if (!this.disposed) this.attachRig(loaded);
+      }, () => undefined);
+    }
     this.placeAtSpawn();
     ctx.scene.add(this.mesh);
     ctx.world.resetWorld();
@@ -552,9 +586,19 @@ export class PlayerActor {
     this.emit();
   }
 
-  /** One transition completes before the next input (§12). */
-  move(dir: Cardinal): void {
-    if (this.animation) return;
+  /**
+   * One transition completes before the next input (§12). A press during a
+   * transition is buffered (the latest one wins) and taken, through the same
+   * engine step, the moment the current one lands — so chained moves run
+   * continuously. Key auto-repeat passes `buffer: false` so releasing a held
+   * key never adds a move.
+   */
+  move(dir: Cardinal, buffer = true): void {
+    if (this.animation) {
+      if (buffer) this.queued = dir;
+      return;
+    }
+    this.queued = null;
     const move = step(this.ctx.compiled, this.state, dir);
     if (!move) return;
     if (reducedMotion()) {
@@ -579,20 +623,25 @@ export class PlayerActor {
       this.faceToward(move.segments[0]!, destination, true);
       this.moves += 1;
       this.emit();
+      this.react(move);
       this.maybeCelebrate();
       return;
     }
     const points = move.segments.map((p) => new THREE.Vector3(p.x, p.y, p.z));
     let length = 0;
     for (let i = 1; i < points.length; i++) length += points[i]!.distanceTo(points[i - 1]!);
+    this.turnTarget = null;
     this.animation = { points, length, distance: 0, move };
   }
 
   restart(): void {
     this.animation = null;
+    this.queued = null;
+    this.turnTarget = null;
     this.moves = 0;
     this.celebrated = false;
     this.figure.position.y = 0;
+    this.rig?.loop('Idle');
     this.state = initialState(this.ctx.compiled);
     this.keys = [];
     this.switches = [];
@@ -611,20 +660,40 @@ export class PlayerActor {
   }
 
   dispose(): void {
+    this.disposed = true;
     this.unregister();
     this.stopConfetti?.();
+    this.rig?.dispose();
+    this.rig = null;
     this.ctx.follow(null);
     this.ctx.world.resetWorld();
     this.ctx.scene.remove(this.mesh);
     this.mesh.traverse((child) => {
-      if (child instanceof THREE.Mesh) {
+      // Skinned character geometry is shared with the cached asset.
+      if (child instanceof THREE.Mesh && !(child instanceof THREE.SkinnedMesh)) {
         child.geometry.dispose();
         (child.material as THREE.Material).dispose();
       }
     });
   }
 
-  private faceToward(from: { x: number; z: number }, to: { x: number; z: number }, snap: boolean): void {
+  private attachRig(asset: CharacterAsset): void {
+    if (this.fallback !== null) {
+      this.figure.remove(this.fallback);
+      this.fallback.traverse((child) => {
+        if (child instanceof THREE.Mesh) {
+          child.geometry.dispose();
+          (child.material as THREE.Material).dispose();
+        }
+      });
+      this.fallback = null;
+    }
+    this.rig = new CharacterRig(asset);
+    this.rig.object.position.y = -ACTOR_CENTER_OFFSET_CM;
+    this.figure.add(this.rig.object);
+  }
+
+  private faceToward(from: { x: number; z: number }, to: { x: number; z: number }, snap: boolean, dt = 0): void {
     const dx = to.x - from.x;
     const dz = to.z - from.z;
     if (Math.abs(dx) + Math.abs(dz) < 1) return;
@@ -634,16 +703,47 @@ export class PlayerActor {
       this.figure.rotation.y = target;
       return;
     }
+    // A quick, frame-rate independent turn (about 90% within 0.15 s).
+    this.turnTo(target, 1 - Math.exp(-dt * 15));
+  }
+
+  private turnTo(target: number, amount: number): void {
     let delta = target - this.yaw;
     while (delta > Math.PI) delta -= Math.PI * 2;
     while (delta < -Math.PI) delta += Math.PI * 2;
-    this.yaw += delta * 0.25;
+    this.yaw += delta * amount;
     this.figure.rotation.y = this.yaw;
   }
 
   private stopConfetti: (() => void) | null = null;
 
+  private turnToViewer(): void {
+    const facing = towardViewer(this.ctx, this.mesh.position);
+    this.turnTarget = facing === null ? null : Math.atan2(facing.x, facing.z);
+  }
+
   /** A short celebration when the goal is reached without breaking a rule. */
+  /** Gestures for what just happened; the engine state has already been applied. */
+  private react(move: MoveRecord): void {
+    if (this.rig === null) return;
+    const atGoal = this.state.moduleId === this.ctx.compiled.goal;
+    if (atGoal) {
+      const violated = goalRequirementViolated(this.ctx.compiled, this.state, this.visitedModules);
+      this.turnToViewer();
+      if (violated) this.rig.perform('No');
+      else this.rig.perform('Jump', 'Wave');
+      return;
+    }
+    if (transitions(this.ctx.compiled, this.state).length === 0) {
+      this.turnToViewer();
+      this.rig.perform('No');
+      return;
+    }
+    // A nod for a pickup or a pressed switch, unless the next move is already buffered.
+    if (this.queued !== null) return;
+    if (move.events.collectedKey !== undefined || move.events.activatedSwitch !== undefined) this.rig.perform('Yes');
+  }
+
   private maybeCelebrate(): void {
     if (this.celebrated || this.state.moduleId !== this.ctx.compiled.goal) return;
     if (goalRequirementViolated(this.ctx.compiled, this.state, this.visitedModules)) return;
@@ -693,10 +793,17 @@ export class PlayerActor {
 
 
   private update = (dt: number): void => {
-    if (!this.animation) return;
+    if (this.rig !== null) {
+      this.rig.setLocomotion(this.animation !== null ? WALK_SPEED_CM_S : 0);
+      this.rig.update(reducedMotion() ? 0 : dt);
+    }
+    if (!this.animation) {
+      if (this.turnTarget !== null) this.turnTo(this.turnTarget, reducedMotion() ? 1 : 1 - Math.exp(-dt * 8));
+      return;
+    }
     this.animation.distance += WALK_SPEED_CM_S * dt;
-    // A light walking bob; the collision-free path itself never changes.
-    this.figure.position.y = Math.abs(Math.sin(this.animation.distance * 0.045)) * 5;
+    // The stand-in figure bobs; the animated character has a real run cycle.
+    if (this.rig === null) this.figure.position.y = Math.abs(Math.sin(this.animation.distance * 0.045)) * 5;
     if (this.animation.distance >= this.animation.length) {
       const move = this.animation.move;
       const endpoint = move.segments[move.segments.length - 1]!;
@@ -716,7 +823,11 @@ export class PlayerActor {
         this.ctx.world.activateSwitch(move.events.activatedSwitch);
       }
       this.emit();
+      this.react(move);
       this.maybeCelebrate();
+      const queued = this.queued;
+      this.queued = null;
+      if (queued !== null && this.state.moduleId !== this.ctx.compiled.goal) this.move(queued);
       return;
     }
     const { points, distance } = this.animation;
@@ -727,7 +838,7 @@ export class PlayerActor {
         const t = segment === 0 ? 0 : remaining / segment;
         const position = points[i - 1]!.clone().lerp(points[i]!, t);
         this.mesh.position.set(position.x, position.y + ACTOR_CENTER_OFFSET_CM, position.z);
-        this.faceToward(points[i - 1]!, points[i]!, false);
+        this.faceToward(points[i - 1]!, points[i]!, false, dt);
         return;
       }
       remaining -= segment;
