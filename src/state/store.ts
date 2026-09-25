@@ -52,6 +52,10 @@ export type SceneId = (typeof SCENES)[number]['id'];
 
 let contextGeneration = 0;
 let activeCompileController: AbortController | null = null;
+/** Client ceiling for one submit: the server stops each call at 60 s and a
+ * build can make two (the engine-guided revision), so a request still open
+ * after this is a stalled connection, not a slow model. */
+export const COMPILE_WATCHDOG_MS = 130_000;
 let activeExplainController: AbortController | null = null;
 
 /** Invalidate any compile that was started against an older scene context. */
@@ -813,6 +817,16 @@ export const useApp = create<AppState>()((set, get) => ({
     activeCompileController?.abort();
     const controller = new AbortController();
     activeCompileController = controller;
+    const watchdog = setTimeout(() => {
+      if (generation !== contextGeneration || !get().busy) return;
+      contextGeneration += 1;
+      controller.abort();
+      set({
+        busy: false,
+        compileProgress: null,
+        error: 'The AI service did not answer in time, so the request was stopped. Nothing changed — your prompt is still here; try again.',
+      });
+    }, COMPILE_WATCHDOG_MS);
     set({ busy: true, error: null, evidence: null, promptDraft: prompt, compileProgress: progressStart() });
     const selection = state.selection;
     const history = state.promptHistory;
@@ -967,6 +981,7 @@ export const useApp = create<AppState>()((set, get) => ({
         set({ busy: false, compileProgress: null, error: `${message} Your prompt is still available — try again when the service is ready.` });
       }
     } finally {
+      clearTimeout(watchdog);
       if (activeCompileController === controller) activeCompileController = null;
     }
   },
