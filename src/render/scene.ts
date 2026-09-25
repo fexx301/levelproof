@@ -7,7 +7,7 @@ import { doorPassable, initialState } from '../core/movement.js';
 import { craftedBox, rampGeometry, sceneBounds, framingPoints, fitOverview } from './craft.js';
 import { createMechanisms, type WorldVisuals } from './mechanisms.js';
 import { buildKeyLook } from './props.js';
-import { atmosphere, buildScenery, GROUND_Y } from './scenery.js';
+import { atmosphere, buildScenery, FOUNDATION_TOP_Y, GROUND_Y } from './scenery.js';
 import type { PreviewMarker } from './preview-diff.js';
 import { revisionId } from '../core/serialize.js';
 import { artDirection, switchSignature, type ArtDirection, type ThemeKey } from './art-direction.js';
@@ -255,7 +255,7 @@ function addModule(world: THREE.Group, mats: Mats, compiled: CompiledLevel, m: L
     // tile carrying the same decoration. The walking surface stays at y=0.
     const inlay = new THREE.Mesh(new THREE.RingGeometry(100, 104, m.id === compiled.goal ? 32 : 4), mats.trim);
     inlay.rotation.x = -Math.PI / 2;
-    inlay.position.set(c.x, c.y + 0.6, c.z);
+    inlay.position.set(c.x, c.y + 1.5, c.z);
     world.add(inlay);
   }
   if (m.h > 0 && m.template === 'flat' && m.ports.length <= 2 &&
@@ -266,8 +266,9 @@ function addModule(world: THREE.Group, mats: Mats, compiled: CompiledLevel, m: L
       const pier = new THREE.Mesh(craftedBox(64, height, 64), mats.wall);
       pier.position.set(c.x + side * 160, (c.y - 30 - 60) / 2, c.z + 160);
       world.add(pier);
-      const foot = new THREE.Mesh(craftedBox(84, 20, 84), mats.trim);
-      foot.position.set(pier.position.x, -50, pier.position.z);
+      // Feet reach down to the terrain so raised floors never hover over it.
+      const foot = new THREE.Mesh(craftedBox(84, 30, 84), mats.trim);
+      foot.position.set(pier.position.x, GROUND_Y + 15, pier.position.z);
       world.add(foot);
     }
   }
@@ -672,22 +673,33 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel, theme?: T
   sun.target.updateMatrixWorld();
   // Follow the footprint rather than filling the negative space with a disc.
   const stage = new THREE.Group();
-  const foundationMaterial = new THREE.MeshStandardMaterial({ color: direction.base, roughness: 0.9 });
+  // On the empty stage the foundations outline the whole footprint. In a
+  // dressed world they only seat ground-level floors (raised floors stand on
+  // piers), in stone, and never share a height with terrain, islands, or
+  // water tiles.
+  const dressed = environment !== 'void' && environment !== 'space';
+  const foundationMaterial = new THREE.MeshStandardMaterial({
+    color: dressed ? new THREE.Color(direction.wall).multiplyScalar(0.8).getHex() : direction.base,
+    roughness: 0.9,
+  });
+  const tileCells = new Set((compiled.level.props ?? []).filter((prop) => prop.prop === 'water' || prop.prop === 'lava').map((prop) => `${prop.x}:${prop.z}`));
   const cells = new Set<string>();
   for (const module of compiled.level.modules) {
     const cell = `${module.x}:${module.z}`;
-    if (cells.has(cell)) continue;
+    if (cells.has(cell) || tileCells.has(cell) || (dressed && module.h !== 0)) continue;
     cells.add(cell);
     const c = centerPoint(module);
     const block = new THREE.Mesh(craftedBox(398, 64, 398, 12), foundationMaterial);
-    block.position.set(c.x, -92, c.z);
+    block.position.set(c.x, FOUNDATION_TOP_Y - 32, c.z);
     block.receiveShadow = true;
     stage.add(block);
   }
   scene.add(stage);
 
   const viewDir = new THREE.Vector3(...direction.camera).normalize();
-  const camera = new THREE.PerspectiveCamera(45, 16 / 9, 10, 60000);
+  // The orbit never comes closer than 8 m to its target, so a 40 cm near
+  // plane costs nothing and quadruples depth precision over a 10 cm one.
+  const camera = new THREE.PerspectiveCamera(45, 16 / 9, 40, 60000);
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.minDistance = 800;
   controls.maxDistance = 30000;

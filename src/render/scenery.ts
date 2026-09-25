@@ -11,9 +11,13 @@ import { buildProp, hashString, MaterialCache, seededRandom, type BuiltProp, typ
  * the engine — the floors the checker explores are exactly the modules.
  */
 
-/** Top of the terrain: just under the foundation blocks, so ground-level
- * floors read as raised stone paths on the land. */
-export const GROUND_Y = -62;
+/** Top of the terrain: 6 cm under the foundation blocks' top (y = -60), so
+ * ground-level floors read as raised stone paths on the land. Surfaces that
+ * overlap must never share a height, or the GPU cannot tell which is in
+ * front and they flicker (z-fighting). */
+export const GROUND_Y = -66;
+/** Top of the foundation blocks under ground-level floors (scene.ts). */
+export const FOUNDATION_TOP_Y = -60;
 
 export interface Atmosphere {
   environment: Environment;
@@ -360,7 +364,7 @@ function sea(centerX: number, centerZ: number, radius: number): { mesh: THREE.Me
   geometry.rotateX(-Math.PI / 2);
   const material = new THREE.MeshStandardMaterial({ color: 0x2f7394, roughness: 0.18, metalness: 0.2, emissive: 0x0b2a3c, emissiveIntensity: 0.4, flatShading: true });
   const mesh = new THREE.Mesh(geometry, material);
-  mesh.position.set(centerX, GROUND_Y - 22, centerZ);
+  mesh.position.set(centerX, GROUND_Y - 30, centerZ);
   mesh.receiveShadow = true;
   const position = geometry.getAttribute('position') as THREE.BufferAttribute;
   const baseX = Float32Array.from({ length: position.count }, (_, i) => position.getX(i));
@@ -502,7 +506,8 @@ export function buildScenery(level: Level, options: SceneryOptions): SceneryBuil
     ];
     for (const cell of islandCells) {
       const island = new THREE.Mesh(new THREE.CylinderGeometry(260, 300, 40, 10), sand);
-      island.position.set(cell.x, GROUND_Y - 18, cell.z);
+      // Top at GROUND_Y - 2: below the foundation blocks, never coplanar.
+      island.position.set(cell.x, GROUND_Y - 22, cell.z);
       island.receiveShadow = true;
       environmentRoot.add(island);
       disposables.push(island.geometry);
