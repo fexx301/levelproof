@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { DisclosureGlyph } from './check-strip.js';
-import { BUILD_PROMPTS, EXAMPLE_PROMPTS, MAKEOVER_PROMPT, TWIST_PROMPT, WINTER_PROMPT } from './example-prompts.js';
+import { EXAMPLE_PROMPTS, MAKEOVER_PROMPT, TWIST_PROMPT, WINTER_PROMPT } from './example-prompts.js';
 import { useApp } from '../state/store.js';
 import { themeKeySchema, type ThemeKey } from '../../shared/api.js';
 
@@ -116,8 +116,9 @@ export function PromptPanel() {
 
   // One-click examples: the cache-verified canonical demo prompts, so a
   // first-time visitor can reach the signature moment without reading docs.
+  // On the blank canvas the build examples live in the viewport's welcome card.
   const examples: { label: string; prompt: string }[] = isBlank
-    ? BUILD_PROMPTS.map((entry) => ({ label: entry.label, prompt: entry.prompt }))
+    ? []
     : isVault
       ? [
           { label: 'Key + locked door', prompt: EXAMPLE_PROMPTS.baseline },
@@ -211,8 +212,8 @@ export function PromptPanel() {
         </div>
       )}
       <CompileProgressCard />
-      <div className="example-prompts" role="group" aria-label="Example prompts">
-        <span className="panel-note">{isBlank ? 'Build:' : 'Try:'}</span>
+      {examples.length > 0 && <div className="example-prompts" role="group" aria-label="Example prompts">
+        <span className="panel-note">Try:</span>
         {examples.map((example) => (
           <button
             key={example.label}
@@ -224,7 +225,7 @@ export function PromptPanel() {
             {example.label}
           </button>
         ))}
-      </div>
+      </div>}
       {changeSummary !== null && (
         <p className="change-summary" aria-live="polite">
           Changed: {changeSummary}
