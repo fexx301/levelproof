@@ -9,6 +9,7 @@ import { CheckStrip, RuleChips } from './ui/check-strip';
 import { useLevelIsBlank } from './ui/prompt-panel';
 import { PlayPanel, requestHint } from './ui/play-panel';
 import { SoundToggle } from './ui/sound-toggle';
+import { heldPadIntent } from './ui/held-input';
 import { PlaytesterPanel, witnessOptions } from './ui/playtester';
 import { PromptPanel } from './ui/prompt-panel';
 import { RepairPanel } from './ui/repair-panel';
@@ -425,7 +426,7 @@ function Viewport({ level, mode, report, theme, previewing }: { level: Level; mo
     // a run carries on through landings without waiting for key auto-repeat.
     const held = new Map<string, MoveIntent>();
     const heldDirection = (): Cardinal | null => {
-      const intent = [...held.values()].at(-1);
+      const intent = [...held.values()].at(-1) ?? heldPadIntent() ?? undefined;
       return intent === undefined ? null : relativeCardinal(useApp.getState().facing, intent);
     };
     const actor = scene.spawnPlayer({

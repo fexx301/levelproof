@@ -1,10 +1,11 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import type { Cardinal } from '../../shared/schema.js';
 import { actorBridge } from '../render/bridge.js';
 import { compileLevel } from '../core/topology.js';
 import type { Report } from '../core/verifier.js';
 import type { Level } from '../../shared/schema.js';
 import { playSound } from '../render/sound.js';
+import { setPadHeld } from './held-input.js';
 import { useApp, type PlayHint } from '../state/store.js';
 import { CARDINAL_NAMES, relativeCardinal, type MoveIntent } from './relative-direction.js';
 
@@ -50,6 +51,8 @@ export function PlayPanel({ level, report }: { level: Level; report: Report }) {
     masksMatch(compiled.switchBit, deadEnd.switchMask, play.switches);
   const placeName = (id: string): string => compiled.moduleById.get(id)?.label ?? id.replace(/-/g, ' ');
   const won = play.atGoal && !play.goalViolated;
+  const pointerPressed = useRef(false);
+  useEffect(() => () => setPadHeld(null), []);
   const playHint = useApp((s) => s.playHint);
   // A hint answers "from here": any move or restart retires it.
   useEffect(() => {
@@ -61,11 +64,31 @@ export function PlayPanel({ level, report }: { level: Level; report: Report }) {
 
   const moveButton = (intent: MoveIntent) => {
     const direction: Cardinal = relativeCardinal(facing, intent);
+    const release = () => setPadHeld(null);
     return (
       <button
         type="button"
         className={hintIntent === intent ? 'dpad-hint' : undefined}
-        onClick={() => actorBridge.player()?.move(direction)}
+        // Press moves at once; holding keeps running through landings.
+        onPointerDown={(event) => {
+          if (event.button !== 0) return;
+          pointerPressed.current = true;
+          event.currentTarget.setPointerCapture?.(event.pointerId);
+          setPadHeld(intent);
+          actorBridge.player()?.move(direction);
+        }}
+        onPointerUp={release}
+        onPointerCancel={release}
+        onLostPointerCapture={release}
+        onContextMenu={(event) => event.preventDefault()}
+        // Keyboard activation (Enter / Space) arrives as a click with no pointer press.
+        onClick={() => {
+          if (pointerPressed.current) {
+            pointerPressed.current = false;
+            return;
+          }
+          actorBridge.player()?.move(direction);
+        }}
         aria-label={`Move ${CARDINAL_NAMES[direction]} (${intent})`}
         title={`${intent} · ${CARDINAL_NAMES[direction]}`}
       >
@@ -87,7 +110,10 @@ export function PlayPanel({ level, report }: { level: Level; report: Report }) {
           {followCamera ? 'Camera: following' : 'Camera: overview'}
         </button>
       </div>
-      <p className="panel-note">WASD or arrows move relative to the camera · drag to look around · H hint · R restarts · Esc exits</p>
+      <p className="panel-note play-keys-note">
+        WASD or arrows move relative to the camera · drag to look around · H hint · R restarts · Esc exits
+      </p>
+      <p className="panel-note play-touch-note">Hold an arrow to keep running · drag the world to look around</p>
       <div className="dpad">
         <span />
         {moveButton('forward')}

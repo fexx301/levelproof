@@ -2,6 +2,31 @@
 
 Build-window decisions and measured evidence, newest first. Dates are 2026.
 
+## Sep 25 (play-mode strengthening — hints, sound, phones)
+
+- **Hints from the checker**: **Hint** (H) runs a breadth-first search with
+  the verifier's own `transitions()` from the player's exact state and shows
+  the first move of a shortest winning route (gold trail, highlighted arrow,
+  "N moves from the goal"). Winning means every design rule holds;
+  passThrough visits are carried as extra search state because plain visits
+  do not change the engine state. Tests follow hints to the goal on six
+  levels (always in the promised number of moves, never longer than the
+  verifier's witness) and under a passThrough rule on every module.
+- **Dead ends named at once**: the same search flags a state with moves left
+  but no winning continuation; the panel says so immediately instead of
+  waiting until the player is fully trapped.
+- **Sound**: synthesized with Web Audio (no samples, no licences) — footsteps
+  on the run cycle's measured footfalls (17.5% and 65.8% of the cycle),
+  quieter for ghosts; key, switch, door open, trap-door seal, win, dead end,
+  hint. Starts only after a user gesture; mute remembered per browser.
+  Key/switch/door cues come from engine state changes (unit-tested, silent
+  on reset), so replays sound like play.
+- **Phones**: press-and-hold on the on-screen arrows keeps running through
+  landings (the same held-direction path as the keyboard); arrows act on
+  press, keyboard activation still works. In play the world is on top and the
+  52 px arrows below, and touch screens get touch instructions. Verified in
+  Pixel 7 emulation only — not yet on a real phone.
+
 ## Sep 25 (the character — a real animated adventurer)
 
 - **Why**: the procedural adventurer had no arms and a bob instead of a run

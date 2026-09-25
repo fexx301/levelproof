@@ -1330,9 +1330,13 @@ details.inspector[open] summary .disclosure-glyph {
     width: auto;
   }
 
+  /* Play: the world on top, the controls underneath within thumb reach. */
   .app[data-mode='playing'] .side-panel {
     max-height: 50%;
-    order: -1;
+  }
+
+  .app[data-mode='playing'] .dpad button {
+    min-height: 52px;
   }
 
   .app[data-mode='watching'] .side-panel {
@@ -1842,6 +1846,10 @@ details.inspector summary,
 .dpad button {
   font-size: 18px;
   min-height: 40px;
+  /* Press-and-hold to run: no long-press menu, text selection, or double-tap zoom. */
+  -webkit-touch-callout: none;
+  touch-action: manipulation;
+  user-select: none;
 }
 
 .dpad-center {
@@ -1975,4 +1983,21 @@ details.inspector summary,
   overflow-wrap: anywhere;
   padding: 0 var(--space-1);
   white-space: normal;
+}
+
+/* Touch screens: the keyboard instructions do not apply. */
+@media (pointer: coarse) {
+  .play-keys-note {
+    display: none;
+  }
+}
+
+.play-touch-note {
+  display: none;
+}
+
+@media (pointer: coarse) {
+  .play-touch-note {
+    display: block;
+  }
 }
