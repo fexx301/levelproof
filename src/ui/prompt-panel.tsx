@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { DisclosureGlyph } from './check-strip.js';
-import { BUILD_PROMPTS, EXAMPLE_PROMPTS, MAKEOVER_PROMPT, SHORTCUT_PROMPT, TWIST_PROMPT } from './example-prompts.js';
+import { BUILD_PROMPTS, EXAMPLE_PROMPTS, MAKEOVER_PROMPT, TWIST_PROMPT, WINTER_PROMPT } from './example-prompts.js';
 import { useApp } from '../state/store.js';
 import { themeKeySchema, type ThemeKey } from '../../shared/api.js';
 
@@ -44,11 +44,11 @@ function CompileProgressCard() {
   const seconds = Math.max(0, (now - progress.startedAt) / 1000);
   const recent = progress.recent.slice(-7);
   return (
-    <section className={`compile-progress${progress.revising ? ' is-revising' : ''}`} aria-label="Compile progress" aria-live="polite">
+    <section className={`compile-progress${progress.revising ? ' is-revising' : ''}`} aria-label="Compile progress">
       <div className="compile-progress-head">
         <span className="compile-progress-pulse" aria-hidden="true" />
-        <strong>{stageText(progress)}</strong>
-        <span className="compile-progress-time">{seconds.toFixed(0)} s</span>
+        <strong aria-live="polite">{stageText(progress)}</strong>
+        <span className="compile-progress-time" aria-hidden="true">{seconds.toFixed(0)} s</span>
       </div>
       {progress.revising && progress.note !== null && (
         <p className="compile-progress-finding">
@@ -128,7 +128,7 @@ export function PromptPanel() {
         ]
       : [
           { label: 'Spooky night makeover', prompt: MAKEOVER_PROMPT },
-          { label: 'Add a shortcut', prompt: SHORTCUT_PROMPT },
+          { label: 'Winter makeover', prompt: WINTER_PROMPT },
           { label: 'Suggest a twist', prompt: TWIST_PROMPT },
         ];
   const runExample = (prompt: string) => {

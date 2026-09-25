@@ -71,10 +71,10 @@ export function CheckStrip({ report, ms }: { report: Report; ms: number }) {
       </div>
       {checks.map(({ result, kind }) => (
         <div key={kind} className={`check check--${result.status}`}>
-          <h3 className="check-name">
+          <h3 className="check-name" title={`${CHECK_QUESTIONS[kind].technical} check`}>
             <span>
               {CHECK_QUESTIONS[kind].question}
-              <span className="check-technical">{CHECK_QUESTIONS[kind].technical}</span>
+              <span className="visually-hidden"> ({CHECK_QUESTIONS[kind].technical} check)</span>
             </span>
             <span className="check-status">{answerText(kind, result.status)}</span>
           </h3>

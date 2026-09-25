@@ -1,32 +1,37 @@
 # LevelProof — submission description
 
-**Category framing:** AI copilot for 3D creation (browser-based editor).
+**Focus category:** Browser-native creative tools (use the exact wording from
+the submission form; AI-generated 3D scenes is the closest alternative).
 
-**What we built.** LevelProof is an AI puzzle creator with automatic
-playtesting. You describe a small 3D puzzle in plain language — "put the brass
-key on the balcony and make the vault door require it" — and a live language
-model compiles your intent into typed operations on a discrete kit (floors,
-ramps, bridges, keys, one-shot switches, doors). A deterministic playtester
-then exhaustively explores every reachable state of the resulting scene and
-reports three independent verdicts: does a solution exist, does *every*
-winning route honor your design requirements, and can every reachable state
-still recover? When something breaks, you don't get a warning label — you get
-the failure itself: a ghost pawn replays the exact doomed route (the keyless
-bypass, the player who seals a door behind themselves), and a repair search
-offers checked fixes that provably preserve your rules. You can then play the
-scene yourself with the same movement engine the checker used.
+**What we built.** LevelProof turns one sentence into a playable 3D puzzle
+world — and then proves whether it works. Describe “a haunted forest keep
+with the key at the top of a tower and a dragon guarding the treasure room”
+and a live model compiles your words into typed operations: rooms, ramps,
+bridges, keys, one-shot switches, and doors, plus the scenery that makes it
+look like what you said (a night forest, a dragon statue, a torch instead of a
+key). You watch the model’s plan and each operation stream in. Before you
+accept anything, a deterministic playtester explores every reachable state
+and answers three questions: *Can it be won? Does it follow your rules? Can a
+player get stuck?*
 
-**The problem we explored.** Generative tools are good at producing scenes and
-bad at guaranteeing they *work*. One successful playthrough proves nothing
-about dead ends or shortcuts — and nobody can playtest every branch of a
-puzzle by hand. LevelProof makes verification the product: the AI proposes,
-deterministic search disposes, and the human approves.
+**The problem we explored.** Generative tools are good at producing scenes
+and bad at guaranteeing they *work*. One successful playthrough proves
+nothing about dead ends or shortcuts, and nobody can playtest every branch by
+hand. LevelProof makes verification the product: the AI proposes, the engine
+disposes, and the human approves.
 
 **How AI is used.** The model composes typed edits against an authoritative
-scene summary — it can never emit raw scene JSON, traversal edges, or
-verdicts; those come only from the shared core engine that the player, the
-ghost, and the verifier all call. Ambiguous requests return a clarifying
-question, unsupported ones an honest refusal. Compile results are cached with
-full disclosure (fresh vs. cached, model, cost, attempts), and rule changes
-require explicit human approval — the system cannot weaken your design
-requirements on its own.
+scene summary — it never emits raw scene JSON, traversal edges, or verdicts;
+those come only from one shared engine used by the player, the ghost, the
+verifier, and the repair search. When a build cannot be won, the engine’s
+concrete findings go back to the model and it revises (disclosed in the
+preview). When a design fails, a ghost replays the exact verified route, the
+model narrates the engine’s facts (grounding-checked), and you choose between
+an AI fix judged by the engine and deterministic repairs that provably keep
+your rules. Ambiguous requests get one clarifying question; mechanics the kit
+cannot simulate get an honest “unsupported” with alternatives. Every compile
+discloses fresh vs cached, model, cost, and attempts.
+
+**Built with:** Three.js (all 3D procedural — no imported or AI-generated
+assets), React, Zustand, Zod, Vite, Vercel serverless, OpenRouter
+(`gemini-3.8-flash`).

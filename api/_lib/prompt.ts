@@ -57,7 +57,7 @@ function occupancyGrid(level: Level): string[] {
 }
 
 /** Bump when the system prompt changes; participates in the cache key (§10.2). */
-export const PROMPT_VERSION = 'prompt-9';
+export const PROMPT_VERSION = 'prompt-11';
 
 export function buildSystemPrompt(level: Level, baseRevision: string): string {
   return `You are the compiler for LevelProof, a 3D puzzle editor with discrete movement. Convert the user's request into exactly ONE typed result: a patch, a clarification, a rule_proposal, or an unsupported response. You compose typed edits against the scene; you never invent traversal rules, verify puzzles, or emit raw level JSON.
@@ -102,7 +102,7 @@ OPERATIONS (at most ${BOUNDS.maxOpsPerPatch} per result; ids match ^[a-z][a-z0-9
 - {"kind":"removeDoor","id"}
 - scenery: setScenery, addProp, moveProp, removeProp, setKeyLook (see SCENERY)
 
-RESPONSE FORMAT — a single JSON object whose "type" field is required and must be exactly one of the four values below. Include ONLY the fields shown for that type; omit nothing:
+RESPONSE FORMAT — a single JSON object whose "type" field is required and must be exactly one of the four values below. Include ONLY the fields shown for that type; omit nothing. "rationale", "reason", "assumptions", and "question" are read by the author: plain words and place names, never coordinates, elevations, or ids.
 {"type":"patch","rationale":"...","assumptions":["..."],"operations":[...]}
 {"type":"clarification","question":"...","choices":[{"id":"...","label":"..."}]}
 {"type":"rule_proposal","reason":"...","oldRequirements":[...],"newRequirements":[...],"operations":[...]}

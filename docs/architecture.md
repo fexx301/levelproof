@@ -9,8 +9,11 @@ and the repair search — decides everything about movement and correctness.
 
 ```
 shared/            Wire contracts shared by client, server, and tests
-  schema.ts        The kit itself: modules, items, doors, requirements (Zod)
+  schema.ts        The kit itself: modules, items, doors, requirements, and the
+                   cosmetic scenery vocabulary (Zod)
   compile-result.ts The four compile results; wire normalization
+  scenery-aliases.ts Cosmetic word normalization (never gameplay fields)
+  stream-progress.ts Streamed reasoning headlines and operation parsing
   api.ts           Request/response envelopes for /api/compile and /api/explain
 api/               Serverless functions (Vercel)
   compile.ts       POST /api/compile
@@ -24,8 +27,12 @@ src/core/          The deterministic engine — zero DOM/renderer/React/network
   movement.ts      step()/transitions(): the single movement implementation
   verifier.ts      Bounded exhaustive exploration; the three checks; recovery map
   search.ts        Checked-repair templates; never weakens rules
+  engine-findings.ts Concrete engine facts for the AI↔engine revision loop
+  revision-policy.ts When a build is sent back to the model automatically
   serialize.ts     Canonical JSON + revision ids
 src/render/        Imperative Three.js diorama (scene, actors, overlays)
+  scenery.ts       Terrain, sky, fog, scatter, particles, lighting presets
+  props.ts         Procedural landmark props and key looks (no imported assets)
 src/state/         Zustand store: one accepted level + at most one draft
 src/ui/            React chrome (prompt panel, checks, playtester, repairs)
 ```
@@ -52,26 +59,69 @@ labeled draft with **Return to accepted** always available. One-step undo.
 ## Compile service policy
 
 At most three provider attempts: the primary model, at most one correction
-retry (generic for malformed JSON; carrying the engine's exact rejection
-reasons for a patch the core refused — **self-repair**), then the evaluated
-fallback. Patches and rule-proposal geometry are pre-applied with the same
-core the client uses, so a rejected edit never reaches the user. Everything
-is cost-accounted per attempt; the whole service fits inside the serverless
-platform's 60s ceiling (per-attempt timeouts clamp to the remaining budget).
+retry (generic for malformed JSON or an empty answer; carrying the engine's
+exact rejection reasons for a patch the core refused — **self-repair**), then
+the evaluated fallback. Patches and rule-proposal geometry are pre-applied
+with the same core the client uses, so a rejected edit never reaches the
+user. Everything is cost-accounted per attempt; the whole service fits inside
+the serverless platform's 60s ceiling (per-attempt timeouts clamp to the
+remaining budget).
+
+## Streaming
+
+With `Accept: application/x-ndjson`, `/api/compile` streams while the model
+works: the headlines of the model's own reasoning summary and each operation
+the moment its JSON object closes. These are provisional, unvalidated labels;
+the stream ends with exactly one `result` event carrying the same status and
+body the plain endpoint returns, and only that result is parsed, validated,
+and pre-applied. Clients that do not ask for the stream get plain JSON.
+
+## The AI↔engine revision loop
+
+The engine judges every proposal before the author sees it (the preview
+card's pre-check). When an **additive** patch produces a level that cannot be
+won, the client sends it back once with `revision.operations`; the server
+re-applies those operations, recomputes the engine's findings itself
+(`engine-findings.ts` — never client text), and asks the model for a
+corrected patch that keeps everything the author asked for. The better of the
+two (fewer failing checks) is staged, and the preview discloses the revision
+and the findings. Edits that remove things are never auto-revised — breaking
+a level can be the point. **Ask the AI to fix it** uses the same channel with
+an empty operation list to repair a failing draft; the deterministic checked
+repair search remains beside it.
+
+## Scenery (cosmetic)
+
+`level.scenery` (environment, lighting, architecture), `level.props`
+(landmarks on grid cells), and `key.look` let the world look like the words —
+a haunted forest, a dragon by the gate, a torch instead of a key. The
+verifier, movement engine, and repair search never read them; tests assert
+identical verdicts with and without scenery for every gallery scene. They
+appear in canonical JSON only when present, so older levels keep their exact
+revision ids, and they travel through saves, share links, undo, and history
+with the level. Cosmetic words the model gets slightly wrong ("lamp",
+"jungle") are normalized to the nearest supported value or dropped — the one
+deliberate exception to strict validation, and it never touches gameplay.
 
 ## Cache and cost disclosure
 
 Exact full-input identity: canonical level content, prompt, clarification
-context, model configuration, and prompt version all participate in the key.
-In-memory and instance-local by design — a cold start simply means a fresh
-provider call, never a stale verdict. The UI always shows **Fresh compile**
-or **Cached compile** with model, dollar cost, and attempt count in a
-collapsible inspector. Explanations are cached and disclosed the same way.
+context, selection, kept entities, conversation turns, revision operations,
+model configuration, and prompt version all participate in the key. Two
+tiers: bounded in-memory per instance, and (when Upstash is configured) a
+shared store keyed by the SHA-256 of that identity that stores the full
+identity and only reuses an exact match; entries expire after
+`SHARED_CACHE_TTL_SECONDS` (7 days by default) and hold the prompt text. A
+store failure is only a miss. The UI always shows **Fresh compile** or
+**Cached result** with model, dollar cost, and attempt count in a collapsible
+inspector. Explanations are cached and disclosed the same way.
 
 ## Verification contract
 
 Three independent checks, each `pass` / `fail` / `check incomplete` /
-`not applicable`: solution (any goal reachable, with a playable route),
+`not applicable`, shown to authors as plain questions — *Can it be won?*,
+*Does it follow your rules?*, *Can a player get stuck?*: solution (any goal
+reachable, with a playable route),
 design requirements (every reachable goal contains the required keys — a
 keyless route alongside a keyed one still fails), and recovery (reverse
 search from all goals; any reachable state that cannot win is a dead end).

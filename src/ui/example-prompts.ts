@@ -1,14 +1,14 @@
 /**
- * The canonical demo prompts (§16). These exact strings are cache-verified
- * end-to-end on production (DECISIONS.md, Sep 12): the baseline accepts green
- * and the trap fails Recovery with the stranded witness. The exact-match
- * cache (§10.2) makes them deterministic and free; changing a word voids the
- * cache and returns the result to live-model odds. Keep them byte-identical
- * everywhere they appear: the UI example chips, the README, and the video
- * script.
+ * The canonical demo prompts (§16), graded live by scripts/chip-battery.ts.
+ * The shared exact-match cache (§10.2) serves a prewarmed chip instantly;
+ * changing a word voids its cache entry and returns it to live-model odds.
+ * Keep them byte-identical everywhere they appear: the UI example chips, the
+ * README, the prewarm script, and the video script.
  */
 export const EXAMPLE_PROMPTS = {
-  baseline: 'Put the brass key on the key balcony, and make the vault door require it.',
+  // Naming the exact edge matters: "the vault door" alone makes the model
+  // deliberate over which edge is meant (measured 5-27 s vs ~4 s).
+  baseline: 'Put the brass key on the key balcony, and add a vault door between the vault approach and the vault entry that requires it.',
   trap: 'Add a switch named seal-switch on the vault approach, and a door named gallery-door between the gallery and the bridge landing that closes permanently after the seal-switch activates.',
   removeRamp: 'Remove the ramp.',
   /**
@@ -18,7 +18,7 @@ export const EXAMPLE_PROMPTS = {
    * no rule approval is needed — one click reaches the signature moment.
    */
   trapOneShot:
-    'Put the brass key on the key balcony and make the vault door require it. Then add a switch named seal-switch on the vault approach, and a door named gallery-door between the gallery and the bridge landing that closes permanently after the seal-switch activates.',
+    'Put the brass key on the key balcony and add a vault door between the vault approach and the vault entry that requires it. Then add a switch named seal-switch on the vault approach, and a door named gallery-door between the gallery and the bridge landing that closes permanently after the seal-switch activates.',
 } as const;
 
 /**
@@ -57,4 +57,5 @@ export const BUILD_PROMPTS = [
 /** Scene-agnostic edits for any existing puzzle. */
 export const MAKEOVER_PROMPT =
   'Make it a spooky forest at night: dead trees around it, lanterns along the path, and a dragon statue guarding the goal.';
-export const SHORTCUT_PROMPT = 'Add a bridge that shortcuts straight to the goal.';
+export const WINTER_PROMPT =
+  'Turn it into a snowy mountain pass at dusk: snowy pines around it, lanterns along the path, and ice crystals near the goal.';

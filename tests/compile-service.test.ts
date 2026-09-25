@@ -54,7 +54,7 @@ describe('compile prompt guardrails', () => {
   it('defaults unspecified doors to open and forbids invented conditions', () => {
     const prompt = buildSystemPrompt(vaultEmptyLevel, revisionId(vaultEmptyLevel));
 
-    expect(PROMPT_VERSION).toBe('prompt-9');
+    expect(PROMPT_VERSION).toBe('prompt-11');
     expect(prompt).toContain('A door with no explicitly requested lock or switch behavior is an OPEN, passable door');
     expect(prompt).toContain('Never invent a key, switch, or other condition for a door');
     expect(prompt).toContain('if the intended condition or location is materially ambiguous, ask one concise clarification');

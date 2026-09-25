@@ -1,155 +1,176 @@
 # LevelProof
 
-Build a puzzle with AI. Watch how it breaks. Fix it without losing the idea.
+Build a puzzle world with AI. Watch how it breaks. Fix it without losing the idea.
 
-![The switch trap: the ghost replays the route that strands the player](assets/trap-loop.gif)
+![A one-sentence desert tomb streams in live, then appears as a verified, playable 3D level](assets/build-stream.gif)
 
 **Try it:** <https://levelproof.vercel.app>
 
-An AI puzzle creator with automatic playtesting. Describe a small 3D puzzle in
-plain language; a live model compiles your intent into typed kit operations,
-and a deterministic playtester explores every reachable state — then replays
-concrete failures (a keyless shortcut, a player who seals themselves in) as a
-ghost before you ship them.
+Describe a small 3D puzzle world in plain language. A live model compiles
+your words into typed operations — the rooms, ramps, bridges, keys, switches,
+and doors that make the puzzle, plus the scenery that makes it look like what
+you said. Then a deterministic playtester explores **every reachable state**
+and answers three questions before you accept anything: *Can it be won?*
+*Does it follow your rules?* *Can a player get stuck?* When the answer is bad,
+you see the failure itself — a ghost replays the doomed route — and you get
+fixes that the engine has already checked.
 
-## Try it
+## Type any world
 
-Open the demo and paste these two prompts in order — each compiles in a few
-seconds and the second one is the signature moment:
+Pick **Blank canvas** and describe a whole puzzle in one sentence, or press
+one of the build chips (**Haunted forest keep**, **Frozen observatory**,
+**Pirate cove**, **Lava temple**). While the model works you watch its plan
+and each operation stream in; the finished world appears as a preview you
+approve.
 
-1. `Put the brass key on the key balcony, and make the vault door require it.`
-2. `Add a switch named seal-switch on the vault approach, and a door named
-   gallery-door between the gallery and the bridge landing that closes
-   permanently after the seal-switch activates.`
+| The same prompt, before | …and now |
+|---|---|
+| ![Before: a beige walkway with a key](assets/before-forest.jpg) | ![After: a night forest, a river under a bridge, a dragon statue guarding a torch-locked door](assets/after-forest.jpg) |
+| *“Make a spooky forest with a river crossing and a dragon guarding the treasure. The player should need a torch to get past the dragon.”* | A night forest, a river under the bridge, a dragon statue at the hoard, and a key that looks like a torch. The door it opens is the real mechanic; the dragon is honestly labeled scenery. |
+| ![Before: a castle that could not be won](assets/before-castle.jpg) | ![After: a winnable castle with a watchtower, throne, and a seal trap placed so no one gets stranded](assets/after-castle.jpg) |
+| *“A small castle with a tall watchtower. The key is hidden at the top of the tower, and the throne room is locked behind a door that needs it. Add a pressure plate trap that seals the courtyard gate.”* | The watchtower key, the locked throne room, and the sealing trap — built so every reachable state can still win. |
 
-Prompt 2 adds a trap: a player who presses the switch before taking the key
-seals the gallery door behind themselves. Recovery turns red, and
-**The failure — a player gets stranded** replays the exact doomed route as a
-ghost. Approve the checked repair and the level turns green again.
+The kit is deliberately small and exact: a 16×16 grid, up to three floor
+levels, flat/ramp/bridge modules, up to 3 keys, 4 one-shot switches, and
+doors that require keys, require switches, or seal once a switch fires.
+Everything the kit cannot *simulate* is expressed as **scenery**:
+environments (meadow, forest, swamp, desert, snow, volcanic, cavern, sea,
+space, city), day/dusk/night lighting, five building styles, 29 procedural
+landmark props (a dragon, a throne, a fountain, braziers, water and lava
+tiles…), and key looks (torch, lantern, gem, crown, scroll, keycard…). The
+engine never reads scenery — a dragon never blocks a door — and the preview
+says so.
 
-When a check fails, **Why did this fail?** asks the model to phrase the
-engine's causal story in plain language — the server recomputes the verdict
-from your scene before the model writes a word, and its output is checked
-against the scene's real ids before it is shown. The engine's verdict always
-stands on its own; the narration adds story, never authority.
+## Watch it break
 
-The header's scene picker also offers three verified showcase levels — **The
-Twin Keys** (silver unlocks the gold wing; a powered return loop opens the
-two-key vault), **The Overpass** (cross above the lower corridor, activate
-the relay, then descend to the lower vault), and **The Gauntlet** (collect
-the key and arm the gate before committing; the entrance seals behind you
-as the exit opens). The checker proves every reachable state can still win.
-Each scene has its own material palette, tracked retracting shutters, and
-architectural detailing. The camera holds the whole puzzle during play;
-orbit/zoom remain available and **Frame level** restores the overview.
-In every scene the checker's analysis is drawn on the floors: red
-tiles can strand a player, dimmed tiles are unreachable — the exhaustive
-search made visible (hidden while you play, so it never spoils the puzzle).
+![The switch trap: the ghost replays the route that strands the player](assets/trap-loop.gif)
 
-You can also play any scene yourself with the keyboard — the same movement
-engine the checker uses. AI edits first arrive as a red/green before-and-after
-preview; **Apply edit** commits them and **Keep current** discards them. Choose
-an explicit architecture theme — limestone, ivory, patina, basalt, or
-futuristic — or leave it on Auto. **Save** stores the accepted checkpoint
-locally; **Share** copies a link that opens that accepted puzzle directly in
-play mode, where a friend can press
-**Remix this puzzle** to start editing their own copy.
+On **The Balcony Vault**, press **Key + locked door**, apply it, then press
+**The switch trap**. The trap is legal but deadly: a player who presses the
+switch before taking the key seals the gallery door behind them. *Can a
+player get stuck?* turns to **Yes**, the stranded floors turn red, and
+**Show the problem** replays the exact verified route as a ghost and pauses
+on the decisive move. **Why did this fail?** asks the model to narrate the
+engine's own facts — the server recomputes the verdict first and checks every
+id the model writes against the scene.
+
+## The AI and the engine argue until it works
+
+![The engine found the first build could not be won; the model revised it](assets/revision-loop.jpg)
+
+Every proposal is checked by the engine before you see it; the preview card
+shows the **engine pre-check** next to the **Apply** button. When a build
+that only *adds* things cannot be won — the model locked the key behind its
+own door — the engine's concrete findings go back to the model once
+(recomputed on the server, never taken from the client) and the revision is
+shown with a disclosure of what the engine found. Edits that remove things
+are shown exactly as asked: breaking a level can be the point.
+
+On a failing draft you get two kinds of repair:
+
+- **Ask the AI to fix it** — the model proposes a fix that keeps your idea;
+  the engine judges it before you see it.
+- **Find checked repairs** — a deterministic search (≤ 24 candidates, ≤ 4
+  operations) over four template families: gate the bypass with a keyed door,
+  relocate the trapping switch, move the key onto the shortcut, or dissolve
+  the trap. Every candidate is fully re-verified; repairs never weaken a
+  rule, move the goal, or grant inventory.
 
 ## What the AI can edit
 
 The model never emits raw scene JSON. It composes typed operations against an
-authoritative scene summary — add/move/remove modules (flat, ramp, bridge on a
-16×16 grid with elevations, including bridges crossing directly over lower
-corridors), place keys and one-shot switches, set door conditions
-(`requiresKey`, `requiresKeys` — every listed key must be held —
-`requiresSwitch`, `closesAfterSwitch`), move the spawn or goal, and propose
-`collectBeforeGoal`, `passThrough`, and `switchNecessary` design requirements
-(which you approve — the model cannot weaken your rules). Ambiguous or
-unsupported requests come back as a
-clarifying question or an honest `unsupported` card, never a silent guess.
+authoritative scene summary — add/move/remove modules (including bridges
+directly over lower corridors), place keys and switches, set door conditions
+(`requiresKey`, `requiresKeys` — every listed key — `requiresSwitch`,
+`closesAfterSwitch`), move the spawn or goal, rename places, set scenery,
+place landmark props, and propose `collectBeforeGoal`, `passThrough`, and
+`switchNecessary` design requirements (which you approve — the model cannot
+weaken your rules). Ambiguous requests come back as one clarifying question;
+mechanics the kit cannot simulate come back as an honest `unsupported` card
+with alternatives.
 
-Pick **Blank canvas** in the scene selector and describe a whole puzzle in one
-sentence — from-scratch generation is measured at 15/16 fresh judge-voice
-phrasings producing accepted, fully-verified levels; the one miss was a
-provider-latency timeout and passed on retry. Or press **Suggest a twist** on any scene and
-let the model propose a mechanic the checker immediately judges (a twist that
-breaks recovery is the product working: red floors, witness, checked repair).
-
-You can also **click anything in the scene** — a floor, key, switch, or door —
-and describe the change relative to it: "move this behind that door", "make
-these two doors require both keys", "put a switch here". And when a repair
-would touch something you care about, select it and press **Keep these**: the
-repair search then excludes anything that moves or removes it, and says so
-when that leaves no checked fix.
+Click anything in the scene — a floor, key, switch, door, or landmark — and
+describe the change relative to it (“move this behind that door”). Select
+something you care about and press **Keep these**: proposals and repairs that
+would change it are refused.
 
 ## Three checks, honestly reported
 
-One successful route proves nothing, so every edit is verified three ways —
-each reported as `pass`, `fail`, `check incomplete`, or `not applicable`:
+- **Can it be won?** (solution) — is any goal reachable, with a playable
+  route?
+- **Does it follow your rules?** (design requirements) — does *every*
+  winning route satisfy the active requirements? A keyless bypass alongside a
+  keyed route still fails.
+- **Can a player get stuck?** (recovery) — can every reachable non-goal state
+  still win? Reverse search finds the dead ends and witnesses the earliest.
 
-- **Solution** — is any goal reachable, with a playable route?
-- **Design requirements** — does *every* winning route satisfy the active
-  requirements? This includes collecting required key(s), crossing required
-  module(s), and activating necessary switch(es). A keyless bypass alongside
-  a keyed route still fails.
-- **Recovery** — can every reachable non-goal state still win? Reverse search
-  finds dead ends and witnesses the earliest one.
+Exploration is bounded and exhaustive (≤ 32,768 states: module × keys ×
+switches). If the bound is hit, the check says *check incomplete* instead of
+pretending. Player, ghost, verifier, and repair search all call the same core
+`step()` over the same catalog polylines; a witness only plays back if it
+replays through that engine from the real initial state.
 
-Incomplete exploration is never green. If the state bound is hit, the check
-says so instead of pretending.
+## Model, latency, and cache — disclosed
 
-## One movement engine, everywhere
+Compiles run through OpenRouter on `google/gemini-3.8-flash` with low
+reasoning effort (fallback `google/gemini-2.5-flash-lite`). Measured on
+2026-09-25 (small samples; see [`docs/model-eval.md`](docs/model-eval.md)):
 
-Player, ghost, verifier, and search all call the same core `step()` over the
-same catalog polylines — floats never decide legality. Exploration is bounded
-and exhaustive (≤ 32,768 states: module × keys × switches); the golden fixture
-verifies in ~1 ms on the main thread. A witness only plays back if it replays
-through that same engine from the real initial state.
+- Direct evaluation battery (27 calls): 27/27 schema-valid, 26/27 semantically
+  correct on the first try, 4/4 ambiguity and 2/2 rule-protection cases,
+  median 4.7 s.
+- The fixed 30-case suite plus 12 repeats through the real endpoint: 41/42.
+- Every example chip, twice each on the final prompt: 24/24.
+- Eight one-sentence worlds on the blank canvas: 8/8 valid on the first try,
+  7/8 winnable (the eighth is what the revision loop is for), typically
+  5–12 s. The previous model (`gemini-3.7-flash`) took 20–33 s on the same
+  prompts and produced 6/8 valid.
 
-## Checked repairs
-
-When an edit breaks a rule, the repair search enumerates deterministic
-candidates (≤ 24, ≤ 4 operations, no recursion) from four template families —
-gate the bypass with a keyed door, relocate the trapping switch, move the
-required key onto the shortcut, or dissolve the trap — fully re-verifies each
-against every active rule, and ranks them by a versioned preference that
-keeps every entity ahead of destructive fixes and favors fewer changes.
-Repairs can never weaken a rule, move the goal, or grant inventory; relaxing
-a rule is a separate, explicitly approved diff.
-
-## Model and cache, disclosed
-
-Compiles run through OpenRouter (`google/gemini-3.7-flash`, fallback
-`google/gemini-2.5-flash-lite`; chosen by a measured reliability battery —
-30+ phrasings graded by the deterministic engine — see
-`docs/model-eval.md` and `scripts/reliability.ts`).
-Identical requests — same level, rules, prompt, and versions — are served from
-an exact-match cache, and the UI always shows whether you are seeing a
-**Fresh compile** or a **Cached compile** with its model, cost, and attempt
-count in a collapsible inspector. Every result carries the revision it
-verified against; stale results are discarded.
+Latency varies with how long the model chooses to reason: most edits finish
+in 3–12 s, and a large build occasionally takes 30 s or more, which is why the
+plan and operations stream live. Identical requests — same level, prompt,
+selection, kept objects, conversation, prompt version, and model
+configuration — are served from an exact-match cache: in memory per server
+instance and, when Upstash is configured, in a shared store for 7 days
+(entries contain the prompt text). The UI always shows **Fresh compile** or
+**Cached result**, with model, cost, and attempts in **Generation details**.
+The example chips are prewarmed after each deploy (`scripts/prewarm.ts`).
 
 ## Setup and tests
 
 ```bash
 npm install
-cp .env.example .env   # add your OpenRouter key
-npm run dev            # vite dev server
-npm test               # vitest: core semantics + fixtures
-npm run typecheck && npm run lint && npm run build
+cp .env.example .env   # add your OpenRouter key (and optionally Upstash)
+npm run dev            # Vite dev server; also serves /api/compile and /api/explain
+npm run verify         # typecheck, lint, 246 unit tests, production build
+npm run test:e2e       # Playwright browser journeys (fixture-backed, no model calls)
+```
+
+Live-model scripts are opt-in, budget-capped, and stop on unknown cost:
+
+```bash
+npx tsx scripts/chip-battery.ts --confirm-live-ai --budget-usd 0.50   # every chip, graded
+npx tsx scripts/build-battery.ts --confirm-live-ai --budget-usd 0.30  # one-sentence worlds
+npm run eval -- --confirm-live-ai --budget-usd 0.40 --models google/gemini-3.8-flash
+npx tsx scripts/prewarm.ts --confirm-live-ai --budget-usd 0.40 --url https://levelproof.vercel.app
+npx tsx scripts/prop-gallery.ts forest night   # share links showing every prop (visual QA)
 ```
 
 The deterministic core (`src/core`) has no DOM, renderer, React, or network
 imports — the same engine runs in tests, the browser, and the serverless API.
-Full details: [architecture](docs/architecture.md) and
-[the movement model](docs/movement-model.md).
+The renderer adapts its quality on slow devices (resolution first, then
+terrain shadows and particles). Details: [architecture](docs/architecture.md),
+[the movement model](docs/movement-model.md), and the
+[evaluation report](docs/evaluation-report.md).
 
 ## Provenance and licenses
 
 Submission code is MIT. Built with Three.js, React, Zustand, Zod, Vite, and
-Vitest (all MIT); typography is Space Grotesk Variable and IBM Plex Mono
-(SIL OFL 1.1, via Fontsource). No AI-generated assets are used — the model
-only ever compiles typed operations at runtime. Pre-window planning notes
-are private and excluded from this repository.
+Vitest (all MIT); typography is Space Grotesk Variable and IBM Plex Mono (SIL
+OFL 1.1, via Fontsource). Every 3D asset — terrain, trees, the dragon, the
+props — is built procedurally from Three.js primitives; no imported or
+AI-generated assets are used. The model only ever compiles typed operations at
+runtime. Pre-window planning notes are private and excluded from this
+repository.
 
 > Built for the [AI Builder Hackathon 2026](https://www.victoriavr.com/news/ai-builder-hackathon-2026-build-the-future-of-ai-native-3d-experiences-5915194b) (Victoria VR).

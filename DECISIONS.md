@@ -2,6 +2,54 @@
 
 Build-window decisions and measured evidence, newest first. Dates are 2026.
 
+## Sep 25 (strategic pass — the world matches the prompt)
+
+- **The gap, measured on production**: a judge-style prompt (“a spooky forest
+  with a river crossing and a dragon guarding the treasure”) produced an
+  accepted but beige walkway — the world ignored the words — and a castle
+  prompt took ~35 s and came back unwinnable, with both offered repairs
+  deleting the trap the author asked for. Judges test with their own prompts
+  (terms §9), so the free-prompt path, not the scripted vault, is what gets
+  judged.
+- **Scenery layer (cosmetic, engine-blind)**: `level.scenery`, `level.props`,
+  `key.look`, five scenery operations, a procedural environment renderer
+  (terrain, sky, fog, merged scatter, particles, day/dusk/night) and 29
+  procedural props. Creatures and relics become honest scenery over a real
+  mechanic (“the dragon is scenery; the torch-locked door guards the hoard”).
+  Tests pin identical verdicts with and without scenery for every gallery
+  scene; pre-scenery revision ids are unchanged. Cosmetic words are
+  normalized (lamp → lantern, jungle → forest) — the one deliberate exception
+  to strict validation, never applied to gameplay fields.
+- **AI↔engine loop**: an additive patch that cannot be won is sent back once
+  with server-computed engine findings; the preview discloses the revision.
+  **Ask the AI to fix it** repairs drafts through the same channel; the
+  deterministic checked-repair search stays beside it. Every preview carries
+  an engine pre-check.
+- **Streaming**: NDJSON progress (reasoning headlines, each operation) with a
+  single final result identical to the plain endpoint; the plain JSON path
+  remains for scripts and older clients.
+- **Model**: `gemini-3.8-flash` at low reasoning effort replaces 3.7-flash as
+  primary — measured in `docs/model-eval.md` (small samples). Chips were
+  reworded to name exact edges after measuring that ambiguity, not build
+  size, drives latency. Production needs `LLM_MODEL` changed together with the
+  deploy.
+- **Shared cache tier (Upstash)** so cold serverless instances still answer
+  prewarmed chips instantly; `scripts/prewarm.ts` warms every chip exactly as
+  the editor sends it. Entries hold prompt text for 7 days (disclosed).
+- **UX**: plain-language check names (technical names kept in tooltips and
+  the inspector), the proposal rendered in the viewport during preview, a
+  compact first-run guide below the prompt, scene-aware chips, one-line change
+  summaries, removal of prompt word-detection that silently pinned a theme.
+- **Performance**: adaptive quality (resolution, then terrain shadows and
+  particles) after sustained slow frames; static scatter merged into one mesh
+  per material. SwiftShader replay: 6.8 fps before scenery, 2.9 fps with
+  scenery unmerged, 5.0 fps after these measures; Apple M4 Pro via Metal:
+  60 fps (vsync-capped).
+- **Evidence**: 246 unit tests (scenery invariants, stream parsing, NDJSON
+  client, engine findings, revision requests, shared cache, auto-revision
+  store flow); 10/10 Playwright journeys; live batteries recorded in
+  `docs/model-eval.md` and `docs/evaluation-report.md`.
+
 ## Sep 13 (integrity pass — staged edits, parity, and accepted checkpoints)
 
 - AI patches now stop at a visible before/after review. The author can apply or

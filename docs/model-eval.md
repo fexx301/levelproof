@@ -90,3 +90,47 @@ engine-graded) replaced the earlier slate's snapshot judgment:
 Decision: **3.7-flash primary, 2.5-flash-lite fallback** (config live since
 Sep 12). Canonical demo strings re-verified fresh under the new model.
 Battery spend $0.249 total (raised eval allowance, user-approved).
+
+## Sep 25 update — gemini-3.8-flash at low reasoning effort
+
+Context: the scenery vocabulary made the system prompt longer (prompt-9 → 11),
+and judges will type their own one-sentence worlds. On `gemini-3.7-flash` a
+from-scratch build spent 2,000–4,000 reasoning tokens (20–35 s); one swamp
+prompt ran past the 45 s attempt timeout. Reasoning is mandatory on these
+endpoints (`enabled: false` is rejected) and `reasoning.max_tokens` is not
+honored (a 1,024 cap produced 3,866 reasoning tokens); `effort: "low"` is the
+lever that works. All runs below are small samples, dated 2026-09-25.
+
+| Run | Prompt | Model | Result |
+|---|---|---|---|
+| `scripts/eval.ts`, 12 fixtures × 2 (+3 golden repeats) | prompt-9 | `gemini-3.8-flash`, effort low | schema 27/27 · semantic first try **26/27** · ambiguity 4/4 · rule protection 2/2 · references 19/19 · median **4.7 s** · $0.147 |
+| 8 one-sentence worlds, blank canvas (`scripts/build-battery.ts`) | prompt-9 | `gemini-3.8-flash`, effort low | valid first try **8/8** · winnable 7/8 · 5.2–11.3 s · ~$0.007 each |
+| same 8 worlds | prompt-9 | `gemini-3.7-flash`, default | valid first try 6/8 (one two-items-per-module rejection, one schema error) · 20.3–33.4 s · ~$0.018 each |
+| Fixed 30-case suite + 12 repeats via the endpoint (`eval:fixed:live`, local dev API) | prompt-10 | `gemini-3.8-flash`, effort low | **41/42** semantic; the miss changed a door the case marks must-not-change · $0.211 |
+| Every example chip × 2, graded (`scripts/chip-battery.ts`) | prompt-11 | `gemini-3.8-flash`, effort low | **24/24**; an earlier run needed one engine-guided revision (Pirate cove) and passed |
+
+Observations that shaped the prompt and chips:
+
+- Latency follows how much the model deliberates, not how big the build is.
+  “make the vault door require it” reasoned for 3,000–5,000 tokens (up to
+  38 s) because the edge is ambiguous; naming the edge (“a vault door between
+  the vault approach and the vault entry”) produced 0 reasoning tokens and
+  ~4 s. The canonical chips now name their edges.
+- The prompt-9 preservation misses (clarifying instead of refusing a change
+  to a kept object) came from the service instruction itself (“ask the creator
+  to unkeep”); prompt-10 asks for an `unsupported` answer naming the kept
+  object, and the preservation category went from 3/6 to 6/6.
+- Gemini occasionally returns an empty completion after reasoning; the
+  service now treats that as invalid output and retries the primary instead of
+  dropping to the weaker fallback.
+- A generic “add a shortcut” chip was ambiguous on scenes other than the
+  vault (a clarification once, a timeout once) and was replaced by a scenery
+  makeover chip that is safe on every scene.
+
+Decision: **primary `google/gemini-3.8-flash` (reasoning effort low),
+fallback `google/gemini-2.5-flash-lite`**. Deployment requires setting
+`LLM_MODEL` and `LLM_FALLBACK_MODEL` in the hosting environment together with
+the code (the prompt-11 code on the old 3.7 configuration is slower than
+today's production). Spend for this whole improvement pass, every live call
+including probes, recordings, and a local prewarm test: about $1.8 (OpenRouter
+reported costs).

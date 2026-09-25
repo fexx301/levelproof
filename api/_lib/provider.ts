@@ -27,7 +27,7 @@ export interface ProviderUsage {
 
 export type ProviderResult =
   | { ok: true; content: string; usage: ProviderUsage }
-  | { ok: false; kind: ProviderErrorKind; error: string };
+  | { ok: false; kind: ProviderErrorKind; error: string; usage?: ProviderUsage; empty?: boolean };
 
 export interface StructuredOptions {
   jsonSchema?: Record<string, unknown>;
@@ -100,16 +100,13 @@ async function readStream(
       if (chunk.usage !== undefined) usage = chunk.usage;
     }
   }
-  if (content.length === 0) return { ok: false, kind: 'unknown', error: 'Empty completion content.' };
-  return {
-    ok: true,
-    content,
-    usage: {
-      promptTokens: usage?.prompt_tokens ?? 0,
-      completionTokens: usage?.completion_tokens ?? 0,
-      costUsd: typeof usage?.cost === 'number' ? usage.cost : null,
-    },
+  const accounted: ProviderUsage = {
+    promptTokens: usage?.prompt_tokens ?? 0,
+    completionTokens: usage?.completion_tokens ?? 0,
+    costUsd: typeof usage?.cost === 'number' ? usage.cost : null,
   };
+  if (content.length === 0) return { ok: false, kind: 'unknown', error: 'Empty completion content.', usage: accounted, empty: true };
+  return { ok: true, content, usage: accounted };
 }
 
 export async function chatCompletion(
@@ -144,11 +141,13 @@ export async function chatCompletion(
     if (options.reasoningEffort !== undefined) {
       body.reasoning = { effort: options.reasoningEffort };
     }
+    // Always request usage accounting: cost disclosure and the evaluation
+    // budgets depend on it, and some responses omit it otherwise.
+    body.usage = { include: true };
     if (onDelta !== undefined) {
       // Streaming lets the editor show the model's plan and each operation as
       // it is written; usage accounting arrives in the final chunk.
       body.stream = true;
-      body.usage = { include: true };
     }
     const response = await fetch(`${config.baseUrl}/chat/completions`, {
       method: 'POST',
@@ -174,18 +173,17 @@ export async function chatCompletion(
       usage?: { prompt_tokens?: number; completion_tokens?: number; cost?: number };
     };
     const content = data.choices?.[0]?.message?.content;
-    if (typeof content !== 'string' || content.length === 0) {
-      return { ok: false, kind: 'unknown', error: 'Empty completion content.' };
-    }
-    return {
-      ok: true,
-      content,
-      usage: {
-        promptTokens: data.usage?.prompt_tokens ?? 0,
-        completionTokens: data.usage?.completion_tokens ?? 0,
-        costUsd: typeof data.usage?.cost === 'number' ? data.usage.cost : null,
-      },
+    const usage: ProviderUsage = {
+      promptTokens: data.usage?.prompt_tokens ?? 0,
+      completionTokens: data.usage?.completion_tokens ?? 0,
+      costUsd: typeof data.usage?.cost === 'number' ? data.usage.cost : null,
     };
+    if (typeof content !== 'string' || content.length === 0) {
+      // A reasoning model can spend its turn thinking and return no answer;
+      // that is invalid output (retry the primary), not a provider outage.
+      return { ok: false, kind: 'unknown', error: 'Empty completion content.', usage, empty: true };
+    }
+    return { ok: true, content, usage };
   } catch (error) {
     if (requestSignal?.aborted) {
       return { ok: false, kind: 'cancelled', error: 'The request was cancelled by the client.' };

@@ -169,7 +169,7 @@ export async function compile(
           ? `(The author selected these scene entities: ${input.selection.join(', ')}. References like "this door" or "that switch" mean these.)`
           : null,
         input.protectedIds && input.protectedIds.length > 0
-          ? `(The creator marked these scene entities Keep these: ${input.protectedIds.join(', ')}. Do not add, remove, move, rename, or change the connections or conditions of any listed entity. If the request conflicts with this protection, ask the creator to unkeep the entity before proposing a change.)`
+          ? `(The creator marked these scene entities Keep these: ${input.protectedIds.join(', ')}. Do not add, remove, move, rename, or change the connections or conditions of any listed entity. If the request cannot be done without changing a kept entity, respond with type "unsupported": name the kept entity in "reason" and offer unkeeping it as one of the "alternatives".)`
           : null,
         input.clarificationContext ? `(Clarification context: ${input.clarificationContext})` : null,
         revisionNote,
@@ -235,12 +235,15 @@ export async function compile(
     }
     const latencyMs = performance.now() - t0;
     if (!response.ok && response.kind === 'cancelled') return { parsed: null, cancelled: true };
-    const costUsd = response.ok ? response.usage.costUsd : null;
+    const costUsd = response.ok ? response.usage.costUsd : response.usage?.costUsd ?? null;
     totalCostUsd = totalCostUsd === null || costUsd === null ? null : totalCostUsd + costUsd;
     let outcome: AttemptRecord['outcome'];
     let parsed: CompileResult | null = null;
     let rejection: string[] | undefined;
-    if (!response.ok) {
+    if (!response.ok && response.empty === true) {
+      // An empty answer is invalid output: the primary gets its correction retry.
+      outcome = 'schema_invalid';
+    } else if (!response.ok) {
       if (response.kind === 'cancelled') return { parsed: null, cancelled: true };
       outcome = 'error';
       lastProviderError = response.kind;

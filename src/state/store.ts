@@ -19,6 +19,7 @@ import { verify, type Report } from '../core/verifier.js';
 import { buildFailureEvidence, type FailureEvidence } from '../core/failure-evidence.js';
 import { engineFindings } from '../core/engine-findings.js';
 import { summarizeChange } from '../core/operation-description.js';
+import { shouldAutoRevise } from '../core/revision-policy.js';
 import type { MoveRecord } from '../core/movement.js';
 import { validateRoute } from '../core/replay.js';
 import { decodeLevelShare, encodeLevelShare, revisionId } from '../core/serialize.js';
@@ -208,7 +209,7 @@ function applyProgress(state: CompileProgressState, event: CompileProgress): Com
  * UI; the final result carries exactly what the plain endpoint returns. An
  * older server (or a test fixture) answering with plain JSON still works.
  */
-async function postCompile(
+export async function postCompile(
   body: Record<string, unknown>,
   signal: AbortSignal,
   onProgress: (event: CompileProgress) => void,
@@ -257,19 +258,7 @@ async function postCompile(
   return { ok: settled.status >= 200 && settled.status < 300, status: settled.status, body: settled.body };
 }
 
-const REMOVAL_KINDS = new Set<Operation['kind']>(['removeModule', 'removeItem', 'removeDoor', 'removeProp']);
-
-/**
- * An additive build that cannot be won is almost never what the author
- * meant, so it gets one automatic AI↔engine revision. Edits that remove
- * things are shown exactly as asked: breaking a level can be the point.
- */
-export function shouldAutoRevise(base: Level, candidate: Level, operations: Operation[]): boolean {
-  if (operations.length === 0 || operations.some((operation) => REMOVAL_KINDS.has(operation.kind))) return false;
-  const before = verify(base);
-  const after = verify(candidate);
-  return after.valid && after.complete && after.checks.solution.status === 'fail' && before.checks.solution.status !== 'fail';
-}
+export { shouldAutoRevise };
 
 /** Fewer failing checks is better; an unwinnable level is worst. */
 function reportScore(report: Report): number {
@@ -446,17 +435,6 @@ const EXPLAIN_INITIAL: ExplainSlice = {
   busy: false,
   error: null,
 };
-
-/** Theme words in a prompt → the theme side-channel (presentation only). */
-function themeFromPrompt(prompt: string): ThemeKey | undefined {
-  const p = prompt.toLowerCase();
-  if (/futuristic|sci-fi|science fiction|neon|cyber|future vault/.test(p)) return 'futuristic';
-  if (/stone ruin|limestone|castle|crypt|dungeon/.test(p)) return 'limestone';
-  if (/ivory|observatory|white tower|marble|moonlit/.test(p)) return 'ivory';
-  if (/patina|verdigris|relay|steampunk|copper|factory|workshop/.test(p)) return 'patina';
-  if (/basalt|volcanic|dark fortress|shadow|obsidian/.test(p)) return 'basalt';
-  return undefined;
-}
 
 /** Short label for a revision-history entry. */
 function lastPromptLabel(prompt: string): string {
@@ -797,7 +775,9 @@ export const useApp = create<AppState>()((set, get) => ({
     const selection = state.selection;
     const history = state.promptHistory;
     const base = state.draft?.level ?? state.acceptedLevel;
-    const requestedTheme = themeFromPrompt(prompt) ?? state.theme;
+    // The model chooses the architecture inside the level's scenery; only an
+    // explicit editor choice pins it.
+    const requestedTheme = state.theme;
     // §11: every result binds to a base revision. If the scene changes while
     // the request is in flight (scene picker, reset), the result is stale and
     // is discarded instead of applied to the wrong level.

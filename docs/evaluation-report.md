@@ -1,7 +1,40 @@
 # LevelProof evaluation report
 
-Updated 2026-09-23. This report separates controlled fixture evidence from
+Updated 2026-09-25. This report separates controlled fixture evidence from
 live-model evidence.
+
+## 2026-09-25 — gemini-3.8-flash, prompt-10/11, scenery and revision loop
+
+These runs used the local dev server (`npm run dev`, which now serves the real
+`/api/compile`) or the compile service directly, with production's intended
+configuration: `LLM_MODEL=google/gemini-3.8-flash` (reasoning effort low),
+`LLM_FALLBACK_MODEL=google/gemini-2.5-flash-lite`. They are not yet
+production measurements; rerun against production after the deploy.
+
+| Run | Category results | Total |
+| --- | --- | ---: |
+| Fixed 30 cases + 12 repeats (`eval:fixed:live`, prompt-10) | simple 8/8 · linked 7/8 · logic 8/8 · preservation **6/6** · ambiguity 6/6 · unsupported 6/6 | **41/42** |
+| Example chips × 2 (`scripts/chip-battery.ts`, prompt-11) | vault 10/10 · gallery makeovers 4/4 · twists 2/2 · blank-canvas builds 8/8 | **24/24** |
+
+The linked-change miss (`linked-remove-rule-keep-key`, one of its runs)
+removed the rule as asked but also changed `vault-door`, which the case marks
+must-not-change; the proposal is still staged for review, never auto-applied.
+Compared with the 2026-09-23 production run on `gemini-3.7-flash` (36/42,
+preservation 1/6), the preservation fix came from the service's own
+instruction: it told the model to *ask* the creator to unkeep an object, so
+the model clarified instead of refusing; prompt-10 asks for an `unsupported`
+answer that names the kept object.
+
+The chip battery grades each chip against its promise with the engine: the
+keyed vault is keyed, the trap strands a player while the level stays
+winnable, makeovers change scenery but no gameplay field, removals remove,
+and blank-canvas builds are winnable with scenery set. It mirrors the editor's
+automatic revision (an additive build that cannot be won gets one
+engine-guided revision); one earlier Pirate-cove run needed it and passed.
+
+Known gaps: these are one- and two-run samples; production latency and the
+Vercel streaming behavior still need confirmation after deploy; outside-user
+sessions are still not conducted.
 
 ## Deterministic suite
 
