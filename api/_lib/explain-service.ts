@@ -159,6 +159,28 @@ export type CallModel = (
   signal?: AbortSignal,
 ) => Promise<ProviderResult>;
 
+function explainIdentity(primary: ProviderConfig, env: NodeJS.ProcessEnv, input: ExplainInput): string {
+  const fallbackModel = env.LLM_FALLBACK_MODEL;
+  const hasFallback = fallbackModel !== undefined && fallbackModel !== primary.model;
+  const models = JSON.stringify({
+    baseUrl: primary.baseUrl,
+    chain: (hasFallback ? [primary.model, fallbackModel] : [primary.model]).map((model) => ({
+      model,
+      options: callOptionsFor(model!),
+    })),
+  });
+  return cacheKey({ level: input.level, payload: input.check, models, promptVersion: EXPLAIN_PROMPT_VERSION });
+}
+
+/** Cache-only lookup: a cached narration is served without the daily budget. */
+export async function peekExplain(env: NodeJS.ProcessEnv, input: ExplainInput): Promise<ExplainOutcome | null> {
+  const primary = providerConfigFromEnv(env);
+  if (!primary) return null;
+  const hit = await explainCache.get(explainIdentity(primary, env, input));
+  if (hit === null) return null;
+  return { explanation: hit.value, cached: true, attempts: hit.attempts, totalCostUsd: 0, generationCostUsd: hit.generationCostUsd };
+}
+
 export async function explain(
   env: NodeJS.ProcessEnv,
   input: ExplainInput,
@@ -179,20 +201,7 @@ export async function explain(
   }
   const fallbackModel = env.LLM_FALLBACK_MODEL;
   const hasFallback = fallbackModel !== undefined && fallbackModel !== primary.model;
-  const models = JSON.stringify({
-    baseUrl: primary.baseUrl,
-    chain: (hasFallback ? [primary.model, fallbackModel] : [primary.model]).map((model) => ({
-      model,
-      options: callOptionsFor(model!),
-    })),
-  });
-
-  const key = cacheKey({
-    level: input.level,
-    payload: input.check,
-    models,
-    promptVersion: EXPLAIN_PROMPT_VERSION,
-  });
+  const key = explainIdentity(primary, env, input);
   const hit = await explainCache.get(key);
   if (hit !== null) {
     return { explanation: hit.value, cached: true, attempts: hit.attempts, totalCostUsd: 0, generationCostUsd: hit.generationCostUsd };

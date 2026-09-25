@@ -39,8 +39,12 @@ itself.
 - [ ] Configure `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` in the
   hosting environment. Production API calls fail closed without the shared
   request limiter.
-- [ ] Confirm the rate window and daily request cap. These cap requests, not
-  dollars; also set a hard spending limit with the model provider.
+- [ ] Confirm the rate window and daily request cap. The per-address window
+  (default 8 per minute) applies to every request; the daily cap (default
+  500, `API_DAILY_REQUEST_LIMIT`) counts only requests that call the model —
+  cached answers are served before it is charged, so prewarmed chips can
+  never exhaust it. These cap requests, not dollars; also set a hard spending
+  limit on the production OpenRouter key.
 - [ ] Confirm API quota and provider spending limits.
 - [ ] Confirm cache status is visible in the compile result metadata.
 - [ ] The shared cache stores the full request identity, including prompt

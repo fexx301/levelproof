@@ -1,12 +1,13 @@
-import { explain } from './_lib/explain-service.js';
+import { explain, peekExplain } from './_lib/explain-service.js';
 import { explainRequestSchema } from '../shared/api.js';
-import { enforceRequestBudget, readLimitedJson } from './_lib/request-guard.js';
+import { enforceDailyBudget, enforceRequestWindow, readLimitedJson } from './_lib/request-guard.js';
 
 /**
  * POST /api/explain — grounded failure narration (§10). The server recomputes
  * the verdict from the submitted level with the shared core; the model only
  * phrases the engine's facts, and its output is schema- and grounding-checked
- * before it is returned. Server-side only, like /api/compile.
+ * before it is returned. Server-side only, like /api/compile. A cached
+ * narration is served before the daily model budget is charged.
  */
 export const maxDuration = 60;
 
@@ -15,8 +16,8 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json({ error: 'method_not_allowed' }, { status: 405 });
   }
 
-  const protection = await enforceRequestBudget(request);
-  if (protection !== null) return protection;
+  const burst = await enforceRequestWindow(request);
+  if (burst !== null) return burst;
 
   const decoded = await readLimitedJson(request);
   if (!decoded.ok) {
@@ -32,7 +33,10 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json({ error: 'invalid_request', issues }, { status: 400 });
   }
 
-  const outcome = await explain(process.env, parsed.data, { signal: request.signal });
+  const cached = await peekExplain(process.env, parsed.data);
+  const budget = cached === null ? await enforceDailyBudget(request) : null;
+  if (budget !== null) return budget;
+  const outcome = cached ?? await explain(process.env, parsed.data, { signal: request.signal });
 
   if (outcome.explanation === null) {
     const status =

@@ -2,17 +2,17 @@ import { createHmac } from 'node:crypto';
 
 const DEFAULT_WINDOW_SECONDS = 60;
 const DEFAULT_WINDOW_REQUESTS = 8;
-const DEFAULT_DAILY_REQUESTS = 300;
+// The daily cap guards provider spend: only requests that reach the model
+// count toward it (cached answers are free and exempt).
+const DEFAULT_DAILY_REQUESTS = 500;
 const MAX_BODY_BYTES = 512 * 1024;
 
-const WINDOW_SCRIPT = `
-local windowCount = redis.call('INCR', KEYS[1])
-if windowCount == 1 then redis.call('EXPIRE', KEYS[1], tonumber(ARGV[1])) end
-if windowCount > tonumber(ARGV[2]) then return {0, windowCount, 0} end
-local dailyCount = redis.call('INCR', KEYS[2])
-if dailyCount == 1 then redis.call('EXPIRE', KEYS[2], tonumber(ARGV[3])) end
-if dailyCount > tonumber(ARGV[4]) then return {0, windowCount, dailyCount} end
-return {1, windowCount, dailyCount}
+/** One atomic counter: increment, set expiry on first use, compare to a limit. */
+const COUNTER_SCRIPT = `
+local count = redis.call('INCR', KEYS[1])
+if count == 1 then redis.call('EXPIRE', KEYS[1], tonumber(ARGV[1])) end
+if count > tonumber(ARGV[2]) then return {0, count} end
+return {1, count}
 `;
 
 interface LocalBucket {
@@ -53,46 +53,19 @@ function reportProtectionFailure(reason: string): void {
   console.warn(`[levelproof] request protection unavailable: ${reason}`);
 }
 
-function localAdmission(
-  route: string,
-  ip: string,
-  now: number,
-  windowSeconds: number,
-  windowLimit: number,
-  dailyLimit: number,
-): boolean {
-  const window = Math.floor(now / (windowSeconds * 1000));
-  const windowKey = `${route}:${ip}:${window}`;
-  const bucket = localBuckets.get(windowKey) ?? { window, requests: 0 };
-  bucket.requests += 1;
-  localBuckets.set(windowKey, bucket);
-  if (bucket.requests > windowLimit) return false;
-
-  const day = new Date(now).toISOString().slice(0, 10);
-  const dailyKey = day;
-  const daily = (localDailyCounts.get(dailyKey) ?? 0) + 1;
-  localDailyCounts.set(dailyKey, daily);
-
-  // Bound local-development state; production always uses the shared store.
-  if (localBuckets.size > 2000) {
-    for (const [key, value] of localBuckets) if (value.window < window - 2) localBuckets.delete(key);
-  }
-  if (localDailyCounts.size > 100) {
-    for (const key of localDailyCounts.keys()) if (key !== day) localDailyCounts.delete(key);
-  }
-  return daily <= dailyLimit;
+interface GuardConfig {
+  now: number;
+  windowSeconds: number;
+  windowLimit: number;
+  dailyLimit: number;
+  route: string;
+  ip: string;
+  /** Null when running without the shared store (local development only). */
+  store: { url: URL; token: string } | null;
 }
 
-/**
- * Shared, atomic request budget for the paid AI endpoints. Production must
- * provide Upstash REST credentials; process-local limits are only for local
- * development and tests, where multiple serverless instances do not exist.
- */
-export async function enforceRequestBudget(
-  request: Request,
-  env: NodeJS.ProcessEnv = process.env,
-  options: RequestGuardOptions = {},
-): Promise<Response | null> {
+/** Resolve limits and the shared store; a Response means fail closed. */
+function guardConfig(request: Request, env: NodeJS.ProcessEnv, options: RequestGuardOptions): GuardConfig | Response {
   const now = options.now?.() ?? Date.now();
   const windowSeconds = positiveInteger(env.API_RATE_LIMIT_WINDOW_SECONDS, DEFAULT_WINDOW_SECONDS, 3600);
   const windowLimit = positiveInteger(env.API_RATE_LIMIT_REQUESTS, DEFAULT_WINDOW_REQUESTS, 10_000);
@@ -104,53 +77,45 @@ export async function enforceRequestBudget(
   const token = env.UPSTASH_REDIS_REST_TOKEN?.replace(/[\r\n]/g, '').trim();
   const route = new URL(request.url).pathname;
   const ip = requestIp(request);
+  const base = { now, windowSeconds, windowLimit, dailyLimit, route, ip };
 
   if (!url || !token) {
     if (env.NODE_ENV === 'production') {
       reportProtectionFailure('missing_upstash_credentials');
       return reject(503, 'request_protection_unavailable');
     }
-    return localAdmission(route, ip, now, windowSeconds, windowLimit, dailyLimit)
-      ? null
-      : reject(429, 'request_limit_reached');
+    return { ...base, store: null };
   }
-
-  let redisUrl: URL;
   try {
-    redisUrl = new URL(url);
+    const redisUrl = new URL(url);
     if (redisUrl.protocol !== 'https:') {
       reportProtectionFailure('invalid_upstash_url');
       return reject(503, 'request_protection_unavailable');
     }
+    return { ...base, store: { url: redisUrl, token } };
   } catch {
     reportProtectionFailure('invalid_upstash_url');
     return reject(503, 'request_protection_unavailable');
   }
+}
 
-  const day = new Date(now).toISOString().slice(0, 10);
-  const epochWindow = Math.floor(now / (windowSeconds * 1000));
-  // HMAC the client address with the Redis credential: raw IPs are not stored.
-  const clientHash = createHmac('sha256', token).update(ip).digest('hex').slice(0, 32);
-  const windowKey = `levelproof:limit:${route}:${clientHash}:${epochWindow}`;
-  const dailyKey = `levelproof:daily:${day}`;
+/** Increment one shared counter; null admits, a Response rejects. */
+async function sharedCounter(
+  request: Request,
+  store: { url: URL; token: string },
+  key: string,
+  ttlSeconds: number,
+  limit: number,
+  options: RequestGuardOptions,
+): Promise<Response | null> {
   try {
-    const response = await (options.fetcher ?? fetch)(redisUrl.toString(), {
+    const response = await (options.fetcher ?? fetch)(store.url.toString(), {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${token}`,
+        Authorization: `Bearer ${store.token}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify([
-        'EVAL',
-        WINDOW_SCRIPT,
-        '2',
-        windowKey,
-        dailyKey,
-        String(windowSeconds * 2),
-        String(windowLimit),
-        '172800',
-        String(dailyLimit),
-      ]),
+      body: JSON.stringify(['EVAL', COUNTER_SCRIPT, '1', key, String(ttlSeconds), String(limit)]),
     });
     if (!response.ok) {
       reportProtectionFailure(`upstash_http_${response.status}`);
@@ -185,6 +150,68 @@ export async function enforceRequestBudget(
     reportProtectionFailure(`upstash_network_${code.replace(/[^a-z0-9_]/g, '_')}`);
     return reject(503, 'request_protection_unavailable');
   }
+}
+
+/**
+ * Per-address burst window, applied to every request (cached or not): the
+ * flood guard. Production must provide Upstash REST credentials; process-local
+ * limits are only for local development and tests.
+ */
+export async function enforceRequestWindow(
+  request: Request,
+  env: NodeJS.ProcessEnv = process.env,
+  options: RequestGuardOptions = {},
+): Promise<Response | null> {
+  const config = guardConfig(request, env, options);
+  if (config instanceof Response) return config;
+  const epochWindow = Math.floor(config.now / (config.windowSeconds * 1000));
+  if (config.store === null) {
+    const windowKey = `${config.route}:${config.ip}:${epochWindow}`;
+    const bucket = localBuckets.get(windowKey) ?? { window: epochWindow, requests: 0 };
+    bucket.requests += 1;
+    localBuckets.set(windowKey, bucket);
+    // Bound local-development state; production always uses the shared store.
+    if (localBuckets.size > 2000) {
+      for (const [key, value] of localBuckets) if (value.window < epochWindow - 2) localBuckets.delete(key);
+    }
+    return bucket.requests > config.windowLimit ? reject(429, 'request_limit_reached') : null;
+  }
+  // HMAC the client address with the Redis credential: raw IPs are not stored.
+  const clientHash = createHmac('sha256', config.store.token).update(config.ip).digest('hex').slice(0, 32);
+  const windowKey = `levelproof:limit:${config.route}:${clientHash}:${epochWindow}`;
+  return sharedCounter(request, config.store, windowKey, config.windowSeconds * 2, config.windowLimit, options);
+}
+
+/**
+ * Global daily budget for requests that will call the model. Cached answers
+ * never reach this check, so prewarmed examples cannot exhaust it.
+ */
+export async function enforceDailyBudget(
+  request: Request,
+  env: NodeJS.ProcessEnv = process.env,
+  options: RequestGuardOptions = {},
+): Promise<Response | null> {
+  const config = guardConfig(request, env, options);
+  if (config instanceof Response) return config;
+  const day = new Date(config.now).toISOString().slice(0, 10);
+  if (config.store === null) {
+    const daily = (localDailyCounts.get(day) ?? 0) + 1;
+    localDailyCounts.set(day, daily);
+    if (localDailyCounts.size > 100) {
+      for (const key of localDailyCounts.keys()) if (key !== day) localDailyCounts.delete(key);
+    }
+    return daily > config.dailyLimit ? reject(429, 'request_limit_reached') : null;
+  }
+  return sharedCounter(request, config.store, `levelproof:daily:${day}`, 172800, config.dailyLimit, options);
+}
+
+/** Both checks in order: the burst window, then the daily model budget. */
+export async function enforceRequestBudget(
+  request: Request,
+  env: NodeJS.ProcessEnv = process.env,
+  options: RequestGuardOptions = {},
+): Promise<Response | null> {
+  return (await enforceRequestWindow(request, env, options)) ?? (await enforceDailyBudget(request, env, options));
 }
 
 export type LimitedJson = { ok: true; value: unknown } | { ok: false; status: 400 | 413 };

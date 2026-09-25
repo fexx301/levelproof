@@ -112,7 +112,9 @@ tiers: bounded in-memory per instance, and (when Upstash is configured) a
 shared store keyed by the SHA-256 of that identity that stores the full
 identity and only reuses an exact match; entries expire after
 `SHARED_CACHE_TTL_SECONDS` (7 days by default) and hold the prompt text. A
-store failure is only a miss. The UI always shows **Fresh compile** or
+store failure is only a miss. Cache hits are served before the daily model
+budget is charged (the per-address burst window still applies), so free
+answers never use up the budget. The UI always shows **Fresh compile** or
 **Cached result** with model, dollar cost, and attempt count in a collapsible
 inspector. Explanations are cached and disclosed the same way.
 

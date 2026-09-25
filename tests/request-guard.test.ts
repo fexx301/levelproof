@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { enforceRequestBudget, readLimitedJson, resetRequestBudget } from '../api/_lib/request-guard';
+import { enforceDailyBudget, enforceRequestBudget, enforceRequestWindow, readLimitedJson, resetRequestBudget } from '../api/_lib/request-guard';
 
 const request = (path = '/api/compile', ip = '192.0.2.10', body?: string) => new Request(`https://levelproof.test${path}`, {
   method: 'POST',
@@ -99,6 +99,27 @@ describe('paid API request boundary', () => {
     });
 
     expect(await enforceRequestBudget(abortedRequest, env, { fetcher })).toBeNull();
+  });
+
+  it('keeps the burst window and the daily model budget as separate shared counters', async () => {
+    const env = {
+      NODE_ENV: 'production',
+      UPSTASH_REDIS_REST_URL: 'https://redis.example.test',
+      UPSTASH_REDIS_REST_TOKEN: 'test-secret',
+      API_DAILY_REQUEST_LIMIT: '750',
+    } as NodeJS.ProcessEnv;
+    const keys: string[] = [];
+    const fetcher = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const command = JSON.parse(String(init?.body)) as string[];
+      keys.push(`${command[3]} limit=${command[5]}`);
+      return Response.json({ result: [1, 1] });
+    });
+    const now = () => Date.UTC(2026, 8, 25, 12);
+    expect(await enforceRequestWindow(request(), env, { fetcher, now })).toBeNull();
+    expect(await enforceDailyBudget(request(), env, { fetcher, now })).toBeNull();
+    expect(keys[0]).toMatch(/^levelproof:limit:\/api\/compile:[0-9a-f]{32}:\d+ limit=8$/);
+    expect(keys[1]).toBe('levelproof:daily:2026-09-25 limit=750');
+    expect(keys.join(' ')).not.toContain('192.0.2.10');
   });
 
   it('caps the streamed body and distinguishes invalid JSON', async () => {

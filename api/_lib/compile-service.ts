@@ -90,22 +90,11 @@ function tryParse(raw: string): CompileResult | null {
   }
 }
 
-export async function compile(
-  env: NodeJS.ProcessEnv,
-  input: CompileInput,
-  deps: { callModel?: CallModel; signal?: AbortSignal; onProgress?: (progress: CompileProgress) => void } = {},
-): Promise<CompileOutcome> {
-  const callModel = deps.callModel ?? chatCompletion;
-  const signal = deps.signal;
-  const baseRevision = revisionId(input.level);
-  const primary = providerConfigFromEnv(env);
-  if (!primary) {
-    return { result: null, baseRevision, theme: input.theme, cached: false, attempts: [], totalCostUsd: 0, generationCostUsd: null, error: 'missing_provider_config' };
-  }
+/** The exact cache identity of a compile request under this configuration. */
+function compileIdentity(primary: ProviderConfig, env: NodeJS.ProcessEnv, input: CompileInput): string {
   const fallbackModel = env.LLM_FALLBACK_MODEL;
   const hasFallback = fallbackModel !== undefined && fallbackModel !== primary.model;
-
-  const key = compileCacheKey({
+  return compileCacheKey({
     level: input.level,
     prompt: input.prompt,
     clarificationContext: input.clarificationContext,
@@ -122,6 +111,43 @@ export async function compile(
     }),
     promptVersion: PROMPT_VERSION,
   });
+}
+
+/**
+ * Cache-only lookup with the same identity as compile(): the endpoint serves
+ * a hit without charging the daily model budget, because it costs nothing.
+ */
+export async function peekCompile(env: NodeJS.ProcessEnv, input: CompileInput): Promise<CompileOutcome | null> {
+  const primary = providerConfigFromEnv(env);
+  if (!primary) return null;
+  const hit = await compileCache.get(compileIdentity(primary, env, input));
+  if (hit === null) return null;
+  return {
+    result: hit.value,
+    baseRevision: revisionId(input.level),
+    theme: input.theme,
+    cached: true,
+    attempts: hit.attempts,
+    totalCostUsd: 0,
+    generationCostUsd: hit.generationCostUsd,
+  };
+}
+
+export async function compile(
+  env: NodeJS.ProcessEnv,
+  input: CompileInput,
+  deps: { callModel?: CallModel; signal?: AbortSignal; onProgress?: (progress: CompileProgress) => void } = {},
+): Promise<CompileOutcome> {
+  const callModel = deps.callModel ?? chatCompletion;
+  const signal = deps.signal;
+  const baseRevision = revisionId(input.level);
+  const primary = providerConfigFromEnv(env);
+  if (!primary) {
+    return { result: null, baseRevision, theme: input.theme, cached: false, attempts: [], totalCostUsd: 0, generationCostUsd: null, error: 'missing_provider_config' };
+  }
+  const fallbackModel = env.LLM_FALLBACK_MODEL;
+  const hasFallback = fallbackModel !== undefined && fallbackModel !== primary.model;
+  const key = compileIdentity(primary, env, input);
   // The engine's own findings about the attempt being revised.
   let revisionNote: string | null = null;
   if (input.revision !== undefined) {

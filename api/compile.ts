@@ -1,6 +1,6 @@
-import { compile, type CompileOutcome } from './_lib/compile-service.js';
+import { compile, peekCompile, type CompileOutcome } from './_lib/compile-service.js';
 import { compileRequestSchema, type CompileProgress } from '../shared/api.js';
-import { enforceRequestBudget, readLimitedJson } from './_lib/request-guard.js';
+import { enforceDailyBudget, enforceRequestWindow, readLimitedJson } from './_lib/request-guard.js';
 
 /**
  * POST /api/compile — validated model compilation request (§3, §10).
@@ -13,6 +13,10 @@ import { enforceRequestBudget, readLimitedJson } from './_lib/request-guard.js';
  * With `Accept: application/x-ndjson` the same compile streams live progress
  * (the model's reasoning headlines and each operation as it is written) and
  * ends with one "result" event holding the normal status and body.
+ *
+ * Every request passes the per-address burst window. A cached answer is
+ * served before the daily model budget is charged — it costs nothing — so
+ * prewarmed examples can never exhaust the budget for everyone.
  */
 export const maxDuration = 60;
 
@@ -60,8 +64,8 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json({ error: 'method_not_allowed' }, { status: 405 });
   }
 
-  const protection = await enforceRequestBudget(request);
-  if (protection !== null) return protection;
+  const burst = await enforceRequestWindow(request);
+  if (burst !== null) return burst;
 
   const decoded = await readLimitedJson(request);
   if (!decoded.ok) {
@@ -82,7 +86,21 @@ export async function POST(request: Request): Promise<Response> {
     history: parsed.data.history?.map((h) => h.prompt),
   };
 
-  if ((request.headers.get('accept') ?? '').includes('application/x-ndjson')) {
+  const streamed = (request.headers.get('accept') ?? '').includes('application/x-ndjson');
+  const cached = await peekCompile(process.env, input);
+  if (cached !== null) {
+    const { status, body } = outcomeResponse(cached);
+    if (!streamed) return Response.json(body, { status });
+    return new Response(`${JSON.stringify({ event: 'result', status, body })}\n`, {
+      status: 200,
+      headers: { 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-store' },
+    });
+  }
+
+  const budget = await enforceDailyBudget(request);
+  if (budget !== null) return budget;
+
+  if (streamed) {
     const encoder = new TextEncoder();
     const stream = new ReadableStream<Uint8Array>({
       async start(controller) {
