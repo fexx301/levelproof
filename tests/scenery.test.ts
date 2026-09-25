@@ -120,3 +120,14 @@ describe('plain-language change summaries', () => {
     expect(describeOperations([{ kind: 'setModulePorts', id: 'goal-pad', ports: ['S'] }], blankCanvasLevel, blankCanvasLevel)).toEqual([]);
   });
 });
+
+describe('recovered gallery scenes', () => {
+  it('upgrades an unedited, pre-scenery gallery scene and leaves edited levels alone', async () => {
+    const { upgradeGalleryLevel } = await import('../src/state/store');
+    const legacy = withoutScenery(gauntletLevel);
+    expect(upgradeGalleryLevel('gauntlet', legacy)).toBe(gauntletLevel);
+    const edited = { ...legacy, spawn: legacy.modules[1]!.id };
+    expect(upgradeGalleryLevel('gauntlet', edited)).toBe(edited);
+    expect(upgradeGalleryLevel('saved:abc', legacy)).toBe(legacy);
+  });
+});

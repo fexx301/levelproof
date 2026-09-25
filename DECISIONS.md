@@ -45,7 +45,12 @@ Build-window decisions and measured evidence, newest first. Dates are 2026.
   per material. SwiftShader replay: 6.8 fps before scenery, 2.9 fps with
   scenery unmerged, 5.0 fps after these measures; Apple M4 Pro via Metal:
   60 fps (vsync-capped).
-- **Evidence**: 246 unit tests (scenery invariants, stream parsing, NDJSON
+- **Narration on dressed scenes**: `/api/explain` narrates from a
+  gameplay-only copy of the level (explain-2), so prop ids can never trip the
+  grounding check; verified live on the dressed vault trap (2/2 grounded).
+  Recovered, unedited gallery scenes from before scenery are upgraded to the
+  dressed fixture; edited levels are untouched.
+- **Evidence**: 248 unit tests (scenery invariants, stream parsing, NDJSON
   client, engine findings, revision requests, shared cache, auto-revision
   store flow); 10/10 Playwright journeys; live batteries recorded in
   `docs/model-eval.md` and `docs/evaluation-report.md`.

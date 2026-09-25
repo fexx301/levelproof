@@ -108,6 +108,7 @@ lever that works. All runs below are small samples, dated 2026-09-25.
 | same 8 worlds | prompt-9 | `gemini-3.7-flash`, default | valid first try 6/8 (one two-items-per-module rejection, one schema error) · 20.3–33.4 s · ~$0.018 each |
 | Fixed 30-case suite + 12 repeats via the endpoint (`eval:fixed:live`, local dev API) | prompt-10 | `gemini-3.8-flash`, effort low | **41/42** semantic; the miss changed a door the case marks must-not-change · $0.211 |
 | Every example chip × 2, graded (`scripts/chip-battery.ts`) | prompt-11 | `gemini-3.8-flash`, effort low | **24/24**; an earlier run needed one engine-guided revision (Pirate cove) and passed |
+| Blank-canvas build chips × 1 | prompt-12 (only omits empty scenery keys from the scene summary) | `gemini-3.8-flash`, effort low | **4/4**, 6.0–16.2 s |
 
 Observations that shaped the prompt and chips:
 

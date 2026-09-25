@@ -534,6 +534,25 @@ function initialLevel(): Level {
   return vaultEmptyLevel;
 }
 
+/**
+ * Levels saved before scenery existed come back undressed. When a recovered
+ * gallery scene is gameplay-identical to the current fixture (the author
+ * never edited it), show the current dressed version; edited levels are
+ * left exactly as they were.
+ */
+export function upgradeGalleryLevel(sceneId: string, level: Level): Level {
+  const scene = SCENES.find((entry) => entry.id === sceneId);
+  if (scene === undefined || level.scenery !== undefined || level.props !== undefined) return level;
+  const strip = (value: Level): Level => {
+    const copy = structuredClone(value);
+    delete copy.scenery;
+    delete copy.props;
+    copy.keys = copy.keys.map((key) => ({ id: key.id, moduleId: key.moduleId }));
+    return copy;
+  };
+  return revisionId(strip(scene.level)) === revisionId(level) ? scene.level : level;
+}
+
 const initialWindow = initialWindowState();
 const initialStorage = safeBrowserStorage();
 const initialSavedScenes = readSavedScenes(initialStorage);
@@ -629,7 +648,9 @@ function makeRecoverySnapshot(state: AppState): RecoverySnapshot {
 }
 
 export const useApp = create<AppState>()((set, get) => ({
-  acceptedLevel: initialRecovery?.acceptedLevel ?? initialWindow.level,
+  acceptedLevel: initialRecovery === null
+    ? initialWindow.level
+    : upgradeGalleryLevel(initialRecovery.acceptedSceneId, initialRecovery.acceptedLevel),
   sceneId: initialRecovery === null
     ? 'balcony-vault'
     : recoveredSceneId(initialRecovery.sceneId, recoveredSceneId(initialRecovery.acceptedSceneId, 'balcony-vault')),

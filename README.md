@@ -120,7 +120,8 @@ reasoning effort (fallback `google/gemini-2.5-flash-lite`). Measured on
   correct on the first try, 4/4 ambiguity and 2/2 rule-protection cases,
   median 4.7 s.
 - The fixed 30-case suite plus 12 repeats through the real endpoint: 41/42.
-- Every example chip, twice each on the final prompt: 24/24.
+- Every example chip, twice each: 24/24 (prompt-11; the four blank-canvas
+  builds re-checked on the final prompt-12: 4/4).
 - Eight one-sentence worlds on the blank canvas: 8/8 valid on the first try,
   7/8 winnable (the eighth is what the revision loop is for), typically
   5–12 s. The previous model (`gemini-3.7-flash`) took 20–33 s on the same
@@ -142,7 +143,7 @@ The example chips are prewarmed after each deploy (`scripts/prewarm.ts`).
 npm install
 cp .env.example .env   # add your OpenRouter key (and optionally Upstash)
 npm run dev            # Vite dev server; also serves /api/compile and /api/explain
-npm run verify         # typecheck, lint, 246 unit tests, production build
+npm run verify         # typecheck, lint, 248 unit tests, production build
 npm run test:e2e       # Playwright browser journeys (fixture-backed, no model calls)
 ```
 

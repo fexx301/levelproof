@@ -33,8 +33,10 @@ export function sceneSummary(level: Level): string {
       goal: level.goal,
       doors: [...level.doors].sort((a, b) => (a.id < b.id ? -1 : 1)),
       requirements: level.requirements,
-      scenery: level.scenery ?? {},
-      props: [...(level.props ?? [])].sort((a, b) => (a.id < b.id ? -1 : 1)),
+      ...(level.scenery !== undefined ? { scenery: level.scenery } : {}),
+      ...(level.props !== undefined && level.props.length > 0
+        ? { props: [...level.props].sort((a, b) => (a.id < b.id ? -1 : 1)) }
+        : {}),
     },
     null,
     1,
@@ -57,7 +59,7 @@ function occupancyGrid(level: Level): string[] {
 }
 
 /** Bump when the system prompt changes; participates in the cache key (§10.2). */
-export const PROMPT_VERSION = 'prompt-11';
+export const PROMPT_VERSION = 'prompt-12';
 
 export function buildSystemPrompt(level: Level, baseRevision: string): string {
   return `You are the compiler for LevelProof, a 3D puzzle editor with discrete movement. Convert the user's request into exactly ONE typed result: a patch, a clarification, a rule_proposal, or an unsupported response. You compose typed edits against the scene; you never invent traversal rules, verify puzzles, or emit raw level JSON.

@@ -137,3 +137,19 @@ describe('exact-match cache (§10.2)', () => {
     expect(calls).toBe(1);
   });
 });
+
+describe('narration on a dressed scene', () => {
+  it('shows the model the gameplay scene only, so scenery ids never reach the narration', async () => {
+    expect(trapLevel.props?.length ?? 0).toBeGreaterThan(0);
+    const prompts: string[] = [];
+    const fn: CallModel = async (_config, messages) => {
+      prompts.push(messages[0]!.content);
+      return ok(groundedExplanation);
+    };
+    const outcome = await explain(ENV, { level: trapLevel, check: 'recovery' }, { callModel: fn });
+    expect(outcome.explanation).not.toBeNull();
+    expect(prompts[0]).not.toContain('hoard-brazier');
+    expect(prompts[0]).not.toContain('"scenery"');
+    expect(prompts[0]).toContain('seal-switch');
+  });
+});

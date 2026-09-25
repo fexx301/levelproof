@@ -49,7 +49,19 @@ export interface ExplainInput {
 }
 
 /** Bump when the explanation prompt changes; participates in the cache key. */
-export const EXPLAIN_PROMPT_VERSION = 'explain-1';
+export const EXPLAIN_PROMPT_VERSION = 'explain-2';
+
+/**
+ * Narration is about play, so the model sees the gameplay scene only:
+ * scenery props and key looks are cosmetic, and their ids are not facts the
+ * grounding check accepts.
+ */
+export function gameplayOnly(level: Level): Level {
+  const { scenery: _scenery, props: _props, ...rest } = level;
+  void _scenery;
+  void _props;
+  return { ...rest, keys: level.keys.map((key) => ({ id: key.id, moduleId: key.moduleId })) };
+}
 
 // Fits Vercel's 60s maxDuration with margin; per-attempt timeouts are
 // clamped to the remaining budget.
@@ -187,7 +199,7 @@ export async function explain(
   }
 
   const baseMessages: ChatMessage[] = [
-    { role: 'system', content: buildExplainSystemPrompt(input.level, input.check, report) },
+    { role: 'system', content: buildExplainSystemPrompt(gameplayOnly(input.level), input.check, report) },
     { role: 'user', content: `Explain why the ${CHECK_NAMES[input.check]} check fails for this puzzle's author.` },
   ];
 
