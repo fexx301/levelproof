@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { Cardinal } from '../../shared/schema.js';
 import { centerPoint } from '../core/catalog.js';
 import { goalRequirementViolated, initialState, step, transitions, type GameState, type MoveRecord } from '../core/movement.js';
+import { nextStep, type Hint } from '../core/hint.js';
 import type { CompiledLevel } from '../core/topology.js';
 import type { GhostMotion } from './ghost-visual.js';
 import { CharacterGhostVisual, type ActorVisual } from './ghost-character.js';
@@ -55,6 +56,10 @@ export interface PlayerStateInfo {
   goalViolated: boolean;
   /** Completed moves since spawn or restart. */
   moves: number;
+  /** Hints shown since spawn or restart. */
+  hints: number;
+  /** Moves remain, but none of them can still win (checked exhaustively). */
+  doomed: boolean;
 }
 
 export interface PlayerCallbacks {
@@ -127,6 +132,7 @@ function pointAt(step: PathStep, distance: number): THREE.Vector3 {
 /** Trail/emissive colors mirror the shell: fail red, pass green (§12). */
 const TRAIL_FAIL = 0x8a3630;
 const TRAIL_PASS = 0x4fbe82;
+const TRAIL_HINT = 0xf2c14e;
 
 /** Bright contact ring at the actor's feet so it grounds and stays findable. */
 /**
@@ -194,9 +200,9 @@ class PolylineCurve extends THREE.Curve<THREE.Vector3> {
  * marker ring at the route's final state. Fail routes read red; the one
  * winning route reads pass green.
  */
-function buildTrail(steps: PathStep[], kind: GhostFinishInfo['kind']): THREE.Group {
+function buildTrail(steps: PathStep[], kind: GhostFinishInfo['kind'] | 'hint'): THREE.Group {
   const group = new THREE.Group();
-  const color = kind === 'solution' || kind === 'replay' ? TRAIL_PASS : TRAIL_FAIL;
+  const color = kind === 'hint' ? TRAIL_HINT : kind === 'solution' || kind === 'replay' ? TRAIL_PASS : TRAIL_FAIL;
   const points = steps.flatMap((s) => s.points);
   if (points.length >= 2) {
     const lifted = points.map((p) => new THREE.Vector3(p.x, p.y + 12, p.z));
@@ -581,6 +587,9 @@ export class PlayerActor {
   private disposed = false;
   private yaw = 0;
   private moves = 0;
+  private hints = 0;
+  private hintedAt: string | null = null;
+  private hintTrail: THREE.Group | null = null;
   private celebrated = false;
 
   constructor(ctx: ActorContext, callbacks: PlayerCallbacks) {
@@ -629,6 +638,7 @@ export class PlayerActor {
     this.queued = null;
     const move = step(this.ctx.compiled, this.state, dir);
     if (!move) return;
+    this.clearHint();
     if (reducedMotion()) {
       // Reduced motion: instant transition, no interpolation.
       this.state = move.after;
@@ -659,10 +669,46 @@ export class PlayerActor {
     let length = 0;
     for (let i = 1; i < points.length; i++) length += points[i]!.distanceTo(points[i - 1]!);
     this.turnTarget = null;
+    this.clearHint();
     this.animation = { points, length, distance: 0, move };
   }
 
+  /**
+   * The next move of a shortest winning route from exactly where the player
+   * stands (same engine as the checker), drawn on the floor until the next
+   * move. The player still makes the move.
+   */
+  hint(): Hint {
+    const result = nextStep(this.ctx.compiled, this.animation?.move.after ?? this.state, this.visitedModules);
+    this.clearHint();
+    if (result.kind === 'move') {
+      // Asking again from the same spot is the same hint.
+      const at = `${this.moves}|${this.state.moduleId}`;
+      if (at !== this.hintedAt) this.hints += 1;
+      this.hintedAt = at;
+      this.hintTrail = buildTrail(pathSteps([result.move]), 'hint');
+      this.ctx.scene.add(this.hintTrail);
+      this.emit();
+    }
+    return result;
+  }
+
+  private clearHint(): void {
+    if (this.hintTrail === null) return;
+    this.ctx.scene.remove(this.hintTrail);
+    this.hintTrail.traverse((child) => {
+      if (child instanceof THREE.Mesh) {
+        child.geometry.dispose();
+        (child.material as THREE.Material).dispose();
+      }
+    });
+    this.hintTrail = null;
+  }
+
   restart(): void {
+    this.clearHint();
+    this.hints = 0;
+    this.hintedAt = null;
     this.animation = null;
     this.queued = null;
     this.turnTarget = null;
@@ -690,6 +736,7 @@ export class PlayerActor {
   dispose(): void {
     this.disposed = true;
     this.unregister();
+    this.clearHint();
     this.stopConfetti?.();
     this.rig?.dispose();
     this.rig = null;
@@ -902,6 +949,7 @@ export class PlayerActor {
     const atGoal = this.state.moduleId === this.ctx.compiled.goal;
     const trapped = !atGoal && transitions(this.ctx.compiled, this.state).length === 0;
     const goalViolated = goalRequirementViolated(this.ctx.compiled, this.state, this.visitedModules);
+    const doomed = !atGoal && !trapped && nextStep(this.ctx.compiled, this.state, this.visitedModules).kind === 'stranded';
     this.callbacks.onState({
       at: this.state.moduleId,
       keys: this.keys,
@@ -910,6 +958,8 @@ export class PlayerActor {
       atGoal,
       goalViolated,
       moves: this.moves,
+      hints: this.hints,
+      doomed,
     });
   }
 }

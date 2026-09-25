@@ -1850,6 +1850,21 @@ details.inspector summary,
   font-size: var(--text-sm);
 }
 
+.dpad button.dpad-hint {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-accent) 45%, transparent);
+  color: var(--color-accent);
+}
+
+.play-hint {
+  border-left: 3px solid var(--color-accent);
+  color: var(--color-text);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  margin: var(--space-2) 0 0;
+  padding-left: var(--space-2);
+}
+
 .play-win {
   background: color-mix(in oklab, var(--color-pass) 14%, var(--color-panel));
   border: 1px solid var(--color-pass);

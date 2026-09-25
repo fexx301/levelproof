@@ -7,7 +7,7 @@ import { mountScene, type SceneHandle } from './render/scene';
 import { SCENES, useApp } from './state/store';
 import { CheckStrip, RuleChips } from './ui/check-strip';
 import { useLevelIsBlank } from './ui/prompt-panel';
-import { PlayPanel } from './ui/play-panel';
+import { PlayPanel, requestHint } from './ui/play-panel';
 import { PlaytesterPanel, witnessOptions } from './ui/playtester';
 import { PromptPanel } from './ui/prompt-panel';
 import { RepairPanel } from './ui/repair-panel';
@@ -435,6 +435,10 @@ function Viewport({ level, mode, report, theme, previewing }: { level: Level; mo
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'r' || event.key === 'R') {
         actor.restart();
+        return;
+      }
+      if ((event.key === 'h' || event.key === 'H') && !event.repeat) {
+        requestHint();
         return;
       }
       // Camera-relative: W / ↑ always walks away from the viewer.

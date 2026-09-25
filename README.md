@@ -48,7 +48,10 @@ in behind an animated adventurer and follows it as it runs, W / ↑ always walks
 (controls are relative to the camera; drag to look around, **Camera:
 overview** to see everything), keys vanish into your inventory, doors open
 and seal as the engine says, and reaching the goal without breaking a rule
-ends in a **Level complete** card. It is the same movement engine the
+ends in a **Level complete** card. Stuck? **Hint** (H) asks the checker for
+the next move of a shortest winning route from exactly where you stand, and
+the moment you walk into a dead end the panel says so — even while moves
+remain — because every continuation has already been explored. It is the same movement engine the
 checker explored — nothing the player can do was left unchecked. The
 verifier's replays use the same character as a translucent ghost: blue for a
 winning route, red for the route that fails.
@@ -156,7 +159,7 @@ The example chips are prewarmed after each deploy (`scripts/prewarm.ts`).
 npm install
 cp .env.example .env   # add your OpenRouter key (and optionally Upstash)
 npm run dev            # Vite dev server; also serves /api/compile and /api/explain
-npm run verify         # typecheck, lint, 256 unit tests, production build
+npm run verify         # typecheck, lint, 264 unit tests, production build
 npm run test:e2e       # Playwright browser journeys (fixture-backed, no model calls)
 ```
 

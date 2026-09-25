@@ -283,6 +283,11 @@ interface GhostSlice {
   endNote: string | null;
 }
 
+/** A play-mode hint as the panel shows it (computed by core/hint). */
+export type PlayHint =
+  | { kind: 'move'; direction: Cardinal; destination: string; movesToGoal: number }
+  | { kind: 'at_goal' | 'rule_broken' | 'stranded' | 'unknown' };
+
 interface PlaySlice {
   at: string;
   keys: string[];
@@ -291,6 +296,8 @@ interface PlaySlice {
   atGoal: boolean;
   goalViolated: boolean;
   moves?: number;
+  hints?: number;
+  doomed?: boolean;
 }
 
 interface RepairSlice {
@@ -367,6 +374,8 @@ interface AppState {
   followCamera: boolean;
   /** The world direction the camera faces; drives camera-relative controls. */
   facing: Cardinal;
+  /** The last play-mode hint, cleared by the next move or leaving play. */
+  playHint: PlayHint | null;
   recoveryStatus: 'ready' | 'malformed' | 'unavailable';
   explainCheck: (kind: CheckKind) => Promise<void>;
   submitPrompt: (prompt: string, clarificationContext?: string) => Promise<void>;
@@ -425,6 +434,8 @@ const PLAY_INITIAL: PlaySlice = {
   atGoal: false,
   goalViolated: false,
   moves: 0,
+  hints: 0,
+  doomed: false,
 };
 
 const REPAIR_INITIAL: RepairSlice = {
@@ -715,6 +726,7 @@ export const useApp = create<AppState>()((set, get) => ({
   explain: EXPLAIN_INITIAL,
   evidence: null,
   followCamera: true,
+  playHint: null,
   facing: 'N',
   recoveryStatus: initialRecoveryRead.status === 'malformed'
     ? 'malformed'

@@ -1,11 +1,24 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import type { Cardinal } from '../../shared/schema.js';
 import { actorBridge } from '../render/bridge.js';
 import { compileLevel } from '../core/topology.js';
 import type { Report } from '../core/verifier.js';
 import type { Level } from '../../shared/schema.js';
-import { useApp } from '../state/store.js';
+import { useApp, type PlayHint } from '../state/store.js';
 import { CARDINAL_NAMES, relativeCardinal, type MoveIntent } from './relative-direction.js';
+
+const INTENTS: MoveIntent[] = ['forward', 'back', 'left', 'right'];
+
+/** Ask the live player for the next winning move (H key or the Hint button). */
+export function requestHint(): void {
+  const result = actorBridge.player()?.hint();
+  if (result === undefined) return;
+  const hint: PlayHint =
+    result.kind === 'move'
+      ? { kind: 'move', direction: result.move.action, destination: result.move.destination, movesToGoal: result.movesToGoal }
+      : { kind: result.kind };
+  useApp.setState({ playHint: hint });
+}
 
 const ARROWS: Record<MoveIntent, string> = { forward: '↑', back: '↓', left: '←', right: '→' };
 
@@ -35,12 +48,21 @@ export function PlayPanel({ level, report }: { level: Level; report: Report }) {
     masksMatch(compiled.switchBit, deadEnd.switchMask, play.switches);
   const placeName = (id: string): string => compiled.moduleById.get(id)?.label ?? id.replace(/-/g, ' ');
   const won = play.atGoal && !play.goalViolated;
+  const playHint = useApp((s) => s.playHint);
+  // A hint answers "from here": any move or restart retires it.
+  useEffect(() => {
+    useApp.setState({ playHint: null });
+  }, [play.moves, play.at]);
+  useEffect(() => () => useApp.setState({ playHint: null }), []);
+  const hintIntent =
+    playHint?.kind === 'move' ? INTENTS.find((intent) => relativeCardinal(facing, intent) === playHint.direction) : undefined;
 
   const moveButton = (intent: MoveIntent) => {
     const direction: Cardinal = relativeCardinal(facing, intent);
     return (
       <button
         type="button"
+        className={hintIntent === intent ? 'dpad-hint' : undefined}
         onClick={() => actorBridge.player()?.move(direction)}
         aria-label={`Move ${CARDINAL_NAMES[direction]} (${intent})`}
         title={`${intent} · ${CARDINAL_NAMES[direction]}`}
@@ -63,7 +85,7 @@ export function PlayPanel({ level, report }: { level: Level; report: Report }) {
           {followCamera ? 'Camera: following' : 'Camera: overview'}
         </button>
       </div>
-      <p className="panel-note">WASD or arrows move relative to the camera · drag to look around · R restarts · Esc exits</p>
+      <p className="panel-note">WASD or arrows move relative to the camera · drag to look around · H hint · R restarts · Esc exits</p>
       <div className="dpad">
         <span />
         {moveButton('forward')}
@@ -94,12 +116,21 @@ export function PlayPanel({ level, report }: { level: Level; report: Report }) {
         <button type="button" onClick={() => actorBridge.player()?.restart()}>
           Restart
         </button>
+        <button type="button" onClick={requestHint} disabled={won} aria-keyshortcuts="H">
+          Hint
+        </button>
       </div>
+      {playHint && !won && (
+        <p className="play-hint" role="status" aria-live="polite">
+          {hintText(playHint, placeName, hintIntent)}
+        </p>
+      )}
       {won && (
         <div className="play-win">
           <p className="play-win-title">Level complete</p>
           <p className="play-win-note">
-            Reached the goal in {play.moves ?? 0} move{play.moves === 1 ? '' : 's'}, following every rule.
+            Reached the goal in {play.moves ?? 0} move{play.moves === 1 ? '' : 's'}, following every rule
+            {(play.hints ?? 0) > 0 ? ` (${play.hints} hint${play.hints === 1 ? '' : 's'})` : ''}.
           </p>
           <div className="card-actions">
             <button type="button" onClick={() => actorBridge.player()?.restart()}>Play again</button>
@@ -120,6 +151,12 @@ export function PlayPanel({ level, report }: { level: Level; report: Report }) {
           Trapped — no route to the goal remains. R restarts.
         </p>
       )}
+      {play.doomed && !play.trapped && !play.atGoal && !reproduced && (
+        <p className="banner banner--fail">
+          Dead end — you can still move, but no winning route remains from here (every continuation was checked). R
+          restarts.
+        </p>
+      )}
     </section>
   );
 }
@@ -128,4 +165,22 @@ function masksMatch(bits: Map<string, number>, mask: number, held: string[]): bo
   const expected = [...bits.entries()].filter(([, bit]) => (mask & bit) !== 0).map(([id]) => id).sort();
   const actual = [...held].sort();
   return expected.length === actual.length && expected.every((id, index) => id === actual[index]);
+}
+
+function hintText(hint: PlayHint, placeName: (id: string) => string, intent: MoveIntent | undefined): string {
+  switch (hint.kind) {
+    case 'move': {
+      const key = intent === undefined ? '' : ` (${ARROWS[intent]})`;
+      const rest = hint.movesToGoal === 1 ? 'That reaches the goal.' : `${hint.movesToGoal} moves from the goal on the shortest winning route.`;
+      return `Next: go ${CARDINAL_NAMES[hint.direction]}${key} to ${placeName(hint.destination)}. ${rest}`;
+    }
+    case 'stranded':
+      return 'No winning route remains from here — every continuation was checked. R restarts.';
+    case 'rule_broken':
+      return 'You reached the goal, but a design rule was broken on the way. R restarts.';
+    case 'at_goal':
+      return 'You are already at the goal.';
+    case 'unknown':
+      return 'Too many possibilities to search from here. Try restarting.';
+  }
 }
