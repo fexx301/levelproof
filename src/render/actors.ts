@@ -59,6 +59,9 @@ export interface PlayerStateInfo {
 
 export interface PlayerCallbacks {
   onState: (info: PlayerStateInfo) => void;
+  /** The direction of a movement key still held down, if any: a landing
+   * carries straight on in it instead of waiting for the key to repeat. */
+  heldDirection?: () => Cardinal | null;
 }
 
 /** Engine-state hooks the scene implements: doors that seal, plates that
@@ -549,6 +552,13 @@ export class GhostActor {
   }
 }
 
+interface PlayerAnimation {
+  points: THREE.Vector3[];
+  length: number;
+  distance: number;
+  move: MoveRecord;
+}
+
 export class PlayerActor {
   readonly mesh: THREE.Group;
   private readonly ctx: ActorContext;
@@ -558,7 +568,7 @@ export class PlayerActor {
   private keys: string[] = [];
   private switches: string[] = [];
   private visitedModules: Set<string>;
-  private animation: { points: THREE.Vector3[]; length: number; distance: number; move: MoveRecord } | null = null;
+  private animation: PlayerAnimation | null = null;
   private queued: Cardinal | null = null;
   /** A standing turn (toward the viewer for a cheer), applied between moves. */
   private turnTarget: number | null = null;
@@ -742,7 +752,7 @@ export class PlayerActor {
 
   /** A short celebration when the goal is reached without breaking a rule. */
   /** Gestures for what just happened; the engine state has already been applied. */
-  private react(move: MoveRecord): void {
+  private react(move: MoveRecord, continuing = false): void {
     if (this.rig === null) return;
     const atGoal = this.state.moduleId === this.ctx.compiled.goal;
     if (atGoal) {
@@ -757,8 +767,8 @@ export class PlayerActor {
       this.rig.perform('No');
       return;
     }
-    // A nod for a pickup or a pressed switch, unless the next move is already buffered.
-    if (this.queued !== null) return;
+    // A nod for a pickup or a pressed switch, unless the run carries on.
+    if (continuing) return;
     if (move.events.collectedKey !== undefined || move.events.activatedSwitch !== undefined) this.rig.perform('Yes');
   }
 
@@ -844,7 +854,6 @@ export class PlayerActor {
       const endpoint = move.segments[move.segments.length - 1]!;
       this.mesh.position.set(endpoint.x, endpoint.y + ACTOR_CENTER_OFFSET_CM, endpoint.z);
       this.figure.position.y = 0;
-      this.animation = null;
       this.moves += 1;
       this.state = move.after;
       this.visitedModules.add(move.after.moduleId);
@@ -857,15 +866,24 @@ export class PlayerActor {
         this.switches = [...this.switches, move.events.activatedSwitch];
         this.ctx.world.activateSwitch(move.events.activatedSwitch);
       }
-      this.emit();
-      this.react(move);
-      this.maybeCelebrate();
-      const queued = this.queued;
+      // Carry straight on — a buffered press first, else a held key —
+      // taking the distance run past the landing into the next move so the
+      // pace never dips. The goal always ends the run.
+      const overshoot = this.animation.distance - this.animation.length;
+      const next =
+        this.state.moduleId === this.ctx.compiled.goal ? null : (this.queued ?? this.callbacks.heldDirection?.() ?? null);
+      this.animation = null;
       this.queued = null;
-      if (queued !== null && this.state.moduleId !== this.ctx.compiled.goal) this.move(queued);
-      return;
+      if (next !== null) this.move(next);
+      // move() may have started the next transition (TypeScript cannot see that).
+      const chained = this.animation as PlayerAnimation | null;
+      this.emit();
+      this.react(move, chained !== null);
+      this.maybeCelebrate();
+      if (chained === null) return;
+      chained.distance = Math.min(overshoot, chained.length);
     }
-    const { points, distance } = this.animation;
+    const { points, distance } = this.animation as PlayerAnimation;
     let remaining = distance;
     for (let i = 1; i < points.length; i++) {
       const segment = points[i]!.distanceTo(points[i - 1]!);

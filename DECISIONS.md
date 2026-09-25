@@ -25,6 +25,15 @@ Build-window decisions and measured evidence, newest first. Dates are 2026.
   the same engine `step()` when the move lands, so chained moves are one
   continuous run (key auto-repeat never buffers, so releasing a key never adds
   a move); stopping waits 0.14 s before settling into idle.
+- **Held keys run without a hitch** (reported: a split-second halt every few
+  seconds). Measured with a frame probe: rendering held 60 fps, but at every
+  landing a held key stood the character still for 1–2 frames (31–48 ms)
+  until the next OS key-repeat arrived, and the follow camera moved the whole
+  view with it. Landings now continue in the direction of the key physically
+  held (tracked by keydown/keyup, cleared on blur), carrying the distance run
+  past the landing into the next move: zero still frames at 33, 60, and 90 ms
+  repeat rates, and releasing mid-move still stops at that move's landing.
+  Replays and tapped moves had no stalls.
 - **Reactions**: a nod on key or switch, and at the end the character turns
   to the camera — jump then wave on a win, head shake when trapped or when a
   rule was broken. Replays end the same way.

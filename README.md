@@ -156,7 +156,7 @@ The example chips are prewarmed after each deploy (`scripts/prewarm.ts`).
 npm install
 cp .env.example .env   # add your OpenRouter key (and optionally Upstash)
 npm run dev            # Vite dev server; also serves /api/compile and /api/explain
-npm run verify         # typecheck, lint, 253 unit tests, production build
+npm run verify         # typecheck, lint, 256 unit tests, production build
 npm run test:e2e       # Playwright browser journeys (fixture-backed, no model calls)
 ```
 

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { Level, ThemeKey } from '../shared/schema';
+import type { Cardinal, Level, ThemeKey } from '../shared/schema';
 import { verify, type Report } from './core/verifier';
 import { compileLevel } from './core/topology';
 import { actorBridge } from './render/bridge';
@@ -15,7 +15,7 @@ import { ResultCards } from './ui/result-cards';
 import { savedSceneOptionLabel } from './state/persistence';
 import { GettingStarted } from './ui/getting-started';
 import { SceneObjectPicker } from './ui/scene-object-picker';
-import { KEY_INTENTS, relativeCardinal } from './ui/relative-direction';
+import { KEY_INTENTS, relativeCardinal, type MoveIntent } from './ui/relative-direction';
 import { BUILD_PROMPTS } from './ui/example-prompts';
 
 type Mode = 'authoring' | 'watching' | 'playing';
@@ -420,8 +420,16 @@ function Viewport({ level, mode, report, theme, previewing }: { level: Level; mo
     const scene = sceneRef.current;
     if (!scene || mode !== 'playing') return;
     scene.setKeyboardOrbit(false);
+    // Movement keys held down, by physical key, most recently pressed last:
+    // a run carries on through landings without waiting for key auto-repeat.
+    const held = new Map<string, MoveIntent>();
+    const heldDirection = (): Cardinal | null => {
+      const intent = [...held.values()].at(-1);
+      return intent === undefined ? null : relativeCardinal(useApp.getState().facing, intent);
+    };
     const actor = scene.spawnPlayer({
       onState: (info) => useApp.setState({ play: info }),
+      heldDirection,
     });
     actorBridge.setPlayer(actor);
     const onKey = (event: KeyboardEvent) => {
@@ -433,12 +441,30 @@ function Viewport({ level, mode, report, theme, previewing }: { level: Level; mo
       const intent = KEY_INTENTS[event.key];
       if (intent) {
         event.preventDefault();
+        if (!event.repeat) {
+          held.delete(event.code);
+          held.set(event.code, intent);
+        }
         actor.move(relativeCardinal(useApp.getState().facing, intent), !event.repeat);
       }
     };
+    const onKeyUp = (event: KeyboardEvent) => {
+      held.delete(event.code);
+    };
+    // A key released while the page is not focused never reports its keyup.
+    const releaseAll = () => held.clear();
+    const onVisibility = () => {
+      if (document.hidden) releaseAll();
+    };
     window.addEventListener('keydown', onKey);
+    window.addEventListener('keyup', onKeyUp);
+    window.addEventListener('blur', releaseAll);
+    document.addEventListener('visibilitychange', onVisibility);
     return () => {
       window.removeEventListener('keydown', onKey);
+      window.removeEventListener('keyup', onKeyUp);
+      window.removeEventListener('blur', releaseAll);
+      document.removeEventListener('visibilitychange', onVisibility);
       scene.setKeyboardOrbit(true);
       actorBridge.setPlayer(null);
       actor.dispose();
