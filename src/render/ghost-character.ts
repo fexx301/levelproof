@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { CharacterRig, characterIfLoaded, preloadCharacter, type CharacterAsset } from './character.js';
-import { createGhostVisual, type GhostFinishKind, type GhostMotion, type GhostVisualEvent } from './ghost-visual.js';
+import { createGhostVisual, type GhostFinishKind, type GhostMotion, type GhostVisual, type GhostVisualEvent } from './ghost-visual.js';
 
 /**
  * The replay ghost as the same animated character the player controls,
@@ -11,6 +11,8 @@ import { createGhostVisual, type GhostFinishKind, type GhostMotion, type GhostVi
 
 export interface ActorVisual {
   readonly object: THREE.Object3D;
+  /** False only while the character model is still downloading. */
+  readonly ready: boolean;
   update(dt: number, elapsed: number, motion: GhostMotion): void;
   setDirection(direction: THREE.Vector3): void;
   trigger(event: GhostVisualEvent): void;
@@ -25,12 +27,13 @@ const GHOST_OPACITY = 0.72;
 export class CharacterGhostVisual implements ActorVisual {
   readonly object = new THREE.Group();
   private rig: CharacterRig | null = null;
-  private fallback: ActorVisual | null = null;
+  private fallback: GhostVisual | null = null;
   private disposed = false;
   private yaw = 0;
   private targetYaw = 0;
   private lastElapsed: number | null = null;
   private finishedKind: GhostFinishKind | null = null;
+  private failed = false;
 
   constructor(
     private readonly kind: GhostFinishKind,
@@ -44,8 +47,14 @@ export class CharacterGhostVisual implements ActorVisual {
       this.object.add(this.fallback.object);
       preloadCharacter().then((loaded) => {
         if (!this.disposed) this.attach(loaded);
-      }, () => undefined);
+      }, () => {
+        this.failed = true;
+      });
     }
+  }
+
+  get ready(): boolean {
+    return this.rig !== null || this.failed;
   }
 
   update(dt: number, elapsed: number, motion: GhostMotion): void {

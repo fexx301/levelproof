@@ -1249,6 +1249,7 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel, theme?: T
     },
     world: mechanisms.events,
     viewer: () => camera.position,
+    characterWaitMs: 1500,
   };
 
   return {

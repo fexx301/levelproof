@@ -78,6 +78,9 @@ export interface ActorContext {
   world: WorldEvents;
   /** Where the camera is, so a finishing actor can turn to the viewer. */
   viewer?: () => THREE.Vector3;
+  /** How long a new actor holds still, hidden, for the character model
+   * before starting with the procedural stand-in (ms; default 0). */
+  characterWaitMs?: number;
 }
 
 /** Horizontal direction from an actor to the camera (null without one). */
@@ -244,6 +247,7 @@ export class GhostActor {
     finished: false,
   };
   private index = 0;
+  private characterWaitedMs = 0;
   private distance = 0;
   private stepClock = 0;
   private playing = false;
@@ -385,6 +389,7 @@ export class GhostActor {
 
   private update = (dt: number, elapsed: number): void => {
     if (this.disposed) return;
+    if (this.waitingForCharacter(dt)) return;
     if (this.finished) {
       this.visualMotion.playing = this.finishVisualPlaying;
       this.visualMotion.finished = true;
@@ -456,6 +461,15 @@ export class GhostActor {
     this.mesh.position.set(position.x, position.y + ACTOR_CENTER_OFFSET_CM, position.z);
     this.updateVisual(dt, elapsed);
   };
+
+  /** On a cold load the replay waits briefly for the character, so the
+   * stand-in never runs the first moves and then swaps mid-route. */
+  private waitingForCharacter(dt: number): boolean {
+    const waiting = !this.visual.ready && this.characterWaitedMs < (this.ctx.characterWaitMs ?? 0);
+    if (waiting) this.characterWaitedMs += Math.max(Number.isFinite(dt) ? dt : 0, 0) * 1000;
+    this.visual.object.visible = !waiting;
+    return waiting;
+  }
 
   private arrive(move: MoveRecord): void {
     this.ctx.world.updateState(move.after);
@@ -552,6 +566,8 @@ export class PlayerActor {
   private readonly figure: THREE.Group;
   private rig: CharacterRig | null = null;
   private fallback: THREE.Group | null = null;
+  private characterFailed = false;
+  private characterWaitedMs = 0;
   private disposed = false;
   private yaw = 0;
   private moves = 0;
@@ -575,7 +591,9 @@ export class PlayerActor {
       this.figure.add(this.fallback);
       preloadCharacter().then((loaded) => {
         if (!this.disposed) this.attachRig(loaded);
-      }, () => undefined);
+      }, () => {
+        this.characterFailed = true;
+      });
     }
     this.placeAtSpawn();
     ctx.scene.add(this.mesh);
@@ -594,7 +612,7 @@ export class PlayerActor {
    * key never adds a move.
    */
   move(dir: Cardinal, buffer = true): void {
-    if (this.animation) {
+    if (this.animation || this.waitingForCharacter()) {
       if (buffer) this.queued = dir;
       return;
     }
@@ -792,7 +810,24 @@ export class PlayerActor {
   }
 
 
+  /** On a cold load the player stays hidden briefly while the character
+   * downloads (a press is buffered), rather than showing the stand-in. */
+  private waitingForCharacter(): boolean {
+    return this.rig === null && !this.characterFailed && this.characterWaitedMs < (this.ctx.characterWaitMs ?? 0);
+  }
+
   private update = (dt: number): void => {
+    if (this.waitingForCharacter()) {
+      this.characterWaitedMs += Math.max(dt, 0) * 1000;
+      this.figure.visible = false;
+      return;
+    }
+    if (!this.figure.visible) {
+      this.figure.visible = true;
+      const queued = this.queued;
+      this.queued = null;
+      if (queued !== null) this.move(queued);
+    }
     if (this.rig !== null) {
       this.rig.setLocomotion(this.animation !== null ? WALK_SPEED_CM_S : 0);
       this.rig.update(reducedMotion() ? 0 : dt);
