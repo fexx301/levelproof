@@ -48,7 +48,7 @@ export function canonicalJson(level: Level): string {
   });
 }
 
-/** FNV-1a 32-bit, hex-encoded. Dependency-free deterministic hashing. */
+/** FNV-1a 32-bit, hex-encoded. Retained for compact non-security uses. */
 export function fnv1a32(input: string): string {
   let hash = 0x811c9dc5;
   for (let i = 0; i < input.length; i++) {
@@ -58,9 +58,21 @@ export function fnv1a32(input: string): string {
   return hash.toString(16).padStart(8, '0');
 }
 
-/** Stable revision identity for a level: canonical content + catalog version. */
+/** FNV-1a 64-bit identity, used where collisions could bind stale work. */
+export function fnv1a64(input: string): string {
+  let hash = 0xcbf29ce484222325n;
+  const prime = 0x100000001b3n;
+  const mask = 0xffffffffffffffffn;
+  for (let i = 0; i < input.length; i++) {
+    hash ^= BigInt(input.charCodeAt(i));
+    hash = (hash * prime) & mask;
+  }
+  return hash.toString(16).padStart(16, '0');
+}
+
+/** Stable, 64-bit revision identity for canonical content + catalog version. */
 export function revisionId(level: Level): string {
-  return `rev-${fnv1a32(canonicalJson(level))}`;
+  return `rev-${fnv1a64(canonicalJson(level))}`;
 }
 
 /**

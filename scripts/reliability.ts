@@ -6,8 +6,9 @@
  * chain, cache) — and grade every outcome with the deterministic core. The
  * engine is the oracle: no human judgment in the loop.
  *
- * Each distinct phrasing is a distinct cache key, so every run is a fresh
- * model call. Run: npx tsx scripts/reliability.ts
+ * Cache hits are recorded as zero-cost requests. Live calls require explicit
+ * opt-in and a post-response budget guard. Run only with authorization:
+ * npx tsx scripts/reliability.ts --confirm-live-ai --budget-usd 0.10
  */
 import { writeFileSync } from 'node:fs';
 import type { CompileResult } from '../shared/compile-result';
@@ -19,6 +20,7 @@ import { gauntletLevel, overpassLevel, twinKeysLevel } from '../src/core/fixture
 import { vaultEmptyLevel } from '../src/core/fixtures/vault-empty';
 import { applyOperations, applyRuleProposal, type ApplyResult } from '../src/core/level';
 import { verify } from '../src/core/verifier';
+import { LiveBudget, LiveEvaluationStop, requireLiveBudget } from './live-budget';
 
 const API = 'https://levelproof.vercel.app/api/compile';
 
@@ -358,42 +360,74 @@ interface RunRecord {
   typeReturned: string | null;
   cached: boolean;
   attempts: number;
-  costUsd: number;
+  costUsd: number | null;
   grade: { pass: boolean; note: string } | null;
   error: string | null;
+  latencyMs: number;
 }
 
-async function runFixture(fixture: Fixture): Promise<RunRecord> {
+function addCost(total: number | null, next: number | null): number | null {
+  return total === null || next === null ? null : total + next;
+}
+
+function formatCost(cost: number | null): string {
+  return cost === null ? 'cost unavailable' : `$${cost.toFixed(5)}`;
+}
+
+function responseCost(body: unknown): number | null {
+  if (body === null || typeof body !== 'object' || !('totalCostUsd' in body)) return null;
+  const value = body.totalCostUsd;
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null;
+}
+
+function responseAttempts(body: unknown): number {
+  return body !== null && typeof body === 'object' && 'attempts' in body && Array.isArray(body.attempts)
+    ? body.attempts.length
+    : 0;
+}
+
+function responseWasCached(body: unknown): boolean {
+  return body !== null && typeof body === 'object' && 'cached' in body && body.cached === true;
+}
+
+async function readBudgetedBody(response: Response, budget: LiveBudget, label: string): Promise<unknown> {
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch {
+    throw new LiveEvaluationStop(`Stopping after ${label}: response body or billing metadata was unreadable.`);
+  }
+  budget.record(responseCost(body), label);
+  return body;
+}
+
+async function runFixture(fixture: Fixture, budget: LiveBudget): Promise<RunRecord> {
+  const started = performance.now();
+  budget.ensureCanCall(fixture.id);
   const response = await fetch(API, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ level: fixture.base, prompt: fixture.prompt }),
   });
-  const body: unknown = await response.json();
+  const body: unknown = await readBudgetedBody(response, budget, fixture.id);
   if (!response.ok) {
     // Error bodies still carry attempts and cost — record them honestly;
     // hiding them made provider failures and schema failures look identical.
-    let attempts = 0;
-    let costUsd = 0;
-    if (body !== null && typeof body === 'object' && 'attempts' in body && Array.isArray(body.attempts)) {
-      attempts = body.attempts.length;
-    }
-    if (body !== null && typeof body === 'object' && 'totalCostUsd' in body && typeof body.totalCostUsd === 'number') {
-      costUsd = body.totalCostUsd;
-    }
+    const attempts = responseAttempts(body);
+    const costUsd = responseCost(body);
     const note =
       body !== null && typeof body === 'object' && 'error' in body
         ? String(body.error)
         : `HTTP ${response.status}`;
-    return { id: fixture.id, category: 'followup', typeReturned: null, cached: false, attempts, costUsd, grade: null, error: note };
+    return { id: fixture.id, category: fixture.category, typeReturned: null, cached: false, attempts, costUsd, grade: null, error: note, latencyMs: performance.now() - started };
   }
   const parsed = compileOkResponseSchema.safeParse(body);
   if (!parsed.success) {
-    return { id: fixture.id, category: 'followup', typeReturned: null, cached: false, attempts: 0, costUsd: 0, grade: null, error: 'response failed validation' };
+    return { id: fixture.id, category: fixture.category, typeReturned: null, cached: false, attempts: 0, costUsd: null, grade: null, error: 'response failed validation', latencyMs: performance.now() - started };
   }
   const { result, cached, attempts, totalCostUsd } = parsed.data;
   const grade = fixture.grade(result, fixture.base);
-  return { id: fixture.id, category: 'followup', typeReturned: result.type, cached, attempts: attempts.length, costUsd: totalCostUsd, grade, error: null };
+  return { id: fixture.id, category: fixture.category, typeReturned: result.type, cached, attempts: attempts.length, costUsd: totalCostUsd, grade, error: null, latencyMs: performance.now() - started };
 }
 
 /** Multi-turn conversation fixtures (§12): turn 1 builds, turn 2 refers
@@ -445,20 +479,26 @@ const FOLLOWUPS: FollowupFixture[] = [
   },
 ];
 
-async function runFollowup(fixture: FollowupFixture): Promise<RunRecord> {
+async function runFollowup(fixture: FollowupFixture, budget: LiveBudget): Promise<RunRecord> {
+  const started = performance.now();
   // Turn 1
+  budget.ensureCanCall(`${fixture.id} turn 1`);
   const firstResponse = await fetch(API, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ level: fixture.base, prompt: fixture.first }),
   });
-  const firstBody: unknown = await firstResponse.json();
+  const firstBody: unknown = await readBudgetedBody(firstResponse, budget, `${fixture.id} turn 1`);
   let level1: Level | null = null;
-  let cost = 0;
+  let cost: number | null = responseCost(firstBody);
+  let cached = responseWasCached(firstBody);
+  let attempts = responseAttempts(firstBody);
   if (firstResponse.ok) {
     const parsed = compileOkResponseSchema.safeParse(firstBody);
     if (parsed.success) {
-      cost += parsed.data.totalCostUsd;
+      cost = parsed.data.totalCostUsd;
+      cached = parsed.data.cached;
+      attempts = parsed.data.attempts.length;
       const { result } = parsed.data;
       if (result.type === 'patch' || result.type === 'rule_proposal') {
         const applied = applyCompileResult(fixture.base, result);
@@ -469,32 +509,35 @@ async function runFollowup(fixture: FollowupFixture): Promise<RunRecord> {
     }
   }
   if (level1 === null) {
-    return { id: fixture.id, category: 'followup', typeReturned: null, cached: false, attempts: 1, costUsd: cost, grade: { pass: false, note: 'turn 1 failed' }, error: 'turn1' };
+    return { id: fixture.id, category: 'followup', typeReturned: null, cached, attempts, costUsd: cost, grade: { pass: false, note: 'turn 1 failed' }, error: 'turn1', latencyMs: performance.now() - started };
   }
   // Turn 2 with history
+  budget.ensureCanCall(`${fixture.id} turn 2`);
   const secondResponse = await fetch(API, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ level: level1, prompt: fixture.followup, history: [{ prompt: fixture.first }] }),
   });
-  const secondBody: unknown = await secondResponse.json();
+  const secondBody: unknown = await readBudgetedBody(secondResponse, budget, `${fixture.id} turn 2`);
+  cost = addCost(cost, responseCost(secondBody));
+  cached ||= responseWasCached(secondBody);
+  attempts += responseAttempts(secondBody);
   if (!secondResponse.ok) {
     const note =
       secondBody !== null && typeof secondBody === 'object' && 'error' in secondBody ? String(secondBody.error) : `HTTP ${secondResponse.status}`;
-    return { id: fixture.id, category: 'followup', typeReturned: null, cached: false, attempts: 2, costUsd: cost, grade: null, error: note };
+    return { id: fixture.id, category: 'followup', typeReturned: null, cached, attempts, costUsd: cost, grade: null, error: note, latencyMs: performance.now() - started };
   }
   const parsed2 = compileOkResponseSchema.safeParse(secondBody);
   if (!parsed2.success) {
-    return { id: fixture.id, category: 'followup', typeReturned: null, cached: false, attempts: 2, costUsd: cost, grade: null, error: 'response failed validation' };
+    return { id: fixture.id, category: 'followup', typeReturned: null, cached, attempts, costUsd: cost, grade: null, error: 'response failed validation', latencyMs: performance.now() - started };
   }
-  cost += parsed2.data.totalCostUsd;
   const { result: result2 } = parsed2.data;
   if (result2.type !== 'patch' && result2.type !== 'rule_proposal') {
-    return { id: fixture.id, category: 'followup', typeReturned: result2.type, cached: false, attempts: 2, costUsd: cost, grade: { pass: false, note: `follow-up returned "${result2.type}"` }, error: null };
+    return { id: fixture.id, category: 'followup', typeReturned: result2.type, cached, attempts, costUsd: cost, grade: { pass: false, note: `follow-up returned "${result2.type}"` }, error: null, latencyMs: performance.now() - started };
   }
   const applied2 = applyCompileResult(level1, result2);
   if (!applied2.ok) {
-    return { id: fixture.id, category: 'followup', typeReturned: result2.type, cached: false, attempts: 2, costUsd: cost, grade: { pass: false, note: `follow-up rejected: ${applied2.errors[0]}` }, error: null };
+    return { id: fixture.id, category: 'followup', typeReturned: result2.type, cached, attempts, costUsd: cost, grade: { pass: false, note: `follow-up rejected: ${applied2.errors[0]}` }, error: null, latencyMs: performance.now() - started };
   }
   const finalLevel = applied2.level;
   const grade = gradeScratchExpect(fixture.expect)(result2, level1);
@@ -505,44 +548,57 @@ async function runFollowup(fixture: FollowupFixture): Promise<RunRecord> {
     id: fixture.id,
     category: 'followup',
     typeReturned: result2.type,
-    cached: false,
-    attempts: 2,
+    cached,
+    attempts,
     costUsd: cost,
     grade: { pass: grade.pass && report.accepted, note: grade.pass ? note : grade.note },
     error: null,
+    latencyMs: performance.now() - started,
   };
 }
 
 async function main(): Promise<void> {
-  const only = process.env.ONLY; // e.g. ONLY=scratch — run one class standalone
-  if (only === 'followup') {
-    const records: RunRecord[] = [];
-    let totalCost = 0;
-    for (const fixture of FOLLOWUPS) {
-      const record = await runFollowup(fixture);
-      records.push(record);
-      totalCost += record.costUsd;
-      const mark = record.error ? 'ERR ' : record.grade?.pass ? 'PASS' : 'FAIL';
-      console.log(`${mark}  ${fixture.id.padEnd(20)} ${record.typeReturned ?? '—'} ${record.costUsd.toFixed(5)}$  ${record.grade?.note ?? record.error ?? ''}`);
-      await new Promise((r) => setTimeout(r, 2500));
-    }
-    const passed = records.filter((r) => r.grade?.pass).length;
-    console.log(`\nfollowup: ${passed}/${records.length} · $${totalCost.toFixed(4)}`);
-    return;
+  const liveBudgetUsd = requireLiveBudget(
+    process.argv.slice(2),
+    'Usage: npx tsx scripts/reliability.ts --confirm-live-ai --budget-usd 0.10 (optional ONLY=scratch).',
+  );
+  const budget = new LiveBudget(liveBudgetUsd);
+  const only = process.env.ONLY;
+  const validCategories = new Set([...new Set(FIXTURES.map((fixture) => fixture.category)), 'followup']);
+  if (only !== undefined && !validCategories.has(only as Category | 'followup')) {
+    throw new LiveEvaluationStop(`Unknown ONLY category: ${only}`);
   }
-  const fixtures = only !== undefined ? FIXTURES.filter((f) => f.category === only) : FIXTURES;
   const records: RunRecord[] = [];
-  let totalCost = 0;
-  for (const fixture of fixtures) {
-    const record = await runFixture(fixture);
-    records.push(record);
-    totalCost += record.costUsd;
-    const mark = record.error ? 'ERR ' : record.grade?.pass ? 'PASS' : 'FAIL';
-    console.log(`${mark}  ${fixture.id.padEnd(14)} ${record.typeReturned ?? '—'}${record.cached ? ' (cached)' : ''} ${record.costUsd.toFixed(5)}$  ${record.grade?.note ?? record.error ?? ''}`);
-    await new Promise((r) => setTimeout(r, 2500));
+  const fixtures = only !== undefined ? FIXTURES.filter((f) => f.category === only) : FIXTURES;
+  const followupMode = only === 'followup';
+  const expectedCount = followupMode ? FOLLOWUPS.length : fixtures.length;
+  let stopReason: string | null = null;
+
+  try {
+    if (followupMode) {
+      for (const fixture of FOLLOWUPS) {
+        const record = await runFollowup(fixture, budget);
+        records.push(record);
+        const mark = record.error ? 'ERR ' : record.grade?.pass ? 'PASS' : 'FAIL';
+        console.log(`${mark}  ${fixture.id.padEnd(20)} ${record.typeReturned ?? '—'} ${record.latencyMs.toFixed(0)} ms ${formatCost(record.costUsd)}  ${record.grade?.note ?? record.error ?? ''}`);
+        if (record.error !== null) throw new LiveEvaluationStop(`Stopping after ${fixture.id}: ${record.error}`);
+        await new Promise((r) => setTimeout(r, 2500));
+      }
+    } else {
+      for (const fixture of fixtures) {
+        const record = await runFixture(fixture, budget);
+        records.push(record);
+        const mark = record.error ? 'ERR ' : record.grade?.pass ? 'PASS' : 'FAIL';
+        console.log(`${mark}  ${fixture.id.padEnd(14)} ${record.typeReturned ?? '—'}${record.cached ? ' (cached)' : ''} ${record.latencyMs.toFixed(0)} ms ${formatCost(record.costUsd)}  ${record.grade?.note ?? record.error ?? ''}`);
+        if (record.error !== null) throw new LiveEvaluationStop(`Stopping after ${fixture.id}: ${record.error}`);
+        await new Promise((r) => setTimeout(r, 2500));
+      }
+    }
+  } catch (error) {
+    stopReason = error instanceof Error ? error.message : String(error);
   }
 
-  console.log('\n=== per-class reliability ===');
+  if (!followupMode) console.log('\n=== per-class reliability ===');
   const byCategory = new Map<string, { pass: number; total: number }>();
   for (const r of records) {
     const entry = byCategory.get(r.category) ?? { pass: 0, total: 0 };
@@ -554,9 +610,31 @@ async function main(): Promise<void> {
     console.log(`${category.padEnd(16)} ${pass}/${total}`);
   }
   const passed = records.filter((r) => r.grade?.pass).length;
-  console.log(`\ntotal: ${passed}/${records.length} passed · $${totalCost.toFixed(4)} spent`);
-  writeFileSync('/tmp/reliability.json', JSON.stringify(records, null, 2));
+  console.log(`\ntotal: ${passed}/${records.length} passed · known billed/estimated $${budget.spentUsd.toFixed(5)} / $${liveBudgetUsd.toFixed(5)}`);
+  if (stopReason !== null) console.error(`Stopped with incomplete evidence: ${stopReason}`);
+  const report = {
+    generatedAt: new Date().toISOString(),
+    endpoint: API,
+    cacheAware: true,
+    repeats: 1,
+    budgetUsd: liveBudgetUsd,
+    knownTotalCostUsd: budget.spentUsd,
+    complete: stopReason === null && records.length === expectedCount,
+    stopReason,
+    total: records.length,
+    passed,
+    costUsd: records.some((record) => record.costUsd === null) ? null : records.reduce((sum, record) => sum + record.costUsd!, 0),
+    byCategory: Object.fromEntries([...byCategory.entries()].sort()),
+    records,
+  };
+  writeFileSync('/tmp/reliability.json', JSON.stringify(report, null, 2));
   console.log('full records: /tmp/reliability.json');
+  if (stopReason !== null || records.length !== expectedCount) process.exitCode = 2;
 }
 
-await main();
+try {
+  await main();
+} catch (error) {
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exitCode = 2;
+}

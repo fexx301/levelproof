@@ -2,6 +2,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, render, waitFor } from '@testing-library/react';
 import { baselineLevel } from '../src/core/fixtures/baseline';
+import { trapLevel } from '../src/core/fixtures/trap';
+import { buildFailureEvidence } from '../src/core/failure-evidence';
+import { verify } from '../src/core/verifier';
 import { applyRuleProposal } from '../src/core/level';
 import { revisionId } from '../src/core/serialize';
 
@@ -23,6 +26,7 @@ function makeHandle() {
     onPick: vi.fn(),
     setSelection: vi.fn(),
     setProtected: vi.fn(),
+    setEvidence: vi.fn(),
     spawnPlayer: vi.fn(),
     setKeyboardOrbit: vi.fn(),
     setAnalysis: vi.fn(),
@@ -45,6 +49,7 @@ beforeEach(() => {
     preview: null,
     selection: [],
     protectedIds: [],
+    evidence: null,
     mode: 'authoring',
     error: null,
     savedScenes: [],
@@ -110,5 +115,26 @@ describe('scene lifecycle boundaries', () => {
     render(<App />);
     await waitFor(() => expect(handle.previewOperations).toHaveBeenCalledWith(preview));
     expect(handle.previewOperations.mock.calls.at(-1)?.[0]?.candidate).toEqual(applied.level);
+  });
+
+  it('keeps verifier evidence and rebinds its highlights after a theme remount', async () => {
+    const handles = [makeHandle(), makeHandle()];
+    let mountCount = 0;
+    sceneMock.mountScene.mockImplementation(() => handles[mountCount++]);
+    const report = verify(trapLevel);
+    const evidence = buildFailureEvidence(trapLevel, report, 'recovery');
+    if (evidence === null) throw new Error('trap fixture needs replayable recovery evidence');
+    useApp.setState({
+      draft: { level: trapLevel, report, viaRule: false, returnSceneId: 'balcony-vault', lineageKnown: true },
+      evidence,
+    });
+    render(<App />);
+
+    await waitFor(() => expect(sceneMock.mountScene).toHaveBeenCalledTimes(1));
+    expect(handles[0]!.setEvidence).toHaveBeenLastCalledWith(evidence.implicatedIds);
+    act(() => useApp.getState().setTheme('futuristic'));
+    await waitFor(() => expect(sceneMock.mountScene).toHaveBeenCalledTimes(2));
+    expect(useApp.getState().evidence).toEqual(evidence);
+    expect(handles[1]!.setEvidence).toHaveBeenLastCalledWith(evidence.implicatedIds);
   });
 });

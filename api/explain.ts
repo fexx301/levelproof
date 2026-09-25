@@ -1,5 +1,6 @@
 import { explain } from './_lib/explain-service.js';
 import { explainRequestSchema } from '../shared/api.js';
+import { enforceRequestBudget, readLimitedJson } from './_lib/request-guard.js';
 
 /**
  * POST /api/explain — grounded failure narration (§10). The server recomputes
@@ -14,20 +15,24 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json({ error: 'method_not_allowed' }, { status: 405 });
   }
 
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return Response.json({ error: 'invalid_json' }, { status: 400 });
+  const protection = await enforceRequestBudget(request);
+  if (protection !== null) return protection;
+
+  const decoded = await readLimitedJson(request);
+  if (!decoded.ok) {
+    return Response.json(
+      { error: decoded.status === 413 ? 'request_too_large' : 'invalid_json' },
+      { status: decoded.status, headers: { 'Cache-Control': 'no-store' } },
+    );
   }
 
-  const parsed = explainRequestSchema.safeParse(body);
+  const parsed = explainRequestSchema.safeParse(decoded.value);
   if (!parsed.success) {
     const issues = parsed.error.issues.map((issue) => `${issue.path.join('.') || '(root)'}: ${issue.message}`);
     return Response.json({ error: 'invalid_request', issues }, { status: 400 });
   }
 
-  const outcome = await explain(process.env, parsed.data);
+  const outcome = await explain(process.env, parsed.data, { signal: request.signal });
 
   if (outcome.explanation === null) {
     const status =
@@ -37,8 +42,9 @@ export async function POST(request: Request): Promise<Response> {
         error: outcome.error ?? 'explain_failed',
         attempts: outcome.attempts,
         totalCostUsd: outcome.totalCostUsd,
+        generationCostUsd: outcome.generationCostUsd,
       },
-      { status },
+      { status: outcome.error === 'cancelled' ? 499 : status },
     );
   }
 
@@ -47,5 +53,6 @@ export async function POST(request: Request): Promise<Response> {
     cached: outcome.cached,
     attempts: outcome.attempts,
     totalCostUsd: outcome.totalCostUsd,
+    generationCostUsd: outcome.generationCostUsd,
   });
 }

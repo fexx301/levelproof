@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { baselineLevel } from '../src/core/fixtures/baseline';
 import {
   SAVES_KEY,
@@ -6,6 +6,7 @@ import {
   persistSavedScenes,
   prependSavedScene,
   readSavedScenes,
+  safeBrowserStorage,
   type StorageLike,
 } from '../src/state/persistence';
 
@@ -24,6 +25,17 @@ function memoryStorage(initial: string | null = null): StorageLike & { value: st
   };
 }
 
+function failingStorage(): StorageLike {
+  return {
+    getItem() {
+      return null;
+    },
+    setItem() {
+      throw new Error('quota');
+    },
+  };
+}
+
 function failingLevel() {
   const level = structuredClone(baselineLevel);
   level.goal = 'gallery';
@@ -31,6 +43,18 @@ function failingLevel() {
 }
 
 describe('versioned legacy save persistence', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('does not report success when browser storage is missing or its getter throws', () => {
+    const record = normalizeSavedScenes([{ id: 'accepted', name: 'Accepted', savedAt: 1, level: baselineLevel }]);
+    expect(persistSavedScenes(undefined, record)).toMatchObject({ ok: false });
+    const restrictedWindow = Object.defineProperty({}, 'localStorage', {
+      get() { throw new Error('blocked by browser policy'); },
+    });
+    vi.stubGlobal('window', restrictedWindow);
+    expect(safeBrowserStorage()).toBeUndefined();
+  });
+
   it('keeps accepted, editable draft, and malformed entries visible', () => {
     const rawAccepted = { id: 'accepted-old', name: 'Accepted old', savedAt: 1, level: baselineLevel };
     const rawDraft = { id: 'draft-old', name: 'Draft old', savedAt: 2, level: failingLevel() };
@@ -73,8 +97,8 @@ describe('versioned legacy save persistence', () => {
     expect(storage.getItem(SAVES_KEY)).toContain('"version":2');
   });
 
-  it('caps accepted checkpoints while retaining all legacy draft/unavailable entries', () => {
-    const accepted = Array.from({ length: 20 }, (_, index) => ({
+  it('never prunes older accepted, draft, or unavailable legacy entries on save', () => {
+    const accepted = Array.from({ length: 24 }, (_, index) => ({
       id: `accepted-${index}`,
       name: `Accepted ${index}`,
       savedAt: index,
@@ -89,8 +113,16 @@ describe('versioned legacy save persistence', () => {
     if (next.status !== 'accepted') throw new Error('baseline fixture should be accepted');
 
     const kept = prependSavedScene(records, next);
-    expect(kept.filter((record) => record.status === 'accepted')).toHaveLength(20);
+    expect(kept.filter((record) => record.status === 'accepted')).toHaveLength(25);
+    expect(kept.find((record) => record.recordKey === 'accepted-23')?.status).toBe('accepted');
     expect(kept.find((record) => record.recordKey === 'old-draft')?.status).toBe('draft');
     expect(kept.find((record) => record.recordKey === 'old-broken')?.status).toBe('unavailable');
+  });
+
+  it('returns a recoverable storage error without hiding the in-memory records', () => {
+    const records = normalizeSavedScenes([{ id: 'accepted', name: 'Accepted', savedAt: 1, level: baselineLevel }]);
+    const persisted = persistSavedScenes(failingStorage(), records);
+    expect(persisted.ok).toBe(false);
+    if (!persisted.ok) expect(persisted.error).toContain('current session is unchanged');
   });
 });

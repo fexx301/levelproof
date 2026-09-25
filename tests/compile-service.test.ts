@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { resetCache } from '../api/_lib/cache';
 import { compile, type CallModel } from '../api/_lib/compile-service';
+import { buildSystemPrompt, PROMPT_VERSION } from '../api/_lib/prompt';
 import type { ProviderResult } from '../api/_lib/provider';
 import { vaultEmptyLevel } from '../src/core/fixtures/vault-empty';
 import { applyOperations } from '../src/core/level';
@@ -47,6 +48,18 @@ function scriptedModel(script: ProviderResult[]): { calls: string[]; fn: CallMod
 
 beforeEach(() => {
   resetCache();
+});
+
+describe('compile prompt guardrails', () => {
+  it('defaults unspecified doors to open and forbids invented conditions', () => {
+    const prompt = buildSystemPrompt(vaultEmptyLevel, revisionId(vaultEmptyLevel));
+
+    expect(PROMPT_VERSION).toBe('prompt-8');
+    expect(prompt).toContain('A door with no explicitly requested lock or switch behavior is an OPEN, passable door');
+    expect(prompt).toContain('Never invent a key, switch, or other condition for a door');
+    expect(prompt).toContain('if the intended condition or location is materially ambiguous, ask one concise clarification');
+    expect(prompt).toContain('omit conditions unless explicitly requested (an unconditioned door is open)');
+  });
 });
 
 describe('three-attempt bound (§10)', () => {
@@ -172,8 +185,44 @@ describe('full-input cache (§10.2)', () => {
     const second = await compile(ENV, input, { callModel: fn });
     expect(second.cached).toBe(true);
     expect(second.result).toEqual(first.result);
-    expect(second.attempts).toHaveLength(0);
+    expect(second.totalCostUsd).toBe(0);
+    expect(second.generationCostUsd).toBe(first.generationCostUsd);
+    expect(second.attempts).toEqual(first.attempts);
     expect(calls).toHaveLength(1);
+  });
+
+  it('keeps unknown provider usage unknown instead of presenting it as zero cost', async () => {
+    const unmetered: ProviderResult = {
+      ok: true,
+      content: validPatch,
+      usage: { promptTokens: 100, completionTokens: 50, costUsd: null },
+    };
+    const { fn } = scriptedModel([unmetered]);
+    const first = await compile(ENV, { level: vaultEmptyLevel, prompt: 'unmetered request' }, { callModel: fn });
+    expect(first.totalCostUsd).toBeNull();
+    expect(first.attempts[0]?.costUsd).toBeNull();
+    const cached = await compile(ENV, { level: vaultEmptyLevel, prompt: 'unmetered request' }, { callModel: fn });
+    expect(cached.cached).toBe(true);
+    expect(cached.totalCostUsd).toBe(0);
+    expect(cached.generationCostUsd).toBeNull();
+    expect(cached.attempts[0]?.costUsd).toBeNull();
+  });
+
+  it('passes cancellation through to the provider and does not schedule retries', async () => {
+    const controller = new AbortController();
+    let receivedSignal: AbortSignal | undefined;
+    const fn: CallModel = async (_config, _messages, _options, signal) => {
+      receivedSignal = signal;
+      controller.abort();
+      return { ok: false, kind: 'cancelled', error: 'cancelled' };
+    };
+    const outcome = await compile(ENV, { level: vaultEmptyLevel, prompt: 'cancel me' }, {
+      callModel: fn,
+      signal: controller.signal,
+    });
+    expect(receivedSignal).toBe(controller.signal);
+    expect(outcome.error).toBe('cancelled');
+    expect(outcome.attempts).toHaveLength(0);
   });
 
   it('differentiates on prompt, clarification context, and level content', async () => {
@@ -186,6 +235,24 @@ describe('full-input cache (§10.2)', () => {
       { callModel: fn },
     );
     expect(calls).toHaveLength(3);
+  });
+
+  it('tells the model which entities are protected and separates their cache entries', async () => {
+    const messages: string[] = [];
+    let calls = 0;
+    const fn: CallModel = async (_config, requestMessages) => {
+      calls++;
+      messages.push(requestMessages[1]?.content ?? '');
+      return ok(validPatch);
+    };
+
+    await compile(ENV, { level: vaultEmptyLevel, prompt: 'Make a small change.', protectedIds: ['brass-key'] }, { callModel: fn });
+    await compile(ENV, { level: vaultEmptyLevel, prompt: 'Make a small change.' }, { callModel: fn });
+
+    expect(calls).toBe(2);
+    expect(messages[0]).toContain('marked these scene entities Keep these: brass-key');
+    expect(messages[0]).toContain('Do not add, remove, move, rename');
+    expect(messages[1]).not.toContain('Keep these');
   });
 });
 

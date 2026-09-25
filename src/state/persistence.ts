@@ -5,7 +5,6 @@ import { verify } from '../core/verifier.js';
 /** Versioned, backwards-compatible local save adapter. */
 export const SAVES_KEY = 'levelproof:saves';
 export const SAVES_VERSION = 2;
-export const MAX_ACCEPTED_SAVES = 20;
 
 export type SavedSceneStatus = 'accepted' | 'draft' | 'unavailable';
 
@@ -44,6 +43,16 @@ export type SavedScene = AcceptedSavedScene | DraftSavedScene | UnavailableSaved
 export interface StorageLike {
   getItem(key: string): string | null;
   setItem(key: string, value: string): void;
+  removeItem?(key: string): void;
+}
+
+/** Accessing window.localStorage itself can throw in privacy-restricted browsers. */
+export function safeBrowserStorage(): StorageLike | undefined {
+  try {
+    return typeof window === 'undefined' ? undefined : window.localStorage;
+  } catch {
+    return undefined;
+  }
 }
 
 export type PersistResult = { ok: true } | { ok: false; error: string };
@@ -198,7 +207,9 @@ function serialize(record: SavedScene): unknown {
 }
 
 export function persistSavedScenes(storage: StorageLike | undefined, records: SavedScene[]): PersistResult {
-  if (storage === undefined) return { ok: true };
+  if (storage === undefined) {
+    return { ok: false, error: 'This browser does not provide local storage. Saved puzzles cannot be kept after this session.' };
+  }
   if (records.some((record) => record.status === 'unavailable' && record.rootCorrupt)) {
     return { ok: false, error: 'Local saves are unreadable. Remove the “Unreadable local saves” entry before saving.' };
   }
@@ -210,19 +221,9 @@ export function persistSavedScenes(storage: StorageLike | undefined, records: Sa
   }
 }
 
-/** Keep every draft/unavailable legacy entry while capping accepted checkpoints. */
+/** Never prune an existing library entry implicitly; storage failure is reported to the user. */
 export function prependSavedScene(records: SavedScene[], next: AcceptedSavedScene): SavedScene[] {
-  const combined = [next, ...records];
-  let acceptedSeen = 0;
-  const kept: SavedScene[] = [];
-  for (const record of combined) {
-    if (record.status === 'accepted') {
-      acceptedSeen += 1;
-      if (acceptedSeen > MAX_ACCEPTED_SAVES) continue;
-    }
-    kept.push(record);
-  }
-  return kept;
+  return [next, ...records];
 }
 
 export function savedSceneOptionLabel(record: SavedScene): string {

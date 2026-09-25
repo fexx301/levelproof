@@ -5,7 +5,7 @@
  * budget exhaustion).
  */
 
-export type ProviderErrorKind = 'rate_limited' | 'timeout' | 'budget' | 'outage' | 'unknown';
+export type ProviderErrorKind = 'rate_limited' | 'timeout' | 'budget' | 'outage' | 'unknown' | 'cancelled';
 
 export interface ProviderConfig {
   baseUrl: string;
@@ -51,9 +51,13 @@ export async function chatCompletion(
   config: ProviderConfig,
   messages: ChatMessage[],
   options: StructuredOptions = {},
+  requestSignal?: AbortSignal,
 ): Promise<ProviderResult> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), config.timeoutMs);
+  const timeoutController = new AbortController();
+  const timer = setTimeout(() => timeoutController.abort(), config.timeoutMs);
+  const signal = requestSignal === undefined
+    ? timeoutController.signal
+    : AbortSignal.any([requestSignal, timeoutController.signal]);
   try {
     const body: Record<string, unknown> = {
       model: config.model,
@@ -82,7 +86,7 @@ export async function chatCompletion(
         'X-Title': 'LevelProof',
       },
       body: JSON.stringify(body),
-      signal: controller.signal,
+      signal,
     });
     if (!response.ok) {
       const text = await response.text().catch(() => '');
@@ -110,6 +114,9 @@ export async function chatCompletion(
       },
     };
   } catch (error) {
+    if (requestSignal?.aborted) {
+      return { ok: false, kind: 'cancelled', error: 'The request was cancelled by the client.' };
+    }
     if (error instanceof Error && error.name === 'AbortError') {
       return { ok: false, kind: 'timeout', error: `Timed out after ${config.timeoutMs} ms.` };
     }

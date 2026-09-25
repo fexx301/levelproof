@@ -3,6 +3,7 @@ import type { Cardinal } from '../../shared/schema.js';
 import { centerPoint } from '../core/catalog.js';
 import { goalRequirementViolated, initialState, step, transitions, type GameState, type MoveRecord } from '../core/movement.js';
 import type { CompiledLevel } from '../core/topology.js';
+import { createGhostVisual, type GhostMotion, type GhostVisual } from './ghost-visual.js';
 
 /**
  * Actors walk catalog-owned polylines at a constant speed (§12). Rendering
@@ -15,6 +16,7 @@ const WALK_SPEED_CM_S = 300;
 const ACTOR_RADIUS_CM = 25;
 const ACTOR_BODY_CM = 110;
 const ACTOR_CENTER_OFFSET_CM = ACTOR_BODY_CM / 2 + ACTOR_RADIUS_CM;
+const FINISH_SETTLE_SECONDS = 0.72;
 /** Contract floor (§12): reduced motion means a stepped ghost, no pulse. Read live so mid-session preference changes are honored. */
 export function reducedMotion(): boolean {
   return typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -23,6 +25,7 @@ export function reducedMotion(): boolean {
 export interface GhostTickState {
   playing: boolean;
   finished: boolean;
+  pausedAtEvidence: boolean;
   moveIndex: number;
   totalMoves: number;
   keys: string[];
@@ -121,21 +124,6 @@ function actorBody(color: number, emissive: number, opacity: number): THREE.Mesh
   return mesh;
 }
 
-/** A back-face shell one size up: reads as a rim outline from any angle. */
-function actorOutline(color: number, opacity: number): THREE.Mesh {
-  const mesh = new THREE.Mesh(
-    new THREE.CapsuleGeometry(ACTOR_RADIUS_CM, ACTOR_BODY_CM, 6, 12),
-    new THREE.MeshBasicMaterial({
-      color,
-      transparent: true,
-      opacity,
-      side: THREE.BackSide,
-    }),
-  );
-  mesh.scale.setScalar(1.22);
-  return mesh;
-}
-
 /** Bright contact ring at the actor's feet so it grounds and stays findable. */
 function underRing(color: number): THREE.Mesh {
   const mesh = new THREE.Mesh(
@@ -168,17 +156,6 @@ class PolylineCurve extends THREE.Curve<THREE.Vector3> {
     return target.copy(this.points[0]!);
   }
 }
-/** A tapering tail under the capsule: reads as a spirit pawn, not a pill. */
-function ghostWisp(): THREE.Mesh {
-  const mesh = new THREE.Mesh(
-    new THREE.ConeGeometry(30, 80, 12, 1, true),
-    new THREE.MeshBasicMaterial({ color: 0xd57064, transparent: true, opacity: 0.55, side: THREE.DoubleSide }),
-  );
-  mesh.rotation.x = Math.PI;
-  mesh.position.y = -(ACTOR_CENTER_OFFSET_CM - 30);
-  return mesh;
-}
-
 /**
  * The witness route rendered as an unlit tube on the floor plus an end
  * marker ring at the route's final state. Fail routes read red; the one
@@ -224,37 +201,62 @@ export class GhostActor {
   private readonly kind: GhostFinishInfo['kind'];
   private readonly missingKeys: string[];
   private readonly unregister: () => void;
-  private readonly body: THREE.Mesh;
+  private readonly visual: GhostVisual;
   private readonly trail: THREE.Group;
+  private readonly pauseAfterMoveIndex: number | null;
+  private readonly previousPosition = new THREE.Vector3();
+  private readonly positionDelta = new THREE.Vector3();
+  private readonly horizontalDelta = new THREE.Vector3();
+  private readonly velocity = new THREE.Vector3();
+  private readonly direction = new THREE.Vector3(0, 0, 1);
+  private readonly visualMotion: GhostMotion = {
+    velocity: this.velocity,
+    direction: this.direction,
+    turning: 0,
+    playing: false,
+    finished: false,
+  };
   private index = 0;
   private distance = 0;
   private stepClock = 0;
   private playing = false;
   private finished = false;
+  private finishVisualPlaying = false;
+  private finishVisualClock = 0;
   private stepMode = false;
+  private breakpointPending = false;
+  private pausedAtEvidence = false;
   private keys: string[] = [];
   private switches: string[] = [];
   private endState: GameState;
+  private disposed = false;
 
-  constructor(ctx: ActorContext, route: MoveRecord[], kind: GhostFinishInfo['kind'], missingKeys: string[], callbacks: GhostCallbacks) {
+  constructor(
+    ctx: ActorContext,
+    route: MoveRecord[],
+    kind: GhostFinishInfo['kind'],
+    missingKeys: string[],
+    callbacks: GhostCallbacks,
+    pauseAfterMoveIndex: number | null = null,
+  ) {
     this.ctx = ctx;
     this.steps = pathSteps(route);
     this.kind = kind;
     this.missingKeys = missingKeys;
     this.callbacks = callbacks;
+    this.pauseAfterMoveIndex = pauseAfterMoveIndex !== null && pauseAfterMoveIndex > 0 ? pauseAfterMoveIndex : null;
+    this.breakpointPending = this.pauseAfterMoveIndex !== null;
     this.endState = route.length > 0 ? route[route.length - 1]!.after : initialState(ctx.compiled);
     this.mesh = new THREE.Group();
-    this.body = actorBody(0xe0685c, 0xc2453a, 0.95);
-    this.body.scale.setScalar(1.15);
-    this.mesh.add(this.body, actorOutline(0xffa89c, 0.5), underRing(0xffc0b5), ghostWisp());
-    // Physical light units at cm scale: decay-1 lamp (see scene.ts goal light).
-    const ghostLamp = new THREE.PointLight(0xd57064, 260, 1500, 1);
-    ghostLamp.position.y = -(ACTOR_CENTER_OFFSET_CM - 55);
-    this.mesh.add(ghostLamp);
+    this.visual = createGhostVisual({ reducedMotion });
+    this.mesh.add(this.visual.object);
     if (this.steps.length > 0) {
       const start = this.steps[0]!.points[0]!;
       this.mesh.position.set(start.x, start.y + ACTOR_CENTER_OFFSET_CM, start.z);
+      this.seedDirection();
+      this.visual.setDirection(this.direction);
     }
+    this.previousPosition.copy(this.mesh.position);
     ctx.scene.add(this.mesh);
     ctx.world.resetWorld();
     ctx.world.updateState(route.length > 0 ? route[0]!.before : initialState(ctx.compiled));
@@ -268,33 +270,53 @@ export class GhostActor {
   }
 
   play(): void {
+    if (this.disposed) return;
     if (this.finished) this.restart();
+    if (this.steps.length === 0) return;
+    if (this.index >= this.steps.length) {
+      this.pausedAtEvidence = false;
+      this.finish();
+      return;
+    }
+    this.pausedAtEvidence = false;
     this.stepMode = false;
     this.playing = true;
     this.emit();
   }
 
   pause(): void {
+    if (this.disposed) return;
     this.playing = false;
+    this.finishVisualPlaying = false;
     this.stepMode = false;
     this.emit();
   }
 
   step(): void {
+    if (this.disposed) return;
     if (this.finished) this.restart();
+    if (this.steps.length === 0) return;
+    if (this.index >= this.steps.length) {
+      this.pausedAtEvidence = false;
+      this.finish();
+      return;
+    }
+    this.pausedAtEvidence = false;
     this.stepMode = true;
     this.playing = true;
     this.emit();
   }
 
   restart(): void {
+    if (this.disposed) return;
     this.index = 0;
     this.distance = 0;
     this.stepClock = 0;
     this.finished = false;
-    const material = this.body.material as THREE.MeshStandardMaterial;
-    material.opacity = 0.95;
-    material.emissiveIntensity = 1;
+    this.breakpointPending = this.pauseAfterMoveIndex !== null;
+    this.pausedAtEvidence = false;
+    this.finishVisualPlaying = false;
+    this.finishVisualClock = 0;
     this.keys = [];
     this.switches = [];
     this.ctx.world.resetWorld();
@@ -303,38 +325,69 @@ export class GhostActor {
       const start = this.steps[0]!.points[0]!;
       this.mesh.position.set(start.x, start.y + ACTOR_CENTER_OFFSET_CM, start.z);
     }
+    this.velocity.set(0, 0, 0);
+    this.previousPosition.copy(this.mesh.position);
+    this.visual.reset();
+    if (this.steps.length > 0) {
+      this.seedDirection();
+      this.visual.setDirection(this.direction);
+    } else {
+      this.direction.set(0, 0, 1);
+    }
     this.emit();
   }
 
   dispose(): void {
+    if (this.disposed) return;
+    this.disposed = true;
     this.unregister();
     this.ctx.follow(null);
     this.ctx.world.resetWorld();
     this.ctx.scene.remove(this.mesh);
     this.ctx.scene.remove(this.trail);
-    for (const child of [...this.mesh.children, ...this.trail.children]) {
+    this.visual.dispose();
+    this.trail.traverse((child) => {
       if (child instanceof THREE.Mesh) {
         child.geometry.dispose();
-        (child.material as THREE.Material).dispose();
+        const materials = Array.isArray(child.material) ? child.material : [child.material];
+        for (const material of materials) material.dispose();
       }
-    }
+    });
   }
 
   private update = (dt: number, elapsed: number): void => {
+    if (this.disposed) return;
     if (this.finished) {
-      if (!reducedMotion()) {
-        // Hold at the trapped state, pulsing gently so the eye finds it.
-        const material = this.body.material as THREE.MeshStandardMaterial;
-        material.opacity = 0.55 + 0.2 * Math.sin(elapsed * 0.004);
-        material.emissiveIntensity = 0.8 + 0.4 * Math.sin(elapsed * 0.004);
+      this.visualMotion.playing = this.finishVisualPlaying;
+      this.visualMotion.finished = true;
+      this.visualMotion.turning = 0;
+      this.visual.update(this.finishVisualPlaying ? dt : 0, elapsed, this.visualMotion);
+      if (this.finishVisualPlaying) {
+        const finishDelta = Math.min(Math.max(Number.isFinite(dt) ? dt : 0, 0), 0.1);
+        this.finishVisualClock += finishDelta;
+        if (this.finishVisualClock >= FINISH_SETTLE_SECONDS) this.finishVisualPlaying = false;
       }
       return;
     }
-    if (!this.playing || this.steps.length === 0) return;
+    if (!this.playing || this.steps.length === 0) {
+      // A zero-delta visual tick is enough to adopt a live reduced-motion
+      // preference while paused, without advancing cloth or expression time.
+      this.visualMotion.playing = false;
+      this.visualMotion.finished = false;
+      this.visualMotion.turning = 0;
+      this.visual.update(0, elapsed, this.visualMotion);
+      return;
+    }
     if (reducedMotion()) {
       // Stepped ghost: one discrete move per interval, no interpolation.
       this.stepClock += dt;
-      if (this.stepClock < 0.6) return;
+      if (this.stepClock < 0.6) {
+        this.visualMotion.playing = true;
+        this.visualMotion.finished = false;
+        this.visualMotion.turning = 0;
+        this.visual.update(0, elapsed, this.visualMotion);
+        return;
+      }
       this.stepClock = 0;
       this.distance += this.steps[this.index]!.length;
     } else {
@@ -347,11 +400,23 @@ export class GhostActor {
       this.mesh.position.set(endpoint.x, endpoint.y + ACTOR_CENTER_OFFSET_CM, endpoint.z);
       this.index++;
       this.arrive(completed.move);
+      if (this.breakpointPending && this.index >= this.pauseAfterMoveIndex!) {
+        this.breakpointPending = false;
+        this.pausedAtEvidence = true;
+        this.updateVisual(dt, elapsed);
+        this.playing = false;
+        this.stepMode = false;
+        this.distance = 0;
+        this.emit();
+        return;
+      }
       if (this.index >= this.steps.length) {
+        this.updateVisual(dt, elapsed);
         this.finish();
         return;
       }
       if (this.stepMode) {
+        this.updateVisual(dt, elapsed);
         this.playing = false;
         this.distance = 0;
         this.emit();
@@ -361,6 +426,7 @@ export class GhostActor {
     const current = this.steps[Math.min(this.index, this.steps.length - 1)]!;
     const position = pointAt(current, this.distance);
     this.mesh.position.set(position.x, position.y + ACTOR_CENTER_OFFSET_CM, position.z);
+    this.updateVisual(dt, elapsed);
   };
 
   private arrive(move: MoveRecord): void {
@@ -373,6 +439,7 @@ export class GhostActor {
       this.switches = [...this.switches, move.events.activatedSwitch];
       this.ctx.world.activateSwitch(move.events.activatedSwitch);
     }
+    this.visual.trigger(move.events.collectedKey ? 'key' : move.events.activatedSwitch ? 'switch' : 'arrive');
     this.callbacks.onArrive(move);
     this.emit();
   }
@@ -380,14 +447,55 @@ export class GhostActor {
   private finish(): void {
     this.finished = true;
     this.playing = false;
+    this.pausedAtEvidence = false;
+    this.finishVisualPlaying = true;
+    this.finishVisualClock = 0;
+    this.velocity.set(0, 0, 0);
+    this.visual.trigger({ type: 'finish', kind: this.kind });
     this.emit();
     this.callbacks.onFinish({ endState: this.endState, kind: this.kind, missingKeys: this.missingKeys });
+  }
+
+  private seedDirection(): void {
+    for (const step of this.steps) {
+      for (let i = 1; i < step.points.length; i++) {
+        this.direction.subVectors(step.points[i]!, step.points[i - 1]!);
+        this.direction.y = 0;
+        if (this.direction.lengthSq() > 0.0001) {
+          this.direction.normalize();
+          return;
+        }
+      }
+    }
+    this.direction.set(0, 0, 1);
+  }
+
+  private updateVisual(dt: number, elapsed: number): void {
+    const seconds = Math.max(Math.min(Math.max(Number.isFinite(dt) ? dt : 0, 0), 0.1), 0.000001);
+    this.positionDelta.subVectors(this.mesh.position, this.previousPosition);
+    this.velocity.copy(this.positionDelta).divideScalar(seconds);
+    this.horizontalDelta.copy(this.positionDelta);
+    this.horizontalDelta.y = 0;
+    let turning = 0;
+    if (this.horizontalDelta.lengthSq() > 0.0001) {
+      this.horizontalDelta.normalize();
+      const dot = THREE.MathUtils.clamp(this.direction.dot(this.horizontalDelta), -1, 1);
+      const cross = this.direction.x * this.horizontalDelta.z - this.direction.z * this.horizontalDelta.x;
+      turning = Math.sign(cross || 1) * Math.acos(dot) / Math.PI;
+      this.direction.copy(this.horizontalDelta);
+    }
+    this.previousPosition.copy(this.mesh.position);
+    this.visualMotion.playing = this.playing;
+    this.visualMotion.finished = this.finished;
+    this.visualMotion.turning = turning;
+    this.visual.update(dt, elapsed, this.visualMotion);
   }
 
   private emit(): void {
     this.callbacks.onTick({
       playing: this.playing,
       finished: this.finished,
+      pausedAtEvidence: this.pausedAtEvidence,
       moveIndex: this.index,
       totalMoves: this.steps.length,
       keys: this.keys,

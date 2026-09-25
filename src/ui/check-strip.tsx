@@ -73,7 +73,7 @@ export function CheckStrip({ report, ms }: { report: Report; ms: number }) {
             <span className="check-status">{statusText(result.status)}</span>
           </h3>
           <p className="check-explanation">{result.explanation}</p>
-          <ExplainCheck kind={kind} failing={result.status === 'fail'} />
+          <ExplainCheck kind={kind} failing={result.status === 'fail'} replayable={result.witness !== undefined} />
         </div>
       ))}
       {report.internalError && (
@@ -117,21 +117,30 @@ export function CheckStrip({ report, ms }: { report: Report; ms: number }) {
  * explanation above always stand on their own — this adds narrative, never
  * authority. Costs are disclosed like compiles.
  */
-function ExplainCheck({ kind, failing }: { kind: CheckKind; failing: boolean }) {
+function ExplainCheck({ kind, failing, replayable }: { kind: CheckKind; failing: boolean; replayable: boolean }) {
   const explain = useApp((s) => s.explain);
   const explainCheck = useApp((s) => s.explainCheck);
+  const showProblem = useApp((s) => s.showProblem);
   if (!failing) return null;
   const entry = explain.byCheck[kind];
   return (
     <div className="explain-check">
+      {replayable && (
+        <button type="button" className="evidence-button" onClick={() => showProblem(kind)}>
+          Show the problem
+        </button>
+      )}
       {entry ? (
         <>
           <p className="explain-text" aria-live="polite">
             {entry.text}
           </p>
           <p className="explain-meta">
-            {entry.meta.cached ? 'Cached explanation' : 'Fresh explanation'} · {entry.meta.model} · $
-            {entry.meta.totalCostUsd.toFixed(5)} · {entry.meta.attempts} attempt
+            {entry.meta.cached ? 'Cached · no new model call' : 'Fresh'} · {entry.meta.model} ·{' '}
+            {entry.meta.cached
+              ? `original cost ${entry.meta.generationCostUsd === null ? 'unavailable' : `$${entry.meta.generationCostUsd.toFixed(5)}`}`
+              : `this call ${entry.meta.totalCostUsd === null ? 'cost unavailable' : `$${entry.meta.totalCostUsd.toFixed(5)}`}`} ·{' '}
+            {entry.meta.attempts} attempt
             {entry.meta.attempts === 1 ? '' : 's'}
           </p>
         </>

@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { DisclosureGlyph } from './check-strip.js';
 import { EXAMPLE_PROMPTS, TWIST_PROMPT } from './example-prompts.js';
 import { useApp } from '../state/store.js';
@@ -12,9 +11,14 @@ const THEME_LABELS: Record<ThemeKey, string> = {
   futuristic: 'Futuristic vault',
 };
 
+function costText(costUsd: number | null): string {
+  return costUsd === null ? 'cost unavailable' : `$${costUsd.toFixed(5)}`;
+}
+
 /** The prompt panel (§12): describe a change, watch it compile. */
 export function PromptPanel() {
-  const [text, setText] = useState('');
+  const text = useApp((s) => s.promptDraft);
+  const setText = useApp((s) => s.setPromptDraft);
   const busy = useApp((s) => s.busy);
   const pendingChange = useApp((s) => s.pendingRule);
   const error = useApp((s) => s.error);
@@ -108,7 +112,7 @@ export function PromptPanel() {
           className={`compile-status${meta?.cached ? ' is-cached' : ''}`}
           aria-live="polite"
         >
-          {meta ? (meta.cached ? 'Cached compile' : 'Fresh compile') : ''}
+          {meta ? (meta.cached ? 'Cached result · no new model call' : 'Fresh compile') : ''}
         </span>
       </div>
       {selection.length > 0 && (
@@ -185,12 +189,13 @@ export function PromptPanel() {
           </ol>
         </details>
       )}
-      {meta && !meta.cached && (
+      {meta && (
         <details className="inspector">
-          <summary><DisclosureGlyph />Model</summary>
+          <summary><DisclosureGlyph />Generation details</summary>
           <p className="inspector-body">
-            {meta.model} · ${meta.totalCostUsd.toFixed(5)} · {meta.attempts} attempt
-            {meta.attempts === 1 ? '' : 's'}
+            {meta.cached ? 'Original generation' : 'This generation'}: {meta.model} ·{' '}
+            {meta.cached ? `original cost ${costText(meta.generationCostUsd)}` : `this call ${costText(meta.totalCostUsd)}`} ·{' '}
+            {meta.attempts} attempt{meta.attempts === 1 ? '' : 's'}
           </p>
         </details>
       )}

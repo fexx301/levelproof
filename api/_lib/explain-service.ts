@@ -31,15 +31,16 @@ export interface AttemptRecord {
   model: string;
   outcome: 'schema_valid' | 'schema_invalid' | 'error';
   latencyMs: number;
-  costUsd: number;
+  costUsd: number | null;
 }
 
 export interface ExplainOutcome {
   explanation: string | null;
   cached: boolean;
   attempts: AttemptRecord[];
-  totalCostUsd: number;
-  error?: 'missing_provider_config' | 'check_not_failing' | 'invalid_output';
+  totalCostUsd: number | null;
+  generationCostUsd: number | null;
+  error?: 'missing_provider_config' | 'check_not_failing' | 'invalid_output' | 'cancelled';
 }
 
 export interface ExplainInput {
@@ -143,28 +144,36 @@ export type CallModel = (
   config: ProviderConfig,
   messages: ChatMessage[],
   options: StructuredOptions,
+  signal?: AbortSignal,
 ) => Promise<ProviderResult>;
 
 export async function explain(
   env: NodeJS.ProcessEnv,
   input: ExplainInput,
-  deps: { callModel?: CallModel; verifyFn?: (level: Level) => Report } = {},
+  deps: { callModel?: CallModel; verifyFn?: (level: Level) => Report; signal?: AbortSignal } = {},
 ): Promise<ExplainOutcome> {
+  const signal = deps.signal;
   // The engine recomputes the verdict server-side; nothing explains a check
   // that is not actually failing.
   const report = (deps.verifyFn ?? verify)(input.level);
   if (report.checks[input.check].status !== 'fail') {
-    return { explanation: null, cached: false, attempts: [], totalCostUsd: 0, error: 'check_not_failing' };
+    return { explanation: null, cached: false, attempts: [], totalCostUsd: 0, generationCostUsd: null, error: 'check_not_failing' };
   }
 
   const callModel = deps.callModel ?? chatCompletion;
   const primary = providerConfigFromEnv(env);
   if (!primary) {
-    return { explanation: null, cached: false, attempts: [], totalCostUsd: 0, error: 'missing_provider_config' };
+    return { explanation: null, cached: false, attempts: [], totalCostUsd: 0, generationCostUsd: null, error: 'missing_provider_config' };
   }
   const fallbackModel = env.LLM_FALLBACK_MODEL;
   const hasFallback = fallbackModel !== undefined && fallbackModel !== primary.model;
-  const models = hasFallback ? `${primary.model},${fallbackModel}` : primary.model;
+  const models = JSON.stringify({
+    baseUrl: primary.baseUrl,
+    chain: (hasFallback ? [primary.model, fallbackModel] : [primary.model]).map((model) => ({
+      model,
+      options: callOptionsFor(model!),
+    })),
+  });
 
   const key = cacheKey({
     level: input.level,
@@ -174,7 +183,7 @@ export async function explain(
   });
   const hit = explainCache.get(key);
   if (hit !== null) {
-    return { explanation: hit, cached: true, attempts: [], totalCostUsd: 0 };
+    return { explanation: hit.value, cached: true, attempts: hit.attempts, totalCostUsd: 0, generationCostUsd: hit.generationCostUsd };
   }
 
   const baseMessages: ChatMessage[] = [
@@ -184,24 +193,32 @@ export async function explain(
 
   const attempts: AttemptRecord[] = [];
   const started = performance.now();
-  let totalCostUsd = 0;
+  let totalCostUsd: number | null = 0;
 
-  const attempt = async (model: string, messages: ChatMessage[]): Promise<string | null> => {
+  const attempt = async (model: string, messages: ChatMessage[]): Promise<{ text: string | null; cancelled?: boolean }> => {
+    if (signal?.aborted) return { text: null, cancelled: true };
     const remaining = SERVICE_DEADLINE_MS - (performance.now() - started);
-    if (remaining < MIN_ATTEMPT_BUDGET_MS) return null;
+    if (remaining < MIN_ATTEMPT_BUDGET_MS) return { text: null };
     const config: ProviderConfig = {
       ...primary,
       model,
       timeoutMs: Math.min(primary.timeoutMs, Math.max(MIN_ATTEMPT_BUDGET_MS, remaining)),
     };
     const t0 = performance.now();
-    const response = await callModel(config, messages, {
-      ...callOptionsFor(model),
-      schemaName: 'levelproof_explanation',
-    });
+    let response: ProviderResult;
+    try {
+      response = await callModel(config, messages, {
+        ...callOptionsFor(model),
+        schemaName: 'levelproof_explanation',
+      }, signal);
+    } catch (error) {
+      if (signal?.aborted) return { text: null, cancelled: true };
+      response = { ok: false, kind: 'unknown', error: error instanceof Error ? error.message : String(error) };
+    }
     const latencyMs = performance.now() - t0;
-    const costUsd = response.ok ? (response.usage.costUsd ?? 0) : 0;
-    totalCostUsd += costUsd;
+    if (!response.ok && response.kind === 'cancelled') return { text: null, cancelled: true };
+    const costUsd = response.ok ? response.usage.costUsd : null;
+    totalCostUsd = totalCostUsd === null || costUsd === null ? null : totalCostUsd + costUsd;
     let outcome: AttemptRecord['outcome'];
     let text: string | null = null;
     if (!response.ok) {
@@ -218,16 +235,23 @@ export async function explain(
       }
     }
     attempts.push({ model, outcome, latencyMs, costUsd });
-    return text;
+    return { text };
   };
 
   const finish = (text: string): ExplainOutcome => {
-    explainCache.set(key, text);
-    return { explanation: text, cached: false, attempts, totalCostUsd };
+    explainCache.set(key, {
+      value: text,
+      attempts,
+      generationCostUsd: totalCostUsd,
+    });
+    return { explanation: text, cached: false, attempts, totalCostUsd, generationCostUsd: totalCostUsd };
   };
 
-  let text = await attempt(primary.model, baseMessages);
-  if (text !== null) return finish(text);
+  let outcome = await attempt(primary.model, baseMessages);
+  if (outcome.cancelled || signal?.aborted) {
+    return { explanation: null, cached: false, attempts, totalCostUsd, generationCostUsd: null, error: 'cancelled' };
+  }
+  if (outcome.text !== null) return finish(outcome.text);
 
   const firstOutcome = attempts[0]?.outcome;
   if (firstOutcome === 'schema_invalid' && performance.now() - started < SERVICE_DEADLINE_MS) {
@@ -239,16 +263,22 @@ export async function explain(
           'Your previous response was invalid (wrong JSON shape, or it referenced an id that does not exist in the scene). Respond again with a single corrected JSON object using only the given facts.',
       },
     ];
-    text = await attempt(primary.model, correction);
-    if (text !== null) return finish(text);
+    outcome = await attempt(primary.model, correction);
+    if (outcome.cancelled || signal?.aborted) {
+      return { explanation: null, cached: false, attempts, totalCostUsd, generationCostUsd: null, error: 'cancelled' };
+    }
+    if (outcome.text !== null) return finish(outcome.text);
   }
 
   if (hasFallback && performance.now() - started < SERVICE_DEADLINE_MS) {
-    text = await attempt(fallbackModel!, baseMessages);
-    if (text !== null) return finish(text);
+    outcome = await attempt(fallbackModel!, baseMessages);
+    if (outcome.cancelled || signal?.aborted) {
+      return { explanation: null, cached: false, attempts, totalCostUsd, generationCostUsd: null, error: 'cancelled' };
+    }
+    if (outcome.text !== null) return finish(outcome.text);
   }
 
-  return { explanation: null, cached: false, attempts, totalCostUsd, error: 'invalid_output' };
+  return { explanation: null, cached: false, attempts, totalCostUsd, generationCostUsd: null, error: 'invalid_output' };
 }
 
 function safeJson(raw: string): unknown {

@@ -51,8 +51,10 @@ export function witnessOptions(report: Report): WitnessOption[] {
 export function PlaytesterPanel({ report }: { report: Report }) {
   const mode = useApp((s) => s.mode);
   const ghost = useApp((s) => s.ghost);
+  const evidence = useApp((s) => s.evidence);
   const watchWitness = useApp((s) => s.watchWitness);
   const startPlay = useApp((s) => s.startPlay);
+  const exitToAuthoring = useApp((s) => s.exitToAuthoring);
   const options = witnessOptions(report);
   if (mode !== 'watching') {
     return (
@@ -79,13 +81,26 @@ export function PlaytesterPanel({ report }: { report: Report }) {
   return (
     <section className="panel panel--active" aria-label="Playtester">
       <h2 className="panel-title">Watch playtester</h2>
+      {evidence && (
+        <div className="evidence-card" aria-label="Verified failure evidence">
+          <p className="evidence-kicker">Verified evidence · {evidence.check}</p>
+          <p className="panel-note">{evidence.fact}</p>
+          <p className="evidence-focus">
+            Focus: <strong>{evidence.focusModuleId}</strong>
+            {evidence.implicatedIds.length > 0 && ` · ${evidence.implicatedIds.join(', ')}`}
+          </p>
+          <p className="panel-note">The replay pauses after move {evidence.decisiveMoveIndex}. Use Play or Step to continue.</p>
+          <p className="panel-note">{evidence.suggestedAction}</p>
+        </div>
+      )}
       {(() => {
         const current = options.find((option) => option.kind === ghost.witnessKind);
         return current ? <p className="panel-note">Replaying: {current.label}</p> : null;
       })()}
       <p className="panel-note" role="status">
-        Move {Math.min(ghost.moveIndex + (ghost.finished ? 0 : 1), ghost.totalMoves)} of{' '}
-        {ghost.totalMoves}
+        {ghost.pausedAtEvidence
+          ? `Paused at decisive moment · move ${ghost.moveIndex} of ${ghost.totalMoves}`
+          : `Move ${Math.min(ghost.moveIndex + (ghost.finished ? 0 : 1), ghost.totalMoves)} of ${ghost.totalMoves}`}
       </p>
       <div className="ghost-controls">
         <button
@@ -107,6 +122,11 @@ export function PlaytesterPanel({ report }: { report: Report }) {
           Step
         </button>
       </div>
+      {evidence && (
+        <button type="button" onClick={exitToAuthoring}>
+          Back to repair
+        </button>
+      )}
       <div className="inventory">
         {ghost.keys.length === 0 && ghost.switches.length === 0 && (
           <span className="inventory-empty">Inventory: empty</span>

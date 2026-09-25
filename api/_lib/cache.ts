@@ -1,6 +1,6 @@
 import type { CompileResult } from '../../shared/compile-result.js';
 import type { Level } from '../../shared/schema.js';
-import { canonicalJson, fnv1a32 } from '../../src/core/serialize.js';
+import { canonicalJson } from '../../src/core/serialize.js';
 
 /**
  * Demo-path caches (§10.2). Full-input identity: canonical level content and
@@ -11,20 +11,46 @@ import { canonicalJson, fnv1a32 } from '../../src/core/serialize.js';
  */
 
 const MAX_ENTRIES = 100;
+const MAX_AGE_MS = 60 * 60 * 1000;
 
-class BoundedCache<T> {
-  private readonly entries = new Map<string, { result: T; createdAt: number }>();
+export interface CachedAttempt<TOutcome extends string = 'schema_valid' | 'schema_invalid' | 'rejected' | 'error'> {
+  model: string;
+  outcome: TOutcome;
+  latencyMs: number;
+  costUsd: number | null;
+  errorKind?: 'rate_limited' | 'timeout' | 'budget' | 'outage' | 'unknown';
+}
 
-  get(key: string): T | null {
-    return this.entries.get(key)?.result ?? null;
+export type CachedCompileAttempt = CachedAttempt;
+export type CachedExplainAttempt = CachedAttempt<'schema_valid' | 'schema_invalid' | 'error'>;
+
+export interface CacheEntry<T, A extends CachedAttempt = CachedAttempt> {
+  value: T;
+  /** Original generation metadata, not a new model call for the cache hit. */
+  attempts: A[];
+  generationCostUsd: number | null;
+}
+
+export class BoundedCache<T, A extends CachedAttempt = CachedAttempt> {
+  private readonly entries = new Map<string, { identity: string; entry: CacheEntry<T, A>; createdAt: number }>();
+
+  get(identity: string): CacheEntry<T, A> | null {
+    const stored = this.entries.get(identity);
+    if (stored?.identity !== identity) return null;
+    if (Date.now() - stored.createdAt > MAX_AGE_MS) {
+      this.entries.delete(identity);
+      return null;
+    }
+    return stored.entry;
   }
 
-  set(key: string, result: T): void {
+  set(identity: string, entry: CacheEntry<T, A>): void {
+    this.entries.delete(identity);
     if (this.entries.size >= MAX_ENTRIES) {
       const oldest = this.entries.keys().next().value;
       if (oldest !== undefined) this.entries.delete(oldest);
     }
-    this.entries.set(key, { result, createdAt: Date.now() });
+    this.entries.set(identity, { identity, entry, createdAt: Date.now() });
   }
 
   clear(): void {
@@ -32,8 +58,8 @@ class BoundedCache<T> {
   }
 }
 
-export const compileCache = new BoundedCache<CompileResult>();
-export const explainCache = new BoundedCache<string>();
+export const compileCache = new BoundedCache<CompileResult, CachedCompileAttempt>();
+export const explainCache = new BoundedCache<string, CachedExplainAttempt>();
 
 export interface CacheKeyInput {
   level: Level;
@@ -44,15 +70,14 @@ export interface CacheKeyInput {
 }
 
 export function cacheKey(input: CacheKeyInput): string {
-  return fnv1a32(
-    canonicalJson(input.level) +
-      '\u0000' +
-      input.payload +
-      '\u0000' +
-      input.models +
-      '\u0000' +
-      input.promptVersion,
-  );
+  // Store the complete canonical identity. A short non-cryptographic hash
+  // could collide and incorrectly reuse another user's generated change.
+  return JSON.stringify([
+    canonicalJson(input.level),
+    input.payload,
+    input.models,
+    input.promptVersion,
+  ]);
 }
 
 /** Kept for the compile path: full-input key including clarification
@@ -62,20 +87,20 @@ export function compileCacheKey(input: {
   prompt: string;
   clarificationContext?: string;
   selection?: string[];
+  protectedIds?: string[];
   history?: string[];
   models: string;
   promptVersion: string;
 }): string {
   return cacheKey({
     level: input.level,
-    payload:
-      input.prompt +
-      '\u0001' +
-      (input.clarificationContext ?? '') +
-      '\u0001' +
-      (input.selection?.join(',') ?? '') +
-      '\u0001' +
-      (input.history?.join('\u0002') ?? ''),
+    payload: JSON.stringify([
+      input.prompt,
+      input.clarificationContext ?? null,
+      input.selection ?? [],
+      [...(input.protectedIds ?? [])].sort(),
+      input.history ?? [],
+    ]),
     models: input.models,
     promptVersion: input.promptVersion,
   });

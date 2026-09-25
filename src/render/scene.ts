@@ -123,6 +123,7 @@ export interface SceneHandle {
     kind: 'solution' | 'bypass' | 'dead_end' | 'replay',
     missingKeys: string[],
     callbacks: GhostCallbacks,
+    pauseAfterMoveIndex?: number | null,
   ): GhostActor;
   /** Before/after markers for one validated AI or repair candidate (§9). */
   previewOperations(preview: PreviewState | null): void;
@@ -133,6 +134,8 @@ export interface SceneHandle {
   setSelection(ids: string[]): void;
   /** Cream outer rings on entities the creator marked "keep this" (§9). */
   setProtected(ids: string[]): void;
+  /** Amber outer rings for engine-owned failure evidence. */
+  setEvidence(ids: string[]): void;
   spawnPlayer(callbacks: PlayerCallbacks): PlayerActor;
   /** Arrow-key orbiting is disabled while manual play owns the arrows. */
   setKeyboardOrbit(enabled: boolean): void;
@@ -553,6 +556,16 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel, theme?: T
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.05;
   host.appendChild(renderer.domElement);
+  const reportRenderState = (state: 'ready' | 'lost'): void => {
+    host.dispatchEvent(new CustomEvent('levelproof:render-state', { detail: state }));
+  };
+  const onContextLost = (event: Event): void => {
+    event.preventDefault();
+    reportRenderState('lost');
+  };
+  const onContextRestored = (): void => reportRenderState('ready');
+  renderer.domElement.addEventListener('webglcontextlost', onContextLost);
+  renderer.domElement.addEventListener('webglcontextrestored', onContextRestored);
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(COLORS.background);
@@ -674,6 +687,7 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel, theme?: T
     frame = requestAnimationFrame(tick);
   };
   frame = requestAnimationFrame(tick);
+  let disposed = false;
 
   const resize = () => {
     const w = host.clientWidth;
@@ -737,6 +751,14 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel, theme?: T
     old: new THREE.MeshBasicMaterial({ color: 0xd57064, transparent: true, opacity: 0.85, side: THREE.DoubleSide }),
     fresh: new THREE.MeshBasicMaterial({ color: 0x4fbe82, transparent: true, opacity: 0.9, side: THREE.DoubleSide }),
   };
+  const previewTileMats = {
+    old: new THREE.MeshBasicMaterial({ color: 0xd57064, transparent: true, opacity: 0.18, side: THREE.DoubleSide, depthWrite: false }),
+    fresh: new THREE.MeshBasicMaterial({ color: 0x4fbe82, transparent: true, opacity: 0.2, side: THREE.DoubleSide, depthWrite: false }),
+  };
+  const previewDoorMats = {
+    old: new THREE.MeshBasicMaterial({ color: 0xd57064, transparent: true, opacity: 0.95, wireframe: true }),
+    fresh: new THREE.MeshBasicMaterial({ color: 0x4fbe82, transparent: true, opacity: 0.98, wireframe: true }),
+  };
   const ringAt = (x: number, y: number, z: number, material: THREE.Material, scale = 1): void => {
     const ring = new THREE.Mesh(new THREE.RingGeometry(30, 48, 28), material);
     ring.rotation.x = -Math.PI / 2;
@@ -744,9 +766,60 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel, theme?: T
     ring.scale.setScalar(scale);
     previewGroup.add(ring);
   };
-  const moduleCenter = (level: Level, id: string): Vec3 | null => {
-    const m = level.modules.find((module) => module.id === id);
-    return m ? centerPoint(m) : null;
+  const positionInLevel = (level: Level, id: string): Vec3 | null => {
+    const module = level.modules.find((item) => item.id === id);
+    if (module) return centerPoint(module);
+    const item = [...level.keys, ...level.switches].find((entry) => entry.id === id);
+    if (item) {
+      const owner = level.modules.find((entry) => entry.id === item.moduleId);
+      return owner ? centerPoint(owner) : null;
+    }
+    const door = level.doors.find((entry) => entry.id === id);
+    if (door !== undefined) {
+      const a = level.modules.find((entry) => entry.id === door.a);
+      const b = level.modules.find((entry) => entry.id === door.b);
+      if (a && b) {
+        const ca = centerPoint(a);
+        const cb = centerPoint(b);
+        return { x: (ca.x + cb.x) / 2, y: (ca.y + cb.y) / 2, z: (ca.z + cb.z) / 2 };
+      }
+    }
+    return null;
+  };
+
+  const moduleWash = (level: Level, id: string, material: THREE.Material): THREE.Mesh | null => {
+    const module = level.modules.find((entry) => entry.id === id);
+    if (module === undefined) return null;
+    const size = GEOMETRY.cellPitchCm - 18;
+    const geometry = new THREE.PlaneGeometry(size, size, 4, 4);
+    geometry.rotateX(-Math.PI / 2);
+    if (module.template === 'ramp') {
+      const positions = geometry.getAttribute('position');
+      for (let index = 0; index < positions.count; index++) {
+        const x = positions.getX(index);
+        const z = positions.getZ(index);
+        const along = module.orientation === 'N' ? -z : module.orientation === 'S' ? z : module.orientation === 'E' ? x : -x;
+        positions.setY(index, along * GEOMETRY.floorSpacingCm / GEOMETRY.cellPitchCm);
+      }
+      geometry.computeVertexNormals();
+    }
+    const center = centerPoint(module);
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.position.set(center.x, center.y + 7, center.z);
+    return mesh;
+  };
+
+  const doorFrameAt = (level: Level, doorId: string, material: THREE.Material): THREE.Mesh | null => {
+    const door = level.doors.find((entry) => entry.id === doorId);
+    const a = door && level.modules.find((entry) => entry.id === door.a);
+    const b = door && level.modules.find((entry) => entry.id === door.b);
+    if (!door || !a || !b) return null;
+    const ca = centerPoint(a);
+    const cb = centerPoint(b);
+    const frame = new THREE.Mesh(new THREE.BoxGeometry(230, 250, 34), material);
+    frame.position.set((ca.x + cb.x) / 2, (ca.y + cb.y) / 2 + 125, (ca.z + cb.z) / 2);
+    if (Math.abs(cb.x - ca.x) > Math.abs(cb.z - ca.z)) frame.rotation.y = Math.PI / 2;
+    return frame;
   };
 
   const clearPreview = (): void => {
@@ -766,14 +839,28 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel, theme?: T
     const { before, candidate: after } = preview;
     for (const marker of previewDiff(before, after)) {
       const level = marker.phase === 'old' ? before : after;
-      const a = moduleCenter(level, marker.moduleId);
+      const material = marker.phase === 'old' ? previewMats.old : previewMats.fresh;
+      const a = positionInLevel(level, marker.moduleId);
       if (!a) continue;
+      if (marker.kind === 'module') {
+        const wash = moduleWash(level, marker.id, marker.phase === 'old' ? previewTileMats.old : previewTileMats.fresh);
+        if (wash) previewGroup.add(wash);
+        ringAt(a.x, a.y, a.z, material, 3.25);
+        continue;
+      }
       if (marker.kind === 'door' && marker.otherModuleId !== undefined) {
-        const b = moduleCenter(level, marker.otherModuleId);
-        if (!b) continue;
-        ringAt((a.x + b.x) / 2, (a.y + b.y) / 2, (a.z + b.z) / 2, marker.phase === 'old' ? previewMats.old : previewMats.fresh, 0.8);
+        const frame = doorFrameAt(level, marker.id, marker.phase === 'old' ? previewDoorMats.old : previewDoorMats.fresh);
+        if (frame) previewGroup.add(frame);
+        else {
+          const b = positionInLevel(level, marker.otherModuleId);
+          if (b) ringAt((a.x + b.x) / 2, (a.y + b.y) / 2, (a.z + b.z) / 2, material, 1.6);
+        }
+      } else if (marker.kind === 'item') {
+        // Keep the authored item silhouette unobscured; a floor halo marks
+        // the change without enclosing keys in an oversized wireframe sphere.
+        ringAt(a.x, a.y + 18, a.z, material, 1.7);
       } else {
-        ringAt(a.x, a.y, a.z, marker.phase === 'old' ? previewMats.old : previewMats.fresh);
+        ringAt(a.x, a.y, a.z, material, 1.5);
       }
     }
     previewGroup.visible = previewGroup.children.length > 0;
@@ -803,6 +890,50 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel, theme?: T
     ring.rotation.x = -Math.PI / 2;
     ring.position.set(x, y + 5, z);
     protectedGroup.add(ring);
+  };
+  const evidenceGroup = new THREE.Group();
+  evidenceGroup.visible = false;
+  scene.add(evidenceGroup);
+  const evidenceMat = new THREE.MeshBasicMaterial({
+    color: 0xe0a24b,
+    transparent: true,
+    opacity: 0.9,
+    side: THREE.DoubleSide,
+  });
+  const evidenceOutlineMat = new THREE.MeshBasicMaterial({ color: 0xe0a24b, transparent: true, opacity: 0.95, wireframe: true });
+  const evidenceRingAt = (x: number, y: number, z: number): void => {
+    const ring = new THREE.Mesh(new THREE.RingGeometry(92, 106, 32), evidenceMat);
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.set(x, y + 6, z);
+    evidenceGroup.add(ring);
+  };
+  const evidenceDoorAt = (level: Level, id: string): boolean => {
+    const door = level.doors.find((entry) => entry.id === id);
+    const a = door && level.modules.find((entry) => entry.id === door.a);
+    const b = door && level.modules.find((entry) => entry.id === door.b);
+    if (!door || !a || !b) return false;
+    const ca = centerPoint(a);
+    const cb = centerPoint(b);
+    const frame = new THREE.Mesh(new THREE.BoxGeometry(240, 260, 36), evidenceOutlineMat);
+    frame.position.set((ca.x + cb.x) / 2, (ca.y + cb.y) / 2 + 130, (ca.z + cb.z) / 2);
+    if (Math.abs(cb.x - ca.x) > Math.abs(cb.z - ca.z)) frame.rotation.y = Math.PI / 2;
+    evidenceGroup.add(frame);
+    return true;
+  };
+  const evidenceObjectAt = (id: string): void => {
+    const key = compiled.level.keys.find((entry) => entry.id === id);
+    if (key !== undefined) {
+      const owner = compiled.moduleById.get(key.moduleId);
+      if (!owner) return;
+      const center = centerPoint(owner);
+      const outline = new THREE.Mesh(new THREE.SphereGeometry(140, 12, 8), evidenceOutlineMat);
+      outline.position.set(center.x, center.y + 105, center.z);
+      evidenceGroup.add(outline);
+      return;
+    }
+    if (compiled.level.doors.some((entry) => entry.id === id) && evidenceDoorAt(compiled.level, id)) return;
+    const center = entityPosition(id);
+    if (center) evidenceRingAt(center.x, center.y, center.z);
   };
   let pickHandler: ((id: string | null) => void) | null = null;
   const selectionRingAt = (x: number, y: number, z: number, scale = 1): void => {
@@ -888,8 +1019,8 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel, theme?: T
 
   return {
     frameLevel: frameHome,
-    spawnGhost(route, kind, missingKeys, callbacks) {
-      return new GhostActor(actorContext, route, kind, missingKeys, callbacks);
+    spawnGhost(route, kind, missingKeys, callbacks, pauseAfterMoveIndex) {
+      return new GhostActor(actorContext, route, kind, missingKeys, callbacks, pauseAfterMoveIndex);
     },
     setAnalysis(map) {
       for (const child of [...analysisGroup.children]) {
@@ -946,6 +1077,14 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel, theme?: T
       }
       protectedGroup.visible = protectedGroup.children.length > 0;
     },
+    setEvidence(ids) {
+      for (const child of [...evidenceGroup.children]) {
+        evidenceGroup.remove(child);
+        if (child instanceof THREE.Mesh) child.geometry.dispose();
+      }
+      for (const id of ids) evidenceObjectAt(id);
+      evidenceGroup.visible = evidenceGroup.children.length > 0;
+    },
     spawnPlayer(callbacks) {
       return new PlayerActor(actorContext, callbacks);
     },
@@ -957,6 +1096,8 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel, theme?: T
       }
     },
     dispose() {
+      if (disposed) return;
+      disposed = true;
       // A theme change tears down the old renderer before React binds the new
       // one. Ignore any pointer-up that was already queued against this
       // canvas; otherwise a late empty hit can clear the store's selection
@@ -981,7 +1122,7 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel, theme?: T
       };
       disposeAll(world);
       disposeAll(stage);
-      for (const overlay of [analysisGroup, previewGroup, selectionGroup, protectedGroup]) {
+      for (const overlay of [analysisGroup, previewGroup, selectionGroup, protectedGroup, evidenceGroup]) {
         for (const child of [...overlay.children]) {
           overlay.remove(child);
           if (child instanceof THREE.Mesh) child.geometry.dispose();
@@ -991,10 +1132,18 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel, theme?: T
       analysisMats.unreachable.dispose();
       previewMats.old.dispose();
       previewMats.fresh.dispose();
+      previewTileMats.old.dispose();
+      previewTileMats.fresh.dispose();
+      previewDoorMats.old.dispose();
+      previewDoorMats.fresh.dispose();
       selectionMat.dispose();
       protectedMat.dispose();
+      evidenceMat.dispose();
+      evidenceOutlineMat.dispose();
       renderer.domElement.removeEventListener('pointerdown', onPointerDown);
       renderer.domElement.removeEventListener('pointerup', onPointerUp);
+      renderer.domElement.removeEventListener('webglcontextlost', onContextLost);
+      renderer.domElement.removeEventListener('webglcontextrestored', onContextRestored);
       for (const material of shared) material.dispose();
       renderer.dispose();
       renderer.domElement.remove();

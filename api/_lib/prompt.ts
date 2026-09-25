@@ -55,7 +55,7 @@ function occupancyGrid(level: Level): string[] {
 }
 
 /** Bump when the system prompt changes; participates in the cache key (§10.2). */
-export const PROMPT_VERSION = 'prompt-6';
+export const PROMPT_VERSION = 'prompt-8';
 
 export function buildSystemPrompt(level: Level, baseRevision: string): string {
   return `You are the compiler for LevelProof, a 3D puzzle editor with discrete movement. Convert the user's request into exactly ONE typed result: a patch, a clarification, a rule_proposal, or an unsupported response. You compose typed edits against the scene; you never invent traversal rules, verify puzzles, or emit raw level JSON.
@@ -68,6 +68,7 @@ KIT RULES:
 - Templates: "flat" occupies one cell at elevation h. "ramp" occupies one cell and joins its low end (elevation h) to the opposite high end (elevation h+1); "orientation" names the direction of ascent (the high end's outward direction); its ports must be exactly those two ends. "bridge" is a narrow flat walkway; undeclared sides carry rails.
 - ports: the open sides, a subset of N, E, S, W. Two modules connect only where facing ports coincide at the same elevation. A closed side is a wall. A door may only sit on an edge where the two named modules actually connect.
 - Keys (at most ${BOUNDS.maxKeys}) are collected on arrival and never consumed or dropped. Switches (at most ${BOUNDS.maxSwitches}) activate once on arrival. Doors sit between two connected modules; at most one door per edge; conditions may combine requiresKey (one key), requiresKeys (an array: EVERY listed key must be held), requiresSwitch, and closesAfterSwitch (the door becomes permanently impassable once that switch activates).
+- A door with no explicitly requested lock or switch behavior is an OPEN, passable door: omit conditions or use an empty conditions object. Never invent a key, switch, or other condition for a door. Add a condition only when the user explicitly asks for that behavior; if the intended condition or location is materially ambiguous, ask one concise clarification instead of guessing.
 - Doors, switches, and keys NEVER require new geometry: a door is an edge between two EXISTING connected modules (use addDoor with a and b set to existing module ids); a switch or key is an item ON an existing flat module (use addItem with an existing moduleId). Never create a module to host a door, switch, or key — such patches are rejected as overlaps.
 - A door with closesAfterSwitch: S starts OPEN (passable) and seals permanently the moment switch S activates. A player who activates S before crossing is stranded on the far side — this is the intended "switch trap" pattern.
 - Every cell (x, z, h) holds at most ONE module. Before addModule, scan the scene's modules and choose a cell that is FREE at that elevation — patches placing a module on an occupied cell are rejected as overlaps. Bridge chains must step through free cells, port by port.
@@ -87,7 +88,7 @@ OPERATIONS (at most ${BOUNDS.maxOpsPerPatch} per result; ids match ^[a-z][a-z0-9
 - {"kind":"moveItem","id","moduleId"}
 - {"kind":"removeItem","id"}
 - {"kind":"moveSpawn","moduleId"} and {"kind":"moveGoal","moduleId"}
-- {"kind":"addDoor","door":{"id","a","b","conditions"?}} — a and b are the two connected modules
+- {"kind":"addDoor","door":{"id","a","b","conditions"?}} — a and b are the two connected modules; omit conditions unless explicitly requested (an unconditioned door is open)
 - {"kind":"setDoorConditions","id","conditions"}
 - {"kind":"removeDoor","id"}
 

@@ -27,6 +27,7 @@ export type CallModel = (
   config: ProviderConfig,
   messages: ChatMessage[],
   options: StructuredOptions,
+  signal?: AbortSignal,
 ) => Promise<ProviderResult>;
 
 export interface CompileInput {
@@ -34,6 +35,7 @@ export interface CompileInput {
   prompt: string;
   clarificationContext?: string;
   selection?: string[];
+  protectedIds?: string[];
   history?: string[];
   theme?: ThemeKey;
 }
@@ -42,7 +44,7 @@ export interface AttemptRecord {
   model: string;
   outcome: 'schema_valid' | 'schema_invalid' | 'rejected' | 'error';
   latencyMs: number;
-  costUsd: number;
+  costUsd: number | null;
   errorKind?: 'rate_limited' | 'timeout' | 'budget' | 'outage' | 'unknown';
 }
 
@@ -54,8 +56,9 @@ export interface CompileOutcome {
   theme?: ThemeKey;
   cached: boolean;
   attempts: AttemptRecord[];
-  totalCostUsd: number;
-  error?: string;
+  totalCostUsd: number | null;
+  generationCostUsd: number | null;
+  error?: 'missing_provider_config' | 'invalid_output' | 'cancelled';
   /** The provider's failure class when the final attempt errored. */
   providerError?: 'rate_limited' | 'timeout' | 'budget' | 'outage' | 'unknown';
 }
@@ -79,13 +82,14 @@ function tryParse(raw: string): CompileResult | null {
 export async function compile(
   env: NodeJS.ProcessEnv,
   input: CompileInput,
-  deps: { callModel?: CallModel } = {},
+  deps: { callModel?: CallModel; signal?: AbortSignal } = {},
 ): Promise<CompileOutcome> {
   const callModel = deps.callModel ?? chatCompletion;
+  const signal = deps.signal;
   const baseRevision = revisionId(input.level);
   const primary = providerConfigFromEnv(env);
   if (!primary) {
-    return { result: null, baseRevision, theme: input.theme, cached: false, attempts: [], totalCostUsd: 0, error: 'missing_provider_config' };
+    return { result: null, baseRevision, theme: input.theme, cached: false, attempts: [], totalCostUsd: 0, generationCostUsd: null, error: 'missing_provider_config' };
   }
   const fallbackModel = env.LLM_FALLBACK_MODEL;
   const hasFallback = fallbackModel !== undefined && fallbackModel !== primary.model;
@@ -95,13 +99,28 @@ export async function compile(
     prompt: input.prompt,
     clarificationContext: input.clarificationContext,
     selection: input.selection,
+    protectedIds: input.protectedIds,
     history: input.history,
-    models: hasFallback ? `${primary.model},${fallbackModel}` : primary.model,
+    models: JSON.stringify({
+      baseUrl: primary.baseUrl,
+      chain: (hasFallback ? [primary.model, fallbackModel] : [primary.model]).map((model) => ({
+        model,
+        options: callOptionsFor(model!),
+      })),
+    }),
     promptVersion: PROMPT_VERSION,
   });
   const hit = compileCache.get(key);
   if (hit !== null) {
-    return { result: hit, baseRevision, theme: input.theme, cached: true, attempts: [], totalCostUsd: 0 };
+    return {
+      result: hit.value,
+      baseRevision,
+      theme: input.theme,
+      cached: true,
+      attempts: hit.attempts,
+      totalCostUsd: 0,
+      generationCostUsd: hit.generationCostUsd,
+    };
   }
 
   const baseMessages: ChatMessage[] = [
@@ -123,6 +142,9 @@ export async function compile(
         input.selection && input.selection.length > 0
           ? `(The author selected these scene entities: ${input.selection.join(', ')}. References like "this door" or "that switch" mean these.)`
           : null,
+        input.protectedIds && input.protectedIds.length > 0
+          ? `(The creator marked these scene entities Keep these: ${input.protectedIds.join(', ')}. Do not add, remove, move, rename, or change the connections or conditions of any listed entity. If the request conflicts with this protection, ask the creator to unkeep the entity before proposing a change.)`
+          : null,
         input.clarificationContext ? `(Clarification context: ${input.clarificationContext})` : null,
       ]
         .filter((part): part is string => part !== null)
@@ -132,13 +154,14 @@ export async function compile(
 
   const attempts: AttemptRecord[] = [];
   const started = performance.now();
-  let totalCostUsd = 0;
+  let totalCostUsd: number | null = 0;
   let lastProviderError: 'rate_limited' | 'timeout' | 'budget' | 'outage' | 'unknown' | undefined;
 
   const attempt = async (
     model: string,
     messages: ChatMessage[],
-  ): Promise<{ parsed: CompileResult | null; rejection?: string[] }> => {
+  ): Promise<{ parsed: CompileResult | null; rejection?: string[]; cancelled?: boolean }> => {
+    if (signal?.aborted) return { parsed: null, cancelled: true };
     const elapsed = performance.now() - started;
     const remaining = SERVICE_DEADLINE_MS - elapsed;
     if (remaining < MIN_ATTEMPT_BUDGET_MS) return { parsed: null };
@@ -148,17 +171,25 @@ export async function compile(
       timeoutMs: Math.min(primary.timeoutMs, Math.max(MIN_ATTEMPT_BUDGET_MS, remaining)),
     };
     const t0 = performance.now();
-    const response = await callModel(config, messages, {
-      ...callOptionsFor(model),
-      schemaName: 'levelproof_result',
-    });
+    let response: ProviderResult;
+    try {
+      response = await callModel(config, messages, {
+        ...callOptionsFor(model),
+        schemaName: 'levelproof_result',
+      }, signal);
+    } catch (error) {
+      if (signal?.aborted) return { parsed: null, cancelled: true };
+      response = { ok: false, kind: 'unknown', error: error instanceof Error ? error.message : String(error) };
+    }
     const latencyMs = performance.now() - t0;
-    const costUsd = response.ok ? (response.usage.costUsd ?? 0) : 0;
-    totalCostUsd += costUsd;
+    if (!response.ok && response.kind === 'cancelled') return { parsed: null, cancelled: true };
+    const costUsd = response.ok ? response.usage.costUsd : null;
+    totalCostUsd = totalCostUsd === null || costUsd === null ? null : totalCostUsd + costUsd;
     let outcome: AttemptRecord['outcome'];
     let parsed: CompileResult | null = null;
     let rejection: string[] | undefined;
     if (!response.ok) {
+      if (response.kind === 'cancelled') return { parsed: null, cancelled: true };
       outcome = 'error';
       lastProviderError = response.kind;
     } else {
@@ -183,17 +214,32 @@ export async function compile(
         outcome = 'schema_valid';
       }
     }
-    attempts.push({ model, outcome, latencyMs, costUsd, ...(outcome === 'error' && lastProviderError !== undefined ? { errorKind: lastProviderError } : {}) });
+    attempts.push({
+      model,
+      outcome,
+      latencyMs,
+      costUsd,
+      ...(outcome === 'error' && lastProviderError !== undefined
+        ? { errorKind: lastProviderError }
+        : {}),
+    });
     return { parsed, rejection };
   };
 
   const finish = (result: CompileResult): CompileOutcome => {
-    compileCache.set(key, result);
-    return { result, baseRevision, theme: input.theme, cached: false, attempts, totalCostUsd };
+    compileCache.set(key, {
+      value: result,
+      attempts,
+      generationCostUsd: totalCostUsd,
+    });
+    return { result, baseRevision, theme: input.theme, cached: false, attempts, totalCostUsd, generationCostUsd: totalCostUsd };
   };
 
   // Attempt 1: the primary model.
   const outcome1 = await attempt(primary.model, baseMessages);
+  if (outcome1.cancelled || signal?.aborted) {
+    return { result: null, baseRevision, theme: input.theme, cached: false, attempts, totalCostUsd, generationCostUsd: null, error: 'cancelled' };
+  }
   if (outcome1.parsed) return finish(outcome1.parsed);
 
   // Attempt 2: one correction retry on the primary — for malformed JSON the
@@ -216,14 +262,30 @@ export async function compile(
       },
     ];
     const outcome2 = await attempt(primary.model, correction);
+    if (outcome2.cancelled || signal?.aborted) {
+      return { result: null, baseRevision, theme: input.theme, cached: false, attempts, totalCostUsd, generationCostUsd: null, error: 'cancelled' };
+    }
     if (outcome2.parsed) return finish(outcome2.parsed);
   }
 
   // Attempt 3: the evaluated fallback model, fresh messages.
   if (hasFallback && performance.now() - started < SERVICE_DEADLINE_MS) {
     const outcome3 = await attempt(fallbackModel!, baseMessages);
+    if (outcome3.cancelled || signal?.aborted) {
+      return { result: null, baseRevision, theme: input.theme, cached: false, attempts, totalCostUsd, generationCostUsd: null, error: 'cancelled' };
+    }
     if (outcome3.parsed) return finish(outcome3.parsed);
   }
 
-  return { result: null, baseRevision, theme: input.theme, cached: false, attempts, totalCostUsd, error: 'invalid_output', ...(lastProviderError !== undefined ? { providerError: lastProviderError } : {}) };
+  return {
+    result: null,
+    baseRevision,
+    theme: input.theme,
+    cached: false,
+    attempts,
+    totalCostUsd,
+    generationCostUsd: null,
+    error: 'invalid_output',
+    ...(lastProviderError !== undefined ? { providerError: lastProviderError } : {}),
+  };
 }

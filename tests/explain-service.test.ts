@@ -104,7 +104,24 @@ describe('exact-match cache (§10.2)', () => {
     expect(first.cached).toBe(false);
     expect(second.cached).toBe(true);
     expect(second.explanation).toBe(first.explanation);
+    expect(second.totalCostUsd).toBe(0);
+    expect(second.generationCostUsd).toBe(first.generationCostUsd);
+    expect(second.attempts).toEqual(first.attempts);
     expect(calls).toBe(1);
+  });
+
+  it('preserves unknown usage cost on a cached explanation', async () => {
+    const unmetered: ProviderResult = {
+      ok: true,
+      content: groundedExplanation,
+      usage: { promptTokens: 10, completionTokens: 20, costUsd: null },
+    };
+    const fn: CallModel = async () => unmetered;
+    const first = await explain(ENV, { level: trapLevel, check: 'recovery' }, { callModel: fn });
+    const cached = await explain(ENV, { level: trapLevel, check: 'recovery' }, { callModel: fn });
+    expect(first.totalCostUsd).toBeNull();
+    expect(cached.totalCostUsd).toBe(0);
+    expect(cached.generationCostUsd).toBeNull();
   });
 
   it('separates cache entries per check kind', async () => {

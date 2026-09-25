@@ -22,7 +22,7 @@ beforeEach(() => {
     busy: false,
     error: null,
     mode: 'authoring',
-    ghost: { witnessKind: null, playing: false, finished: false, moveIndex: 0, totalMoves: 0, keys: [], switches: [], endNote: null },
+    ghost: { witnessKind: null, playing: false, finished: false, pausedAtEvidence: false, moveIndex: 0, totalMoves: 0, keys: [], switches: [], endNote: null },
     play: { at: '', keys: [], switches: [], trapped: false, atGoal: false, goalViolated: false },
     repair: { status: 'idle', candidates: [], explored: 0, durationMs: 0, note: null, applyError: null },
     explain: { byCheck: {}, busy: false, error: null },

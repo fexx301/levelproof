@@ -4,7 +4,7 @@ import { bypassLevel } from '../src/core/fixtures/bypass';
 import { trapLevel } from '../src/core/fixtures/trap';
 import { trapRepairedLevel } from '../src/core/fixtures/trap-repaired';
 import { applyOperations } from '../src/core/level';
-import { findRepairs } from '../src/core/search';
+import { findRepairs, touchesProtected } from '../src/core/search';
 import { revisionId } from '../src/core/serialize';
 import { verify } from '../src/core/verifier';
 
@@ -83,6 +83,16 @@ describe('repair search (§9, §13.4)', () => {
 });
 
 describe('creator preservation constraints (§9 "keep this")', () => {
+  it('treats protected module label and exit edits as changes to that module', () => {
+    const protectedGallery = new Set(['gallery']);
+    expect(touchesProtected([
+      { kind: 'setModuleLabel', id: 'gallery', label: 'Renamed gallery' },
+    ], protectedGallery)).toBe(true);
+    expect(touchesProtected([
+      { kind: 'setModulePorts', id: 'gallery', ports: ['N', 'S'] },
+    ], protectedGallery)).toBe(true);
+  });
+
   it('keeping the seal switch excludes relocation and removal — only the door removal remains', () => {
     const report = verify(trapLevel);
     const result = findRepairs(baselineLevel, trapLevel, report, ['seal-switch']);

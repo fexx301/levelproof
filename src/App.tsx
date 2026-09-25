@@ -12,6 +12,8 @@ import { PromptPanel } from './ui/prompt-panel';
 import { RepairPanel } from './ui/repair-panel';
 import { ResultCards } from './ui/result-cards';
 import { savedSceneOptionLabel } from './state/persistence';
+import { GettingStarted } from './ui/getting-started';
+import { SceneObjectPicker } from './ui/scene-object-picker';
 
 type Mode = 'authoring' | 'watching' | 'playing';
 
@@ -50,6 +52,16 @@ export function App() {
   const shareCurrent = useApp((s) => s.shareCurrent);
   const savedScenes = useApp((s) => s.savedScenes);
   const viaShare = useApp((s) => s.viaShare);
+  const recoveryStatus = useApp((s) => s.recoveryStatus);
+  const clearRecovery = useApp((s) => s.clearRecovery);
+  const retryRecovery = useApp((s) => s.retryRecovery);
+  const busy = useApp((s) => s.busy);
+  const pendingRule = useApp((s) => s.pendingRule);
+  const changeSummary = useApp((s) => s.changeSummary);
+  const promptDraft = useApp((s) => s.promptDraft);
+  const selection = useApp((s) => s.selection);
+  const protectedIds = useApp((s) => s.protectedIds);
+  const theme = useApp((s) => s.theme);
   const headerNote = useApp((s) => s.headerNote);
   const selectedSaved = savedScenes.find((saved) => `saved:${saved.recordKey}` === sceneId);
   const startPlay = useApp((s) => s.startPlay);
@@ -78,6 +90,18 @@ export function App() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [mode]);
+  useEffect(() => {
+    if (recoveryStatus === 'ready') return;
+    const hasWork = busy || draft !== null || pendingRule !== null || history.length > 0 || changeSummary !== null ||
+      promptDraft.length > 0 || selection.length > 0 || protectedIds.length > 0 || theme !== null;
+    if (!hasWork) return;
+    const warnBeforeLeave = (event: BeforeUnloadEvent): void => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warnBeforeLeave);
+    return () => window.removeEventListener('beforeunload', warnBeforeLeave);
+  }, [recoveryStatus, busy, draft, pendingRule, history.length, changeSummary, promptDraft, selection.length, protectedIds.length, theme]);
 
   // Moving keyboard focus to the panel on mode change confirms the switch.
   const panelRef = useRef<HTMLElement | null>(null);
@@ -125,7 +149,7 @@ export function App() {
                 Undo
               </button>
               <button type="button" onClick={saveScene}>
-                Save
+                {draft ? 'Save accepted checkpoint' : 'Save checkpoint'}
               </button>
               <button type="button" onClick={shareCurrent}>
                 {draft ? 'Share accepted' : 'Share'}
@@ -183,12 +207,31 @@ export function App() {
       <div className="rule-bar" id="rules" tabIndex={-1} role="group" aria-label="Active rules">
         <RuleChips level={level} />
       </div>
+      {recoveryStatus === 'malformed' && (
+        <div className="recovery-notice recovery-notice--error" role="alert">
+          <span>Saved session recovery is unreadable. It has been left untouched; clear that recovery entry to start a new one.</span>
+          <button type="button" onClick={clearRecovery}>Clear unreadable recovery</button>
+        </div>
+      )}
+      {recoveryStatus === 'unavailable' && (
+        <div className="recovery-notice" role="status">
+          <span>Local recovery is unavailable. Changes in this tab may be lost if it closes.</span>
+          <button type="button" onClick={retryRecovery}>Retry recovery save</button>
+        </div>
+      )}
       <main className="app-main">
         <Viewport level={level} mode={mode} report={report} />
-        <aside className="side-panel" ref={panelRef} tabIndex={-1}>
+        <aside
+          className="side-panel"
+          ref={panelRef}
+          tabIndex={-1}
+          data-preview-open={pendingRule !== null ? 'true' : undefined}
+        >
           {mode === 'authoring' && (
             <>
+              <GettingStarted />
               <PromptPanel />
+              <SceneObjectPicker level={level} />
               <ResultCards />
               <RepairPanel report={report} />
               <PlaytesterPanel report={report} />
@@ -206,19 +249,35 @@ export function App() {
 function Viewport({ level, mode, report }: { level: Level; mode: Mode; report: Report }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<SceneHandle | null>(null);
+  const [sceneFailure, setSceneFailure] = useState<string | null>(null);
+  const [sceneAttempt, setSceneAttempt] = useState(0);
   const witnessKind = useApp((s) => s.ghost.witnessKind);
   const theme = useApp((s) => s.theme);
 
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
-    const handle = mountScene(host, compileLevel(level), theme ?? undefined);
-    sceneRef.current = handle;
+    const onRenderState = (event: Event): void => {
+      const state = (event as CustomEvent<'ready' | 'lost'>).detail;
+      setSceneFailure(state === 'lost' ? 'The browser lost the 3D graphics context.' : null);
+    };
+    host.addEventListener('levelproof:render-state', onRenderState);
+    let handle: SceneHandle | null = null;
+    try {
+      handle = mountScene(host, compileLevel(level), theme ?? undefined);
+      sceneRef.current = handle;
+      setSceneFailure(null);
+    } catch {
+      host.querySelectorAll('canvas').forEach((canvas) => canvas.remove());
+      sceneRef.current = null;
+      setSceneFailure('The browser could not start the 3D renderer.');
+    }
     return () => {
-      handle.dispose();
+      host.removeEventListener('levelproof:render-state', onRenderState);
+      handle?.dispose();
       sceneRef.current = null;
     };
-  }, [level, theme]);
+  }, [level, theme, sceneAttempt]);
 
   // The engine's per-module recovery analysis renders as floor overlays —
   // the author's view of every dead-end zone and unreachable span. Hidden
@@ -256,6 +315,10 @@ function Viewport({ level, mode, report }: { level: Level; mode: Mode; report: R
   useEffect(() => {
     sceneRef.current?.setProtected(protectedIds);
   }, [protectedIds, level, theme]);
+  const evidence = useApp((st) => st.evidence);
+  useEffect(() => {
+    sceneRef.current?.setEvidence(evidence?.implicatedIds ?? []);
+  }, [evidence, level, theme]);
 
   // Ghost: replays a verifier witness route — never a fabricated one.
   useEffect(() => {
@@ -287,7 +350,7 @@ function Viewport({ level, mode, report }: { level: Level; mode: Mode; report: R
                 : 'Goal reached.';
         useApp.setState({ ghost: { ...current, finished: true, playing: false, endNote } });
       },
-    });
+    }, evidence?.decisiveMoveIndex ?? null);
     actorBridge.setGhost(actor);
     actor.play();
     return () => {
@@ -336,6 +399,13 @@ function Viewport({ level, mode, report }: { level: Level; mode: Mode; report: R
       </button>
       {level.switches.length > 0 && (
         <p className="viewport-legend">Hexagonal plates can open gates · Triangular plates can seal routes</p>
+      )}
+      {sceneFailure !== null && (
+        <div className="scene-failure" role="alert">
+          <h2>3D view unavailable</h2>
+          <p>{sceneFailure} Your puzzle and verification results are still available.</p>
+          <button type="button" onClick={() => setSceneAttempt((attempt) => attempt + 1)}>Retry 3D view</button>
+        </div>
       )}
     </div>
   );

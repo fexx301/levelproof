@@ -1,5 +1,6 @@
 import { compile } from './_lib/compile-service.js';
 import { compileRequestSchema } from '../shared/api.js';
+import { enforceRequestBudget, readLimitedJson } from './_lib/request-guard.js';
 
 /**
  * POST /api/compile — validated model compilation request (§3, §10).
@@ -16,14 +17,18 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json({ error: 'method_not_allowed' }, { status: 405 });
   }
 
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return Response.json({ error: 'invalid_json' }, { status: 400 });
+  const protection = await enforceRequestBudget(request);
+  if (protection !== null) return protection;
+
+  const decoded = await readLimitedJson(request);
+  if (!decoded.ok) {
+    return Response.json(
+      { error: decoded.status === 413 ? 'request_too_large' : 'invalid_json' },
+      { status: decoded.status, headers: { 'Cache-Control': 'no-store' } },
+    );
   }
 
-  const parsed = compileRequestSchema.safeParse(body);
+  const parsed = compileRequestSchema.safeParse(decoded.value);
   if (!parsed.success) {
     const issues = parsed.error.issues.map((issue) => `${issue.path.join('.') || '(root)'}: ${issue.message}`);
     return Response.json({ error: 'invalid_request', issues }, { status: 400 });
@@ -33,17 +38,23 @@ export async function POST(request: Request): Promise<Response> {
     ...parsed.data,
     history: parsed.data.history?.map((h) => h.prompt),
   };
-  const outcome = await compile(process.env, input);
+  const outcome = await compile(process.env, input, { signal: request.signal });
 
   if (outcome.result === null) {
     return Response.json(
       {
-        error: outcome.error === 'missing_provider_config' ? 'provider_not_configured' : 'compilation_failed',
+        error:
+          outcome.error === 'missing_provider_config'
+            ? 'provider_not_configured'
+            : outcome.error === 'cancelled'
+              ? 'request_cancelled'
+              : 'compilation_failed',
         ...(outcome.providerError !== undefined ? { providerError: outcome.providerError } : {}),
         attempts: outcome.attempts,
         totalCostUsd: outcome.totalCostUsd,
+        generationCostUsd: outcome.generationCostUsd,
       },
-      { status: outcome.error === 'missing_provider_config' ? 503 : 502 },
+      { status: outcome.error === 'missing_provider_config' ? 503 : outcome.error === 'cancelled' ? 499 : 502 },
     );
   }
 
@@ -54,5 +65,6 @@ export async function POST(request: Request): Promise<Response> {
     cached: outcome.cached,
     attempts: outcome.attempts,
     totalCostUsd: outcome.totalCostUsd,
+    generationCostUsd: outcome.generationCostUsd,
   });
 }

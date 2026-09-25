@@ -223,6 +223,26 @@ button:focus-visible {
   outline-offset: -2px;
 }
 
+.recovery-notice {
+  align-items: center;
+  background: var(--color-panel);
+  border-bottom: 1px solid var(--color-unknown);
+  color: var(--color-text);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  justify-content: space-between;
+  padding: var(--space-2) var(--space-4);
+}
+
+.recovery-notice--error {
+  border-bottom-color: var(--color-fail);
+}
+
+.recovery-notice button {
+  min-height: 40px;
+}
+
 .rule-chip {
   background: var(--color-panel);
   border: 1px solid var(--color-accent);
@@ -257,6 +277,38 @@ button:focus-visible {
   outline-offset: -2px;
 }
 
+.scene-failure {
+  align-items: flex-start;
+  background: color-mix(in oklab, var(--color-panel) 94%, transparent);
+  border: 1px solid var(--color-fail);
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  left: 50%;
+  max-width: min(28rem, calc(100% - 2 * var(--space-4)));
+  padding: var(--space-4);
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: max-content;
+  z-index: 2;
+}
+
+.scene-failure h2,
+.scene-failure p {
+  margin: 0;
+}
+
+.scene-failure h2 {
+  font-size: var(--text-md);
+}
+
+.scene-failure p {
+  color: var(--color-muted);
+  line-height: 1.5;
+}
+
 .side-panel:focus-visible {
   outline: none;
 }
@@ -276,10 +328,99 @@ button:focus-visible {
   flex: none;
 }
 
+/* A staged candidate must not disappear beneath the sticky verdict strip. */
+.side-panel[data-preview-open='true'] .check-strip {
+  margin-top: var(--space-3);
+  position: static;
+}
+
 .prompt-panel {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
+}
+
+.getting-started {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border: 1px solid color-mix(in oklab, var(--color-accent) 42%, var(--color-line));
+  background: color-mix(in oklab, var(--color-accent) 7%, var(--color-panel));
+}
+
+.getting-started h2 {
+  margin: 0;
+  font-size: var(--text-md);
+}
+
+.getting-started-head {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.guide-kicker {
+  margin: 0 0 var(--space-05);
+  color: var(--color-accent-strong);
+  font-family: var(--font-data);
+  font-size: var(--text-xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.guide-dismiss {
+  min-height: 32px;
+  padding: 4px 8px;
+  color: var(--color-muted);
+}
+
+.guide-steps {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.guide-steps li {
+  display: grid;
+  grid-template-columns: 24px 1fr;
+  gap: var(--space-2);
+  align-items: start;
+  color: var(--color-muted);
+}
+
+.guide-steps li.is-complete {
+  color: var(--color-text);
+}
+
+.guide-step-number {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--color-line);
+  border-radius: 50%;
+  color: var(--color-accent-strong);
+  font-family: var(--font-data);
+  font-size: var(--text-xs);
+}
+
+.guide-steps li span:last-child {
+  display: grid;
+  gap: var(--space-05);
+}
+
+.guide-steps small {
+  color: inherit;
+  font-size: var(--text-xs);
+}
+
+.guide-footnote {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: var(--text-xs);
 }
 
 .prompt-toolbar {
@@ -450,6 +591,68 @@ details.inspector summary .disclosure-glyph {
   transform: rotate(0deg);
 }
 
+.scene-object-picker {
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+}
+
+.scene-object-picker summary {
+  color: var(--color-muted);
+  cursor: pointer;
+  font-family: var(--font-data);
+  font-size: var(--text-xs);
+}
+
+.scene-object-picker summary:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.scene-object-picker > .panel-note {
+  margin: var(--space-2) 0;
+}
+
+.scene-object-list {
+  display: grid;
+  gap: var(--space-1);
+  max-height: 15rem;
+  overflow: auto;
+  padding: 2px;
+}
+
+.scene-object-list button {
+  align-items: center;
+  display: flex;
+  gap: var(--space-2);
+  justify-content: space-between;
+  min-height: 36px;
+  text-align: left;
+  white-space: normal;
+}
+
+.scene-object-list button[aria-pressed='true'] {
+  border-color: var(--color-accent);
+  color: var(--color-accent-strong);
+}
+
+.scene-object-list button:disabled {
+  opacity: 0.5;
+}
+
+.scene-object-kind {
+  color: var(--color-muted);
+  font-family: var(--font-data);
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.scene-object-id {
+  color: var(--color-muted);
+  font-family: var(--font-data);
+  font-size: 10px;
+}
+
 details.inspector[open] summary .disclosure-glyph {
   transform: rotate(90deg);
 }
@@ -492,6 +695,49 @@ details.inspector[open] summary .disclosure-glyph {
   color: var(--color-pass);
   font-family: var(--font-data);
   font-size: var(--text-xs);
+}
+
+.preview-changes {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.preview-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  color: var(--color-muted);
+  font-size: var(--text-xs);
+}
+
+.preview-legend-before::before,
+.preview-legend-after::before {
+  content: '';
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: var(--space-1);
+  border-radius: 50%;
+  vertical-align: 1px;
+}
+
+.preview-legend-before::before { background: var(--color-fail-bright); }
+.preview-legend-after::before { background: var(--color-pass); }
+
+.preview-change-list {
+  display: grid;
+  gap: var(--space-1);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: var(--text-sm);
+}
+
+.preview-change-list li {
+  border-left: 3px solid var(--color-pass);
+  background: var(--color-panel-2);
+  padding: var(--space-1) var(--space-2);
+  overflow-wrap: anywhere;
 }
 
 .card--clarification {
@@ -958,6 +1204,30 @@ details.inspector[open] summary .disclosure-glyph {
   font-size: var(--text-xs);
   min-height: 28px;
   padding: var(--space-05) var(--space-2);
+}
+
+.evidence-button {
+  border-color: color-mix(in oklab, var(--color-unknown) 60%, var(--color-line));
+  color: var(--color-unknown);
+}
+
+.evidence-card {
+  display: grid;
+  gap: 6px;
+  margin: 10px 0;
+  padding: 10px;
+  border: 1px solid color-mix(in oklab, var(--color-unknown) 42%, var(--color-line));
+  background: color-mix(in oklab, var(--color-unknown) 8%, var(--color-panel-2));
+}
+
+.evidence-kicker,
+.evidence-focus {
+  margin: 0;
+  color: var(--color-unknown);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .explain-button:hover:not(:disabled) {

@@ -9,16 +9,25 @@ import { blankCanvasLevel } from '../core/fixtures/blank-canvas.js';
 import { applyOperations, applyRuleProposal, requirementText } from '../core/level.js';
 import { findRepairs, touchesProtected, type RepairCandidate } from '../core/search.js';
 import { verify, type Report } from '../core/verifier.js';
+import { buildFailureEvidence, type FailureEvidence } from '../core/failure-evidence.js';
 import type { MoveRecord } from '../core/movement.js';
+import { validateRoute } from '../core/replay.js';
 import { decodeLevelShare, encodeLevelShare, revisionId } from '../core/serialize.js';
 import type { PreviewState } from '../core/preview.js';
 import {
   prependSavedScene,
   persistSavedScenes,
   readSavedScenes,
+  safeBrowserStorage,
   type SavedScene,
   type AcceptedSavedScene,
 } from './persistence.js';
+import {
+  clearRecovery as clearRecoveryRecord,
+  persistRecovery,
+  readRecovery,
+  type RecoverySnapshot,
+} from './recovery.js';
 
 /** Gallery scenes (§12): the seeded vault plus three verified showcase levels. */
 export const SCENES = [
@@ -32,20 +41,20 @@ export const SCENES = [
 export type SceneId = (typeof SCENES)[number]['id'];
 
 let contextGeneration = 0;
+let activeCompileController: AbortController | null = null;
+let activeExplainController: AbortController | null = null;
 
 /** Invalidate any compile that was started against an older scene context. */
 function invalidateContext(): void {
   contextGeneration += 1;
+  activeCompileController?.abort();
+  activeExplainController?.abort();
 }
 
 /** Only a fully verified green level may enter the accepted checkpoint. */
 export function isAcceptedCheckpoint(value: unknown): value is Level {
   const parsed = levelSchema.safeParse(value);
   return parsed.success && verify(parsed.data).accepted;
-}
-
-function browserStorage(): Storage | undefined {
-  return typeof localStorage === 'undefined' ? undefined : localStorage;
 }
 
 /** One-time window state: a shared puzzle (?p=) opens directly in play
@@ -90,6 +99,8 @@ interface DraftState {
   viaRule: boolean;
   /** Accepted checkpoint to return to when this draft was opened from a save. */
   returnSceneId: string | null;
+  /** Saved drafts do not share a known parent revision with the current checkpoint. */
+  lineageKnown?: boolean;
 }
 
 interface RevisionEntry {
@@ -131,7 +142,8 @@ type PendingChange =
 
 interface CompileMeta {
   cached: boolean;
-  totalCostUsd: number;
+  totalCostUsd: number | null;
+  generationCostUsd: number | null;
   attempts: number;
   model: string;
 }
@@ -140,6 +152,7 @@ interface GhostSlice {
   witnessKind: WitnessKind | null;
   playing: boolean;
   finished: boolean;
+  pausedAtEvidence: boolean;
   moveIndex: number;
   totalMoves: number;
   keys: string[];
@@ -187,6 +200,8 @@ interface AppState {
   selection: string[];
   /** Recent prompts (oldest first) for conversational follow-ups (§12). */
   promptHistory: string[];
+  /** Text currently in the prompt field; retained across reloads. */
+  promptDraft: string;
   /** One-line summary of the last applied change (§12 visible edit). */
   changeSummary: string | null;
   /** Presentation theme the author asked for (§12 visual expression). */
@@ -218,6 +233,9 @@ interface AppState {
   play: PlaySlice;
   repair: RepairSlice;
   explain: ExplainSlice;
+  /** Temporary, verifier-owned evidence shown by the failure replay. */
+  evidence: FailureEvidence | null;
+  recoveryStatus: 'ready' | 'malformed' | 'unavailable';
   explainCheck: (kind: CheckKind) => Promise<void>;
   submitPrompt: (prompt: string, clarificationContext?: string) => Promise<void>;
   approveRule: () => void;
@@ -229,6 +247,7 @@ interface AppState {
   resetVault: () => void;
   loadScene: (id: string) => void;
   watchWitness: (kind: WitnessKind) => void;
+  showProblem: (kind: CheckKind) => void;
   startPlay: () => void;
   exitToAuthoring: () => void;
   runRepairs: (report: Report) => void;
@@ -246,12 +265,16 @@ interface AppState {
   deleteSaved: (id: string) => void;
   shareCurrent: () => void;
   setTheme: (theme: ThemeKey | null) => void;
+  clearRecovery: () => void;
+  retryRecovery: () => void;
+  setPromptDraft: (value: string) => void;
 }
 
 const GHOST_INITIAL: GhostSlice = {
   witnessKind: null,
   playing: false,
   finished: false,
+  pausedAtEvidence: false,
   moveIndex: 0,
   totalMoves: 0,
   keys: [],
@@ -328,6 +351,8 @@ function explainErrorText(body: unknown): string {
   if (body !== null && typeof body === 'object' && 'error' in body) {
     if (body.error === 'check_not_failing') return 'That check is not failing.';
     if (body.error === 'provider_not_configured') return 'Explanation service is not configured.';
+    if (body.error === 'request_limit_reached') return 'The shared request quota is reached. Wait for its window to reset, then try again.';
+    if (body.error === 'request_protection_unavailable') return 'AI requests are temporarily paused because request protection is unavailable.';
   }
   return 'Explanation unavailable — the engine verdict above stands.';
 }
@@ -335,6 +360,10 @@ function explainErrorText(body: unknown): string {
 function extractError(body: unknown): string {
   if (body !== null && typeof body === 'object' && 'error' in body) {
     const base = String(body.error);
+    if (base === 'request_limit_reached') return 'Request limit reached. Wait briefly before trying again.';
+    if (base === 'request_protection_unavailable') return 'AI service temporarily paused: shared request protection is unavailable.';
+    if (base === 'request_too_large') return 'This request is too large. Shorten the prompt or remove extra context.';
+    if (base === 'provider_not_configured') return 'AI provider is not configured. Your prompt is still available for retry.';
     const issue =
       'issues' in body && Array.isArray(body.issues) && body.issues.length > 0
         ? `: ${String(body.issues[0])}`
@@ -390,13 +419,14 @@ function settleDraft(
         report,
         viaRule,
         returnSceneId: current.draft?.returnSceneId ?? current.acceptedSceneId,
+        lineageKnown: current.draft?.lineageKnown ?? true,
       },
       theme: nextTheme,
       promptHistory: [...nextPromptHistory],
       changeSummary: summary,
     });
   }
-  set({ pendingRule: null, mode: 'authoring', ghost: GHOST_INITIAL, play: PLAY_INITIAL, repair: REPAIR_INITIAL, explain: EXPLAIN_INITIAL });
+  set({ pendingRule: null, mode: 'authoring', ghost: GHOST_INITIAL, play: PLAY_INITIAL, repair: REPAIR_INITIAL, explain: EXPLAIN_INITIAL, evidence: null });
   void base;
   return report.accepted;
 }
@@ -410,42 +440,166 @@ function initialLevel(): Level {
 }
 
 const initialWindow = initialWindowState();
+const initialStorage = safeBrowserStorage();
+const initialSavedScenes = readSavedScenes(initialStorage);
+const initialRecoveryRead = initialStorage === undefined
+  ? { status: 'unavailable' as const }
+  : initialWindow.viaShare
+    ? { status: 'empty' as const }
+    : readRecovery(initialStorage);
+const initialRecovery = initialRecoveryRead.status === 'ready' ? initialRecoveryRead.snapshot : null;
+
+function recoveredSceneId(id: string, fallback: string): string {
+  if (id === '') return '';
+  if (SCENES.some((scene) => scene.id === id)) return id;
+  if (id.startsWith('saved:')) {
+    const key = id.slice('saved:'.length);
+    if (initialSavedScenes.some((saved) => saved.recordKey === key && saved.status !== 'unavailable')) return id;
+  }
+  return fallback;
+}
+
+function restorePending(pending: RecoverySnapshot['pending']): PendingChange | null {
+  if (pending === null) return null;
+  if (pending.result.type === 'patch') {
+    const applied = applyOperations(pending.base, pending.result.operations);
+    if (!applied.ok) return null;
+    return {
+      kind: 'patch',
+      base: pending.base,
+      candidate: applied.level,
+      operations: pending.result.operations,
+      rationale: pending.result.rationale,
+      assumptions: pending.result.assumptions,
+      prompt: pending.prompt,
+      nextTheme: pending.nextTheme,
+      baseRevision: pending.baseRevision,
+    };
+  }
+  if (pending.result.type !== 'rule_proposal') return null;
+  const applied = applyRuleProposal(pending.base, pending.result);
+  return applied.ok
+    ? {
+        kind: 'rule',
+        base: pending.base,
+        candidate: applied.level,
+        proposal: pending.result,
+        prompt: pending.prompt,
+        nextTheme: pending.nextTheme,
+        baseRevision: pending.baseRevision,
+      }
+    : null;
+}
+
+function makeRecoverySnapshot(state: AppState): RecoverySnapshot {
+  const pending = state.pendingRule;
+  const result: RecoverySnapshot['pending'] = pending === null
+    ? null
+    : {
+        base: pending.base,
+        result: pending.kind === 'patch'
+          ? { type: 'patch', rationale: pending.rationale, assumptions: pending.assumptions, operations: pending.operations }
+          : pending.proposal,
+        prompt: pending.prompt,
+        nextTheme: pending.nextTheme,
+        baseRevision: pending.baseRevision,
+      };
+  return {
+    version: 1,
+    acceptedLevel: state.acceptedLevel,
+    acceptedSceneId: state.acceptedSceneId,
+    sceneId: state.sceneId,
+    acceptedTheme: state.acceptedTheme,
+    acceptedPromptHistory: state.acceptedPromptHistory,
+    theme: state.theme,
+    promptHistory: state.promptHistory,
+    promptDraft: state.promptDraft,
+    draft: state.draft === null
+      ? null
+      : {
+          level: state.draft.level,
+          viaRule: state.draft.viaRule,
+          returnSceneId: state.draft.returnSceneId,
+          ...(state.draft.lineageKnown !== undefined ? { lineageKnown: state.draft.lineageKnown } : {}),
+        },
+    pending: result,
+    selection: state.selection,
+    protectedIds: state.protectedIds,
+    history: state.history,
+    previousAccepted: state.previousAccepted,
+    lastPrompt: state.lastPrompt,
+    changeSummary: state.changeSummary,
+    lastCompileMeta: state.lastCompileMeta,
+  };
+}
 
 export const useApp = create<AppState>()((set, get) => ({
-  acceptedLevel: initialWindow.level,
-  sceneId: 'balcony-vault',
-  acceptedSceneId: initialWindow.viaShare ? '' : 'balcony-vault',
-  preview: null,
+  acceptedLevel: initialRecovery?.acceptedLevel ?? initialWindow.level,
+  sceneId: initialRecovery === null
+    ? 'balcony-vault'
+    : recoveredSceneId(initialRecovery.sceneId, recoveredSceneId(initialRecovery.acceptedSceneId, 'balcony-vault')),
+  acceptedSceneId: initialRecovery === null
+    ? initialWindow.viaShare ? '' : 'balcony-vault'
+    : recoveredSceneId(initialRecovery.acceptedSceneId, ''),
+  preview: initialRecovery?.pending === null || initialRecovery === null
+    ? null
+    : (() => {
+        const pending = restorePending(initialRecovery.pending);
+        if (pending === null) return null;
+        const operations = pending.kind === 'patch' ? pending.operations : pending.proposal.operations;
+        return {
+          source: 'ai' as const,
+          baseRevision: pending.baseRevision,
+          before: pending.base,
+          candidate: pending.candidate,
+          operations,
+        };
+      })(),
   repairReplay: null,
-  selection: [],
-  protectedIds: [],
-  promptHistory: [],
-  changeSummary: null,
-  theme: initialWindow.theme,
-  acceptedTheme: initialWindow.theme,
-  acceptedPromptHistory: [],
-  history: [],
-  previousAccepted: null,
-  draft: null,
-  pendingRule: null,
-  lastResult: null,
-  lastPrompt: null,
-  lastCompileMeta: null,
+  selection: initialRecovery?.selection ?? [],
+  protectedIds: initialRecovery?.protectedIds ?? [],
+  promptHistory: initialRecovery?.promptHistory ?? [],
+  promptDraft: initialRecovery?.promptDraft ?? '',
+  changeSummary: initialRecovery?.changeSummary ?? null,
+  theme: initialRecovery === null ? initialWindow.theme : initialRecovery.theme,
+  acceptedTheme: initialRecovery === null ? initialWindow.theme : initialRecovery.acceptedTheme,
+  acceptedPromptHistory: initialRecovery?.acceptedPromptHistory ?? [],
+  history: initialRecovery?.history ?? [],
+  previousAccepted: initialRecovery?.previousAccepted ?? null,
+  draft: initialRecovery?.draft === null || initialRecovery === null
+    ? null
+    : {
+        ...initialRecovery.draft,
+        report: verify(initialRecovery.draft.level),
+      },
+  pendingRule: initialRecovery === null ? null : restorePending(initialRecovery.pending),
+  lastResult: initialRecovery?.pending?.result ?? null,
+  lastPrompt: initialRecovery?.lastPrompt ?? null,
+  lastCompileMeta: initialRecovery?.lastCompileMeta ?? null,
   busy: false,
   error: null,
   mode: initialWindow.mode,
   viaShare: initialWindow.viaShare,
   headerNote: null,
-  savedScenes: readSavedScenes(browserStorage()),
+  savedScenes: initialSavedScenes,
   ghost: GHOST_INITIAL,
   play: PLAY_INITIAL,
   repair: REPAIR_INITIAL,
   explain: EXPLAIN_INITIAL,
+  evidence: null,
+  recoveryStatus: initialRecoveryRead.status === 'malformed'
+    ? 'malformed'
+    : initialRecoveryRead.status === 'unavailable'
+      ? 'unavailable'
+      : 'ready',
 
   explainCheck: async (kind) => {
     const state = get();
     if (state.explain.busy) return;
     const generation = contextGeneration;
+    activeExplainController?.abort();
+    const controller = new AbortController();
+    activeExplainController = controller;
     const level = state.draft?.level ?? state.acceptedLevel;
     const boundRevision = revisionId(level);
     set({ explain: { ...state.explain, busy: true, error: null } });
@@ -454,6 +608,7 @@ export const useApp = create<AppState>()((set, get) => ({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ level, check: kind }),
+        signal: controller.signal,
       });
       const body: unknown = await response.json();
       // Stale results are ignored: the level moved on while we asked.
@@ -468,25 +623,55 @@ export const useApp = create<AppState>()((set, get) => ({
         set({ explain: { ...get().explain, busy: false, error: 'The explanation response failed validation.' } });
         return;
       }
-      const { explanation, cached, attempts, totalCostUsd } = parsed.data;
+      const { explanation, cached, attempts, totalCostUsd, generationCostUsd } = parsed.data;
       const model = attempts.length > 0 ? (attempts.at(-1)?.model ?? 'unknown') : 'cache';
       set({
         explain: {
-          byCheck: { ...get().explain.byCheck, [kind]: { text: explanation, meta: { cached, totalCostUsd, attempts: attempts.length, model } } },
+          byCheck: { ...get().explain.byCheck, [kind]: { text: explanation, meta: { cached, totalCostUsd, generationCostUsd: generationCostUsd ?? null, attempts: attempts.length, model } } },
           busy: false,
           error: null,
         },
       });
     } catch {
-      set({ explain: { ...get().explain, busy: false, error: 'Explanation unavailable — the engine verdict above stands.' } });
+      if (generation === contextGeneration) {
+        set({ explain: { ...get().explain, busy: false, error: 'Explanation unavailable — the engine verdict above stands.' } });
+      }
+    } finally {
+      if (activeExplainController === controller) {
+        activeExplainController = null;
+        if (generation !== contextGeneration && get().explain.busy) {
+          set({ explain: { ...get().explain, busy: false } });
+        }
+      }
     }
+  },
+
+  showProblem: (kind) => {
+    const state = get();
+    const level = state.draft?.level ?? state.acceptedLevel;
+    const report = verify(level);
+    const evidence = buildFailureEvidence(level, report, kind);
+    if (evidence === null) {
+      set({ error: 'This check has no replayable witness yet.' });
+      return;
+    }
+    set({
+      mode: 'watching',
+      evidence,
+      ghost: { ...GHOST_INITIAL, witnessKind: evidence.witnessKind },
+      play: PLAY_INITIAL,
+      error: null,
+    });
   },
 
   submitPrompt: async (prompt, clarificationContext) => {
     const state = get();
     if (state.busy || state.pendingRule !== null || prompt.trim().length === 0) return;
     const generation = ++contextGeneration;
-    set({ busy: true, error: null });
+    activeCompileController?.abort();
+    const controller = new AbortController();
+    activeCompileController = controller;
+    set({ busy: true, error: null, evidence: null, promptDraft: prompt });
     const selection = state.selection;
     const history = state.promptHistory;
     const base = state.draft?.level ?? state.acceptedLevel;
@@ -499,11 +684,13 @@ export const useApp = create<AppState>()((set, get) => ({
       const response = await fetch('/api/compile', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
         body: JSON.stringify({
           level: base,
           prompt,
           clarificationContext,
           selection,
+          protectedIds: state.protectedIds,
           history: history.map((h) => ({ prompt: h })),
           ...(requestedTheme !== null ? { theme: requestedTheme } : {}),
         }),
@@ -511,7 +698,7 @@ export const useApp = create<AppState>()((set, get) => ({
       const body: unknown = await response.json();
       if (generation !== contextGeneration) return;
       if (!response.ok) {
-        set({ busy: false, error: extractError(body), lastResult: null, lastCompileMeta: null });
+        set({ busy: false, error: `${extractError(body)} Your prompt is still available — try again when the service is ready.`, lastResult: null, lastCompileMeta: null });
         return;
       }
       const parsed = compileOkResponseSchema.safeParse(body);
@@ -519,7 +706,7 @@ export const useApp = create<AppState>()((set, get) => ({
         set({ busy: false, error: 'The compile response failed validation.', lastResult: null, lastCompileMeta: null });
         return;
       }
-      const { result, baseRevision, cached, attempts, totalCostUsd, theme } = parsed.data;
+      const { result, baseRevision, cached, attempts, totalCostUsd, generationCostUsd, theme } = parsed.data;
       const stillCurrent = revisionId(get().draft?.level ?? get().acceptedLevel) === boundRevision;
       if (generation !== contextGeneration || !stillCurrent || baseRevision !== boundRevision) {
         set({
@@ -530,11 +717,23 @@ export const useApp = create<AppState>()((set, get) => ({
         });
         return;
       }
+      const proposedOperations = result.type === 'patch' || result.type === 'rule_proposal' ? result.operations : [];
+      const keptAtResponse = get().protectedIds;
+      if (keptAtResponse.length > 0 && touchesProtected(proposedOperations, new Set(keptAtResponse))) {
+        set({
+          busy: false,
+          error: 'The proposal changes an object marked Keep these. Nothing changed. Remove that object from Keep these or revise the request.',
+          lastResult: null,
+          lastPrompt: prompt,
+          lastCompileMeta: null,
+        });
+        return;
+      }
       const model = attempts.length > 0 ? (attempts.at(-1)?.model ?? 'unknown') : 'cache';
       set({
         lastResult: result,
         lastPrompt: prompt,
-        lastCompileMeta: { cached, totalCostUsd, attempts: attempts.length, model },
+        lastCompileMeta: { cached, totalCostUsd, generationCostUsd: generationCostUsd ?? null, attempts: attempts.length, model },
       });
       const nextTheme = theme ?? requestedTheme;
 
@@ -591,14 +790,22 @@ export const useApp = create<AppState>()((set, get) => ({
       }
     } catch (error) {
       if (generation === contextGeneration) {
-        set({ busy: false, error: error instanceof Error ? error.message : 'Network error.' });
+        const message = error instanceof Error ? error.message : 'Network error.';
+        set({ busy: false, error: `${message} Your prompt is still available — try again when the service is ready.` });
       }
+    } finally {
+      if (activeCompileController === controller) activeCompileController = null;
     }
   },
 
   approveRule: () => {
     const { pendingRule } = get();
     if (!pendingRule || pendingRule.kind !== 'rule') return;
+    const kept = get().protectedIds;
+    if (kept.length > 0 && touchesProtected(pendingRule.proposal.operations, new Set(kept))) {
+      set({ error: 'This preview changes an object marked Keep these. Remove it from Keep these or revise the proposal before approving.' });
+      return;
+    }
     const currentBase = get().draft?.level ?? get().acceptedLevel;
     if (revisionId(currentBase) !== pendingRule.baseRevision) {
       set({ pendingRule: null, preview: null, lastResult: null, error: 'The scene changed; review this rule again.' });
@@ -629,12 +836,17 @@ export const useApp = create<AppState>()((set, get) => ({
   declineRule: () => {
     const pending = get().pendingRule;
     if (!pending || pending.kind !== 'rule') return;
-    set({ pendingRule: null, preview: null, lastResult: null, lastPrompt: null });
+    set({ pendingRule: null, preview: null, lastResult: null, lastPrompt: null, evidence: null });
   },
 
   applyPatch: () => {
     const { pendingRule } = get();
     if (!pendingRule || pendingRule.kind !== 'patch') return;
+    const kept = get().protectedIds;
+    if (kept.length > 0 && touchesProtected(pendingRule.operations, new Set(kept))) {
+      set({ error: 'This preview changes an object marked Keep these. Remove it from Keep these or revise the proposal before applying.' });
+      return;
+    }
     const currentBase = get().draft?.level ?? get().acceptedLevel;
     if (revisionId(currentBase) !== pendingRule.baseRevision) {
       set({ pendingRule: null, preview: null, lastResult: null, error: 'The scene changed; compile the edit again.' });
@@ -660,7 +872,7 @@ export const useApp = create<AppState>()((set, get) => ({
   declinePatch: () => {
     const pending = get().pendingRule;
     if (!pending || pending.kind !== 'patch') return;
-    set({ pendingRule: null, preview: null, lastResult: null, lastPrompt: null });
+    set({ pendingRule: null, preview: null, lastResult: null, lastPrompt: null, evidence: null });
   },
 
   discardDraft: () => {
@@ -683,6 +895,7 @@ export const useApp = create<AppState>()((set, get) => ({
       preview: null,
       repairReplay: null,
       selection: [],
+      evidence: null,
       sceneId: draft?.returnSceneId ?? (acceptedSceneId || sceneId),
     });
   },
@@ -716,6 +929,7 @@ export const useApp = create<AppState>()((set, get) => ({
       preview: null,
       repairReplay: null,
       selection: [],
+      evidence: null,
     });
   },
 
@@ -748,6 +962,7 @@ export const useApp = create<AppState>()((set, get) => ({
       repairReplay: null,
       selection: [],
       protectedIds: [],
+      evidence: null,
       sceneId: 'balcony-vault',
       acceptedSceneId: 'balcony-vault',
     });
@@ -785,7 +1000,8 @@ export const useApp = create<AppState>()((set, get) => ({
           level,
           report,
           viaRule: false,
-          returnSceneId: current.draft?.returnSceneId ?? current.acceptedSceneId,
+          returnSceneId: current.acceptedSceneId,
+          lineageKnown: false,
         },
         theme,
         promptHistory,
@@ -807,6 +1023,7 @@ export const useApp = create<AppState>()((set, get) => ({
         repairReplay: null,
         selection: [],
         protectedIds: [],
+        evidence: null,
         viaShare: false,
         sceneId: id,
       });
@@ -839,6 +1056,7 @@ export const useApp = create<AppState>()((set, get) => ({
       repairReplay: null,
       selection: [],
       protectedIds: [],
+      evidence: null,
       viaShare: false,
       sceneId: id,
     });
@@ -849,15 +1067,16 @@ export const useApp = create<AppState>()((set, get) => ({
       mode: 'watching',
       ghost: { ...GHOST_INITIAL, witnessKind: kind },
       play: PLAY_INITIAL,
+      evidence: null,
     }),
 
 
   startPlay: () => {
     invalidateContext();
-    set({ mode: 'playing', ghost: GHOST_INITIAL, play: PLAY_INITIAL, pendingRule: null, preview: null, lastResult: null, lastPrompt: null, lastCompileMeta: null, busy: false });
+    set({ mode: 'playing', ghost: GHOST_INITIAL, play: PLAY_INITIAL, pendingRule: null, preview: null, lastResult: null, lastPrompt: null, lastCompileMeta: null, busy: false, evidence: null });
   },
 
-  exitToAuthoring: () => set({ mode: 'authoring', ghost: GHOST_INITIAL, play: PLAY_INITIAL }),
+  exitToAuthoring: () => set({ mode: 'authoring', ghost: GHOST_INITIAL, play: PLAY_INITIAL, evidence: null }),
 
 
   runRepairs: (report) => {
@@ -865,7 +1084,8 @@ export const useApp = create<AppState>()((set, get) => ({
     if (!draft) return;
     set({ repair: { ...REPAIR_INITIAL, status: 'running' } });
     const { protectedIds } = get();
-    const result = findRepairs(acceptedLevel, draft.level, report, protectedIds);
+    const repairBase = draft.lineageKnown === false ? draft.level : acceptedLevel;
+    const result = findRepairs(repairBase, draft.level, report, protectedIds);
     set({
       repair: {
         status: 'done',
@@ -910,7 +1130,15 @@ export const useApp = create<AppState>()((set, get) => ({
         history: [{ level: applied.level, label: `Repair: ${candidate.description}`, theme: nextTheme, promptHistory: nextPromptHistory }, ...priorHistory].slice(0, 12),
       });
     }
-    set({ preview: null, repairReplay: failing.length > 0 ? failing : null });
+    const replayCheck = failing.length > 0 ? validateRoute(applied.level, failing) : null;
+    set({
+      preview: null,
+      repairReplay: replayCheck?.ok === true ? failing : null,
+      evidence: null,
+      ...(replayCheck !== null && !replayCheck.ok
+        ? { changeSummary: `Repair applied. The old witness could not be replayed: ${replayCheck.reason}` }
+        : {}),
+    });
   },
 
   previewRepair: (index) => {
@@ -941,18 +1169,30 @@ export const useApp = create<AppState>()((set, get) => ({
   watchReplay: () => {
     const { repairReplay } = get();
     if (repairReplay === null || repairReplay.length === 0) return;
+    const level = get().draft?.level ?? get().acceptedLevel;
+    const replayCheck = validateRoute(level, repairReplay);
+    if (!replayCheck.ok) {
+      set({ error: `The stored witness is stale and was not replayed: ${replayCheck.reason}` });
+      return;
+    }
     set({
       mode: 'watching',
       ghost: { ...GHOST_INITIAL, witnessKind: 'replay' },
       play: PLAY_INITIAL,
       preview: null,
+      evidence: null,
     });
   },
 
   toggleSelect: (id) => {
     const { selection } = get();
+    if (!selection.includes(id) && selection.length >= 8) {
+      set({ error: 'Select up to 8 scene entities for one prompt.' });
+      return;
+    }
     set({
       selection: selection.includes(id) ? selection.filter((s) => s !== id) : [...selection, id],
+      error: null,
     });
   },
 
@@ -994,6 +1234,7 @@ export const useApp = create<AppState>()((set, get) => ({
       selection: [],
       protectedIds: [],
       viaShare: false,
+      evidence: null,
     });
   },
 
@@ -1003,7 +1244,7 @@ export const useApp = create<AppState>()((set, get) => ({
     const merged = [...new Set([...protectedIds, ...selection])];
     // Protections change what the search may offer: stale candidates and
     // their preview markers are void until the creator searches again.
-    set({ protectedIds: merged, repair: REPAIR_INITIAL, preview: null });
+    set({ protectedIds: merged, repair: REPAIR_INITIAL, preview: null, evidence: null });
   },
 
   unkeep: (id) => {
@@ -1012,6 +1253,7 @@ export const useApp = create<AppState>()((set, get) => ({
       protectedIds: protectedIds.filter((p) => p !== id),
       repair: REPAIR_INITIAL,
       preview: null,
+      evidence: null,
     });
   },
 
@@ -1040,7 +1282,7 @@ export const useApp = create<AppState>()((set, get) => ({
       promptHistory: [...acceptedPromptHistory],
     };
     const next = prependSavedScene(savedScenes, entry);
-    const persisted = persistSavedScenes(browserStorage(), next);
+    const persisted = persistSavedScenes(safeBrowserStorage(), next);
     if (!persisted.ok) {
       set({ error: persisted.error });
       return;
@@ -1066,7 +1308,7 @@ export const useApp = create<AppState>()((set, get) => ({
     const current = get();
     const next = current.savedScenes.filter((saved) => saved.recordKey !== recordKey);
     if (next.length === current.savedScenes.length) return;
-    const persisted = persistSavedScenes(browserStorage(), next);
+    const persisted = persistSavedScenes(safeBrowserStorage(), next);
     if (!persisted.ok) {
       set({ error: persisted.error });
       return;
@@ -1124,4 +1366,58 @@ export const useApp = create<AppState>()((set, get) => ({
       busy: false,
     });
   },
+
+  clearRecovery: () => {
+    const storage = safeBrowserStorage();
+    const cleared = clearRecoveryRecord(storage);
+    if (!cleared.ok) {
+      set({ error: cleared.error });
+      return;
+    }
+    const written = persistRecovery(storage, makeRecoverySnapshot(get()));
+    if (!written.ok) {
+      set({ recoveryStatus: 'unavailable', error: written.error });
+      return;
+    }
+    set({ recoveryStatus: 'ready', error: null });
+  },
+
+  retryRecovery: () => {
+    const result = persistRecovery(safeBrowserStorage(), makeRecoverySnapshot(get()));
+    set({ recoveryStatus: result.ok ? 'ready' : 'unavailable', error: result.ok ? null : result.error });
+  },
+
+  setPromptDraft: (value) => set({ promptDraft: value.slice(0, 2000) }),
 }));
+
+const RECOVERY_FIELDS: Array<keyof AppState> = [
+  'acceptedLevel',
+  'acceptedSceneId',
+  'sceneId',
+  'acceptedTheme',
+  'acceptedPromptHistory',
+  'theme',
+  'promptHistory',
+  'promptDraft',
+  'draft',
+  'pendingRule',
+  'selection',
+  'protectedIds',
+  'history',
+  'previousAccepted',
+  'lastPrompt',
+  'changeSummary',
+  'lastCompileMeta',
+  'viaShare',
+];
+
+useApp.subscribe((state, previous) => {
+  if (
+    state.recoveryStatus === 'malformed' ||
+    !RECOVERY_FIELDS.some((field) => state[field] !== previous[field])
+  ) return;
+
+  const result = persistRecovery(safeBrowserStorage(), makeRecoverySnapshot(state));
+  const nextStatus = result.ok ? 'ready' : 'unavailable';
+  if (state.recoveryStatus !== nextStatus) useApp.setState({ recoveryStatus: nextStatus });
+});

@@ -3,28 +3,32 @@
  * §10.1 model evaluation: one fixture set, pass counts, billed cost.
  * Runs each model over 12 fixtures (3 golden prompts, 4 paraphrases,
  * 2 ambiguity cases, 2 unsupported requests, 1 rule-weakening attempt)
- * twice, uncached, under the $0.25 evaluation cap.
+ * twice, with the three golden prompts repeated a third time to expose
+ * inconsistent behavior, under the $0.25 evaluation cap.
  *
- * Usage: npx tsx scripts/eval.ts [--models openai/gpt-oss-120b,...]
+ * Usage: npm run eval -- --confirm-live-ai --budget-usd 0.10 [--models model-a,...]
  */
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { callOptionsFor } from '../api/_lib/model-options';
 import { buildSystemPrompt } from '../api/_lib/prompt';
 import { chatCompletion, providerConfigFromEnv, type ChatMessage, type ProviderConfig } from '../api/_lib/provider';
 import { baselineLevel } from '../src/core/fixtures/baseline';
 import { trapRepairedLevel } from '../src/core/fixtures/trap-repaired';
 import { vaultEmptyLevel } from '../src/core/fixtures/vault-empty';
-import { applyOperations } from '../src/core/level';
+import { applyOperations, applyRuleProposal, type ApplyResult } from '../src/core/level';
 import { revisionId } from '../src/core/serialize';
 import { verify } from '../src/core/verifier';
 import { compileResultSchema, normalizeWirePayload, type CompileResult } from '../shared/compile-result';
 import type { Level } from '../shared/schema';
+import { LiveEvaluationStop, requireLiveBudget } from './live-budget';
 
 const EVAL_BUDGET_USD = 0.25;
 const RUNS_PER_FIXTURE = 2;
+const REPRESENTATIVE_RUNS = 3;
+const REPRESENTATIVE_FIXTURES = new Set(['g1-baseline', 'g2-trap', 'g3-bypass']);
 const SLATE = ['openai/gpt-oss-120b', 'deepseek/deepseek-v4-flash', 'google/gemini-2.5-flash-lite'];
 
-/** Live prices verified 2026-09-11 from openrouter.ai/api/v1/models, USD per Mtok [in, out]. */
+/** Pinned rate snapshot captured 2026-09-11, USD per Mtok [in, out]; estimates only. */
 const PRICES: Record<string, [number, number]> = {
   'openai/gpt-oss-120b': [0.037, 0.1699],
   'deepseek/deepseek-v4-flash': [0.0859, 0.1719],
@@ -44,6 +48,10 @@ type Grader = (result: CompileResult, base: Level) => Grade;
 const fail = (note: string): Grade => ({ pass: false, note });
 const pass = (note: string): Grade => ({ pass: true, note });
 
+function applyCompileResult(base: Level, result: Extract<CompileResult, { type: 'patch' | 'rule_proposal' }>): ApplyResult {
+  return result.type === 'rule_proposal' ? applyRuleProposal(base, result) : applyOperations(base, result.operations);
+}
+
 function moduleByLabel(level: Level, label: string): string {
   return level.modules.find((m) => m.label === label)?.id ?? '';
 }
@@ -58,7 +66,7 @@ function gradeP1(result: CompileResult, base: Level): Grade {
   const balcony = moduleByLabel(base, 'side balcony');
   const approach = moduleByLabel(base, 'vault approach');
   const entry = moduleByLabel(base, 'vault entry');
-  const applied = applyOperations(base, result.operations);
+  const applied = applyCompileResult(base, result);
   if (!applied.ok) return fail(`operations rejected: ${applied.errors[0]}`);
   const key = applied.level.keys.find((k) => k.moduleId === balcony);
   if (!key) return fail('no key placed on the side balcony');
@@ -81,7 +89,7 @@ function gradeP2(result: CompileResult, base: Level): Grade {
   const foyer = moduleByLabel(base, 'upper foyer');
   const gallery = moduleByLabel(base, 'upper gallery');
   const approach = moduleByLabel(base, 'vault approach');
-  const applied = applyOperations(base, result.operations);
+  const applied = applyCompileResult(base, result);
   if (!applied.ok) return fail(`operations rejected: ${applied.errors[0]}`);
   const seal = applied.level.switches.find((s) => s.moduleId === approach);
   if (!seal) return fail('no switch on the vault approach');
@@ -98,7 +106,7 @@ function gradeP2(result: CompileResult, base: Level): Grade {
 /** Prompt 3 (§8.3): bridge creates a keyless winning route. */
 function gradeP3(result: CompileResult, base: Level): Grade {
   if (result.type !== 'patch') return fail(`expected patch, got "${result.type}"`);
-  const applied = applyOperations(base, result.operations);
+  const applied = applyCompileResult(base, result);
   if (!applied.ok) return fail(`operations rejected: ${applied.errors[0]}`);
   const newModules = applied.level.modules.filter((m) => !base.modules.some((b) => b.id === m.id));
   if (newModules.length < 2) return fail(`only ${newModules.length} new module(s); a new route needs more`);
@@ -229,6 +237,10 @@ const FIXTURES: EvalFixture[] = [
   },
 ];
 
+function runsFor(fixture: EvalFixture): number {
+  return REPRESENTATIVE_FIXTURES.has(fixture.id) ? REPRESENTATIVE_RUNS : RUNS_PER_FIXTURE;
+}
+
 interface CallRecord {
   fixture: string;
   category: string;
@@ -240,9 +252,13 @@ interface CallRecord {
   referenceOk: boolean | null;
   typeReturned: string;
   latencyMs: number;
-  costUsd: number;
+  costUsd: number | null;
+  /** Known partial spend when a later attempt's billing metadata is missing. */
+  knownCostUsd: number;
+  costBasis: 'provider_reported' | 'estimated' | 'unavailable';
   note: string;
   error?: string;
+  stopReason?: 'budget_exceeded';
 }
 
 function loadDotEnv(): void {
@@ -262,13 +278,23 @@ function loadDotEnv(): void {
   }
 }
 
-function callCost(model: string, usage: { promptTokens: number; completionTokens: number; costUsd: number | null }): number {
-  if (usage.costUsd !== null) return usage.costUsd;
-  const [priceIn, priceOut] = PRICES[model] ?? [1, 1];
-  return (usage.promptTokens / 1e6) * priceIn + (usage.completionTokens / 1e6) * priceOut;
+function callCost(model: string, usage: { promptTokens: number; completionTokens: number; costUsd: number | null }): {
+  costUsd: number | null;
+  costBasis: CallRecord['costBasis'];
+} {
+  if (usage.costUsd !== null) return { costUsd: usage.costUsd, costBasis: 'provider_reported' };
+  if (usage.promptTokens === 0 || usage.completionTokens === 0) {
+    return { costUsd: null, costBasis: 'unavailable' };
+  }
+  const price = PRICES[model];
+  if (price === undefined) return { costUsd: null, costBasis: 'unavailable' };
+  return {
+    costUsd: (usage.promptTokens / 1e6) * price[0] + (usage.completionTokens / 1e6) * price[1],
+    costBasis: 'estimated',
+  };
 }
 
-async function runOne(config: ProviderConfig, fixture: EvalFixture, run: number): Promise<CallRecord> {
+async function runOne(config: ProviderConfig, fixture: EvalFixture, run: number, remainingBudgetUsd: number): Promise<CallRecord> {
   const messages: ChatMessage[] = [
     { role: 'system', content: buildSystemPrompt(fixture.base, revisionId(fixture.base)) },
     { role: 'user', content: fixture.prompt },
@@ -278,9 +304,29 @@ async function runOne(config: ProviderConfig, fixture: EvalFixture, run: number)
   let parsed: CompileResult | null = null;
   let schemaValidFirstTry = false;
   let lastError = '';
-  let usage = { promptTokens: 0, completionTokens: 0, costUsd: null as number | null };
+  let knownCostUsd = 0;
+  let costBasis: CallRecord['costBasis'] = 'provider_reported';
 
   while (attempts < 2 && parsed === null) {
+    if (attempts > 0 && knownCostUsd >= remainingBudgetUsd) {
+      return {
+        fixture: fixture.id,
+        category: fixture.category,
+        run,
+        attempts,
+        schemaValidFirstTry: false,
+        semanticPass: false,
+        semanticFirstTry: false,
+        referenceOk: null,
+        typeReturned: 'budget:reached',
+        latencyMs: performance.now() - t0,
+        costUsd: knownCostUsd,
+        knownCostUsd,
+        costBasis,
+        note: `the remaining $${remainingBudgetUsd.toFixed(5)} allowance was reached; stopped before retrying`,
+        stopReason: 'budget_exceeded',
+      };
+    }
     attempts++;
     const response = await chatCompletion(config, messages, {
       ...callOptionsFor(config.model),
@@ -298,12 +344,53 @@ async function runOne(config: ProviderConfig, fixture: EvalFixture, run: number)
         referenceOk: null,
         typeReturned: `error:${response.kind}`,
         latencyMs: performance.now() - t0,
-        costUsd: 0,
-        note: 'provider error',
+        costUsd: null,
+        knownCostUsd,
+        costBasis: 'unavailable',
+        note: 'provider error; billing for this request is unknown, so the battery must stop',
         error: response.error,
       };
     }
-    usage = response.usage;
+    const call = callCost(config.model, response.usage);
+    if (call.costUsd === null) {
+      return {
+        fixture: fixture.id,
+        category: fixture.category,
+        run,
+        attempts,
+        schemaValidFirstTry: false,
+        semanticPass: false,
+        semanticFirstTry: false,
+        referenceOk: null,
+        typeReturned: 'cost:unavailable',
+        latencyMs: performance.now() - t0,
+        costUsd: null,
+        knownCostUsd,
+        costBasis: 'unavailable',
+        note: 'no provider cost or pinned estimate; stopped before another request',
+      };
+    }
+    knownCostUsd += call.costUsd;
+    if (call.costBasis === 'estimated') costBasis = 'estimated';
+    if (knownCostUsd > remainingBudgetUsd) {
+      return {
+        fixture: fixture.id,
+        category: fixture.category,
+        run,
+        attempts,
+        schemaValidFirstTry: false,
+        semanticPass: false,
+        semanticFirstTry: false,
+        referenceOk: null,
+        typeReturned: 'budget:exceeded',
+        latencyMs: performance.now() - t0,
+        costUsd: knownCostUsd,
+        knownCostUsd,
+        costBasis,
+        note: `measured spend exceeded the remaining $${remainingBudgetUsd.toFixed(5)} allowance; stopped before another request`,
+        stopReason: 'budget_exceeded',
+      };
+    }
     let payload: unknown;
     try {
       payload = normalizeWirePayload(response.content);
@@ -330,7 +417,7 @@ async function runOne(config: ProviderConfig, fixture: EvalFixture, run: number)
   }
 
   const latencyMs = performance.now() - t0;
-  const costUsd = callCost(config.model, usage);
+  const costUsd = knownCostUsd;
 
   if (parsed === null) {
     return {
@@ -345,6 +432,8 @@ async function runOne(config: ProviderConfig, fixture: EvalFixture, run: number)
       typeReturned: 'invalid',
       latencyMs,
       costUsd,
+      knownCostUsd,
+      costBasis,
       note: `schema invalid after retry: ${lastError}`,
     };
   }
@@ -352,7 +441,7 @@ async function runOne(config: ProviderConfig, fixture: EvalFixture, run: number)
   const grade = fixture.grade(parsed, fixture.base);
   const referenceOk =
     parsed.type === 'patch' || parsed.type === 'rule_proposal'
-      ? applyOperations(fixture.base, parsed.operations).ok
+      ? applyCompileResult(fixture.base, parsed).ok
       : null;
   return {
     fixture: fixture.id,
@@ -366,6 +455,8 @@ async function runOne(config: ProviderConfig, fixture: EvalFixture, run: number)
     typeReturned: parsed.type,
     latencyMs,
     costUsd,
+    knownCostUsd,
+    costBasis,
     note: grade.note,
   };
 }
@@ -386,7 +477,9 @@ function summarize(model: string, records: CallRecord[]): void {
   const ruleProtection = records.filter((r) => r.category === 'rule_weakening');
   const refs = records.filter((r) => r.referenceOk !== null);
   const retries = records.filter((r) => r.attempts > 1).length;
-  const cost = records.reduce((sum, r) => sum + r.costUsd, 0);
+  const cost = records.reduce((sum, r) => sum + r.knownCostUsd, 0);
+  const unknownCosts = records.filter((record) => record.costUsd === null).length;
+  const estimatedCosts = records.filter((record) => record.costBasis === 'estimated').length;
   console.log(`\n=== ${model} ===`);
   console.log(
     `schema 1st try: ${schemaFirst}/${total} · semantic 1st try: ${semanticFirst}/${total} · semantic final: ${semanticFinal}/${total}`,
@@ -395,7 +488,9 @@ function summarize(model: string, records: CallRecord[]): void {
     `ambiguity: ${ambiguity.filter((r) => r.semanticPass).length}/${ambiguity.length} · rule protection: ${ruleProtection.filter((r) => r.semanticPass).length}/${ruleProtection.length} · references clean: ${refs.filter((r) => r.referenceOk).length}/${refs.length}`,
   );
   console.log(
-    `retries: ${retries} · median latency: ${median(records.map((r) => r.latencyMs)).toFixed(0)} ms · cost: $${cost.toFixed(4)}`,
+    `retries: ${retries} · median latency: ${median(records.map((r) => r.latencyMs)).toFixed(0)} ms · ` +
+      `${unknownCosts === 0 ? `$${cost.toFixed(4)}` : `known $${cost.toFixed(4)}; ${unknownCosts} unknown`} ` +
+      `(${estimatedCosts} estimated from the pinned rate snapshot)`,
   );
   const failures = records.filter((r) => !r.semanticPass);
   if (failures.length > 0) {
@@ -407,45 +502,89 @@ function summarize(model: string, records: CallRecord[]): void {
 }
 
 async function main(): Promise<void> {
+  const args = process.argv.slice(2);
+  const liveBudgetUsd = requireLiveBudget(
+    args,
+    'Usage: npm run eval -- --confirm-live-ai --budget-usd 0.10 [--models model-a,...]',
+  );
   loadDotEnv();
-  const flagIndex = process.argv.indexOf('--models');
+  const flagIndex = args.indexOf('--models');
   const models =
-    flagIndex >= 0 ? (process.argv[flagIndex + 1] ?? '').split(',').map((m) => m.trim()).filter(Boolean) : SLATE;
+    flagIndex >= 0 ? (args[flagIndex + 1] ?? '').split(',').map((m) => m.trim()).filter(Boolean) : SLATE;
+  if (models.length === 0) throw new LiveEvaluationStop('No models selected; provide a non-empty --models list.');
   const base = providerConfigFromEnv(process.env);
   if (!base) {
     console.error('Missing LLM_BASE_URL / LLM_API_KEY / LLM_MODEL configuration.');
     process.exit(1);
   }
-  const calls = models.length * FIXTURES.length * RUNS_PER_FIXTURE;
-  const worstCase = calls * 0.001; // ~4k in / 1k out at the priciest slate price
-  console.log(`Evaluating ${models.length} model(s) × ${FIXTURES.length} fixtures × ${RUNS_PER_FIXTURE} runs = ${calls} calls.`);
-  console.log(`Worst-case estimate $${worstCase.toFixed(3)} against the $${EVAL_BUDGET_USD} cap.`);
+  const calls = models.reduce((total) => total + FIXTURES.reduce((count, fixture) => count + runsFor(fixture), 0), 0);
+  console.log(`Evaluating ${models.length} model(s) × ${FIXTURES.length} fixtures; ${RUNS_PER_FIXTURE} runs each, with three golden fixtures repeated ${REPRESENTATIVE_RUNS} times = ${calls} calls.`);
+  console.log(`Requested software ceiling: $${liveBudgetUsd.toFixed(3)} (evaluator maximum $${EVAL_BUDGET_USD.toFixed(2)}).`);
+  console.log('A single completed provider request can cross this ceiling; a provider-side hard spending cap is still required.');
 
   let spent = 0;
+  const reportGroups: Array<{ model: string; records: CallRecord[] }> = [];
+  let stopReason: string | null = null;
   for (const model of models) {
     const config: ProviderConfig = { ...base, model };
     console.log(`\n--- ${model} · config: ${JSON.stringify(callOptionsFor(model))} ---`);
     const records: CallRecord[] = [];
     for (const fixture of FIXTURES) {
-      for (let run = 1; run <= RUNS_PER_FIXTURE; run++) {
-        const record = await runOne(config, fixture, run);
+      for (let run = 1; run <= runsFor(fixture); run++) {
+        if (spent >= liveBudgetUsd) {
+          stopReason = `software ceiling $${liveBudgetUsd.toFixed(5)} reached`;
+          break;
+        }
+        const record = await runOne(config, fixture, run, liveBudgetUsd - spent);
         records.push(record);
-        spent += record.costUsd;
+        spent += record.knownCostUsd;
         console.log(
-          `[${model}] ${fixture.id} run ${run}: ${record.typeReturned} ${record.semanticPass ? 'PASS' : 'FAIL'} — ${record.note} (${record.latencyMs.toFixed(0)} ms, $${record.costUsd.toFixed(5)})`,
+          `[${model}] ${fixture.id} run ${run}: ${record.typeReturned} ${record.semanticPass ? 'PASS' : 'FAIL'} — ${record.note} (${record.latencyMs.toFixed(0)} ms, ${record.costUsd === null ? `known $${record.knownCostUsd.toFixed(5)}; total unknown` : `$${record.costUsd.toFixed(5)} ${record.costBasis}`})`,
         );
-        if (spent > EVAL_BUDGET_USD) {
-          console.error(`\nBudget cap of $${EVAL_BUDGET_USD} reached with $${spent.toFixed(4)} spent — stopping with incomplete evidence.`);
-          process.exit(2);
+        if (record.costUsd === null) {
+          stopReason = `billing unknown after ${fixture.id} run ${run}; no further live calls were made`;
+          break;
+        }
+        if (record.stopReason !== undefined || spent > liveBudgetUsd) {
+          stopReason = `software ceiling $${liveBudgetUsd.toFixed(5)} exceeded after ${fixture.id} run ${run}`;
+          break;
         }
         const { promise: pause, resolve: resume } = Promise.withResolvers<void>();
         setTimeout(resume, 150);
         await pause;
       }
+      if (stopReason !== null) break;
     }
     summarize(model, records);
+    reportGroups.push({ model, records });
+    if (stopReason !== null) break;
   }
-  console.log(`\nTotal billed: $${spent.toFixed(4)} of the $${EVAL_BUDGET_USD} cap.`);
+  console.log(`\nKnown billed/estimated total: $${spent.toFixed(5)} of the $${liveBudgetUsd.toFixed(5)} software ceiling.${stopReason ? ` Stopped: ${stopReason}.` : ''}`);
+  writeFileSync(
+    '/tmp/model-eval.json',
+    JSON.stringify(
+      {
+        generatedAt: new Date().toISOString(),
+        models,
+        representativeFixtures: [...REPRESENTATIVE_FIXTURES],
+        runsPerFixture: RUNS_PER_FIXTURE,
+        representativeRuns: REPRESENTATIVE_RUNS,
+        budgetUsd: liveBudgetUsd,
+        knownTotalCostUsd: spent,
+        complete: stopReason === null,
+        stopReason,
+        groups: reportGroups,
+      },
+      null,
+      2,
+    ),
+  );
+  console.log('full records: /tmp/model-eval.json');
 }
 
-await main();
+try {
+  await main();
+} catch (error) {
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exitCode = 2;
+}

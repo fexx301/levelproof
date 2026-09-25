@@ -1,7 +1,10 @@
 import type { CompileResult } from '../../shared/compile-result.js';
+import { useEffect, useRef } from 'react';
 import { useApp } from '../state/store.js';
 import { requirementId, requirementText } from '../core/level.js';
 import { verify } from '../core/verifier.js';
+import { describeOperations } from '../core/operation-description.js';
+import type { Level, Operation } from '../../shared/schema.js';
 import type { ThemeKey } from '../../shared/api.js';
 
 const THEME_LABELS: Record<ThemeKey, string> = {
@@ -21,17 +24,46 @@ export function ResultCards() {
   const pendingChange = useApp((s) => s.pendingRule);
   const lastResult = useApp((s) => s.lastResult);
   const lastPrompt = useApp((s) => s.lastPrompt);
+  const draft = useApp((s) => s.draft);
   const busy = useApp((s) => s.busy);
   const approveRule = useApp((s) => s.approveRule);
   const declineRule = useApp((s) => s.declineRule);
   const applyPatch = useApp((s) => s.applyPatch);
   const declinePatch = useApp((s) => s.declinePatch);
   const submitPrompt = useApp((s) => s.submitPrompt);
+  const previewRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    const target = previewRef.current;
+    if (pendingChange === null || target === null || typeof window === 'undefined' || typeof target.scrollIntoView !== 'function') return;
+    target.scrollIntoView({
+      block: 'nearest',
+      inline: 'nearest',
+      behavior: 'auto',
+    });
+  }, [pendingChange]);
+
+  const sceneChanges = (operations: Operation[], before: Level, candidate: Level, title: string) => {
+    const descriptions = describeOperations(operations, before, candidate);
+    if (descriptions.length === 0) return <p className="card-note">No scene geometry changes.</p>;
+    return (
+      <div className="preview-changes">
+        <p className="card-title">{title}</p>
+        <div className="preview-legend" aria-label="Scene marker key">
+          <span className="preview-legend-before">Before / removed</span>
+          <span className="preview-legend-after">Proposed / added</span>
+        </div>
+        <ul className="preview-change-list" aria-label={title}>
+          {descriptions.map((description, index) => <li key={`${operations[index]?.kind ?? 'change'}-${index}`}>{description}</li>)}
+        </ul>
+      </div>
+    );
+  };
 
   if (pendingChange?.kind === 'patch') {
     const candidateReport = verify(pendingChange.candidate);
     return (
-      <section className="card card--preview" aria-label="Edit preview">
+      <section ref={previewRef} className="card card--preview" aria-label="Edit preview">
         <div className="card-heading-row">
           <h2 className="card-title">Edit preview</h2>
           <span className="preview-badge">{pendingChange.operations.length} op{pendingChange.operations.length === 1 ? '' : 's'}</span>
@@ -40,6 +72,7 @@ export function ResultCards() {
         <p className="card-note">
           Nothing has changed yet. Review the red/green scene markers, then apply when the edit looks right.
         </p>
+        {sceneChanges(pendingChange.operations, pendingChange.base, pendingChange.candidate, 'Proposed scene changes')}
         <p className="card-note">
           Apply will {candidateReport.accepted ? 'accept this checkpoint.' : 'leave a draft for repair or review.'}
         </p>
@@ -65,7 +98,7 @@ export function ResultCards() {
       (r) => !pendingChange.proposal.oldRequirements.some((n) => requirementId(n) === requirementId(r)),
     );
     return (
-      <section className="card card--rule" aria-label="Rule proposal">
+      <section ref={previewRef} className="card card--rule" aria-label="Rule proposal">
         <h2 className="card-title">Rule changed — review required</h2>
         <p className="card-text">{pendingChange.proposal.reason}</p>
         <ul className="rule-diff">
@@ -82,10 +115,10 @@ export function ResultCards() {
           {removed.length === 0 && added.length === 0 && <li>No requirement changes</li>}
         </ul>
         {pendingChange.proposal.operations.length > 0 && (
-          <p className="card-note">
-            Carries {pendingChange.proposal.operations.length} geometry operation(s), held for the same
-            review.
-          </p>
+          <>
+            <p className="card-note">These scene changes are part of the same approval:</p>
+            {sceneChanges(pendingChange.proposal.operations, pendingChange.base, pendingChange.candidate, 'Scene changes')}
+          </>
         )}
         <div className="card-actions">
           <button type="button" onClick={approveRule}>
@@ -142,8 +175,9 @@ export function ResultCards() {
   if (result.type === 'patch') {
     return (
       <section className="card" aria-label="Applied edit">
-        <h2 className="card-title">Edit applied</h2>
+        <h2 className="card-title">{draft ? 'Edit applied — draft' : 'Edit applied — accepted'}</h2>
         <p className="card-text">{result.rationale}</p>
+        {draft && <p className="card-note">The accepted checkpoint is still safe. Use Repairs or Return to accepted when you are ready.</p>}
         {result.assumptions.length > 0 && (
           <p className="card-note">Assumed: {result.assumptions.join('; ')}</p>
         )}
@@ -151,5 +185,11 @@ export function ResultCards() {
     );
   }
 
-  return null;
+  return (
+    <section className="card" aria-label="Applied rule">
+      <h2 className="card-title">Rule applied{draft ? ' — draft' : ' — accepted'}</h2>
+      <p className="card-text">The reviewed requirement change is now part of the current scene.</p>
+      {draft && <p className="card-note">The accepted checkpoint remains available while this draft is repaired or discarded.</p>}
+    </section>
+  );
 }

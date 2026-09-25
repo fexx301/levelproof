@@ -27,6 +27,8 @@ beforeEach(() => {
   useApp.setState({
     busy: false,
     error: null,
+    promptDraft: '',
+    pendingRule: null,
     lastCompileMeta: null,
     selection: [],
     protectedIds: [],

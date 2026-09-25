@@ -223,14 +223,15 @@ function routeGatingCandidates(accepted: Level, draft: Level, report: Report): D
   return candidates;
 }
 
-/** A candidate touches a protected entity if it moves, removes, or
- * reconditions it — those repairs are excluded (§9 "keep this"). */
-/** Exported for the apply-time guard: a repair that moves or removes a
- * protected entity must never apply, even if it was found before the
- * protection was set (§9 "keep this"). */
+/** An operation touches a protected entity when it changes that entity's
+ * location, existence, label, exits, or door conditions. */
 export function touchesProtected(operations: Operation[], protectedIds: Set<string>): boolean {
   for (const op of operations) {
-    if (op.kind === 'moveItem' || op.kind === 'removeItem' || op.kind === 'removeModule' || op.kind === 'moveModule') {
+    if (
+      op.kind === 'moveItem' || op.kind === 'removeItem' ||
+      op.kind === 'removeModule' || op.kind === 'moveModule' ||
+      op.kind === 'setModulePorts' || op.kind === 'setModuleLabel'
+    ) {
       if (protectedIds.has(op.id)) return true;
     }
     if (op.kind === 'setDoorConditions' || op.kind === 'removeDoor') {
