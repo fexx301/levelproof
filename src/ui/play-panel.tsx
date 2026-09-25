@@ -1,20 +1,30 @@
 import { useMemo } from 'react';
+import type { Cardinal } from '../../shared/schema.js';
 import { actorBridge } from '../render/bridge.js';
 import { compileLevel } from '../core/topology.js';
 import type { Report } from '../core/verifier.js';
 import type { Level } from '../../shared/schema.js';
 import { useApp } from '../state/store.js';
+import { CARDINAL_NAMES, relativeCardinal, type MoveIntent } from './relative-direction.js';
+
+const ARROWS: Record<MoveIntent, string> = { forward: '↑', back: '↓', left: '←', right: '→' };
 
 /**
- * Manual play (§12): WASD or arrows in fixed world-cardinal directions,
- * R restart, Escape exit, on-screen direction buttons. One transition
- * completes before the next input. When the player's exact state matches
- * the checker's dead-end witness, the failure is called out — the player
- * has reproduced the same trapped state as the ghost.
+ * Manual play (§12): WASD or arrows relative to the camera (W / ↑ always
+ * walks away from the viewer), R restart, Escape exit, on-screen direction
+ * buttons laid out the same way. The camera follows the player unless the
+ * author switches to the overview. One transition completes before the next
+ * input. When the player's exact state matches the checker's dead-end
+ * witness, the failure is called out — the player has reproduced the same
+ * trapped state as the ghost.
  */
 export function PlayPanel({ level, report }: { level: Level; report: Report }) {
   const play = useApp((s) => s.play);
   const hasDraft = useApp((s) => s.draft !== null);
+  const facing = useApp((s) => s.facing);
+  const followCamera = useApp((s) => s.followCamera);
+  const exitToAuthoring = useApp((s) => s.exitToAuthoring);
+  const viaShare = useApp((s) => s.viaShare);
   const compiled = useMemo(() => compileLevel(level), [level]);
   const deadEnd =
     report.checks.recovery.status === 'fail' ? report.checks.recovery.witness?.endState : undefined;
@@ -23,34 +33,47 @@ export function PlayPanel({ level, report }: { level: Level; report: Report }) {
     play.at === deadEnd.moduleId &&
     masksMatch(compiled.keyBit, deadEnd.keyMask, play.keys) &&
     masksMatch(compiled.switchBit, deadEnd.switchMask, play.switches);
+  const placeName = (id: string): string => compiled.moduleById.get(id)?.label ?? id.replace(/-/g, ' ');
+  const won = play.atGoal && !play.goalViolated;
+
+  const moveButton = (intent: MoveIntent) => {
+    const direction: Cardinal = relativeCardinal(facing, intent);
+    return (
+      <button
+        type="button"
+        onClick={() => actorBridge.player()?.move(direction)}
+        aria-label={`Move ${CARDINAL_NAMES[direction]} (${intent})`}
+        title={`${intent} · ${CARDINAL_NAMES[direction]}`}
+      >
+        {ARROWS[intent]}
+      </button>
+    );
+  };
 
   return (
     <section className="panel panel--active" aria-label="Play">
-      <h2 className="panel-title">{hasDraft ? 'Play the draft' : 'Play the level'}</h2>
-      <p className="panel-note">WASD / arrows · Esc exits. Compass: N is away from you.</p>
+      <div className="play-head">
+        <h2 className="panel-title">{hasDraft ? 'Play the draft' : 'Play the level'}</h2>
+        <button
+          type="button"
+          className="play-camera-toggle"
+          aria-pressed={followCamera}
+          onClick={() => useApp.setState({ followCamera: !followCamera })}
+        >
+          {followCamera ? 'Camera: following' : 'Camera: overview'}
+        </button>
+      </div>
+      <p className="panel-note">WASD or arrows move relative to the camera · drag to look around · R restarts · Esc exits</p>
       <div className="dpad">
         <span />
-        <button type="button" onClick={() => actorBridge.player()?.move('N')} aria-label="Move north">
-          N
-        </button>
+        {moveButton('forward')}
         <span />
-        <button type="button" onClick={() => actorBridge.player()?.move('W')} aria-label="Move west">
-          W
-        </button>
-        <span className="dpad-center" role="status">{play.at || '—'}</span>
-        <button type="button" onClick={() => actorBridge.player()?.move('E')} aria-label="Move east">
-          E
-        </button>
+        {moveButton('left')}
+        <span className="dpad-center" role="status" data-module={play.at}>{play.at ? placeName(play.at) : '—'}</span>
+        {moveButton('right')}
         <span />
-        <button type="button" onClick={() => actorBridge.player()?.move('S')} aria-label="Move south">
-          S
-        </button>
+        {moveButton('back')}
         <span />
-      </div>
-      <div className="ghost-controls">
-        <button type="button" onClick={() => actorBridge.player()?.restart()}>
-          Restart
-        </button>
       </div>
       <div className="inventory">
         {play.keys.length === 0 && play.switches.length === 0 && (
@@ -67,18 +90,33 @@ export function PlayPanel({ level, report }: { level: Level; report: Report }) {
           </span>
         ))}
       </div>
-      {play.atGoal && (
-        <p className={`banner ${play.goalViolated ? 'banner--fail' : 'banner--pass'}`} role="status">
-          {play.goalViolated ? 'Goal reached — rule violated' : 'Goal reached'}
-        </p>
+      <div className="ghost-controls">
+        <button type="button" onClick={() => actorBridge.player()?.restart()}>
+          Restart
+        </button>
+      </div>
+      {won && (
+        <div className="play-win">
+          <p className="play-win-title">Level complete</p>
+          <p className="play-win-note">
+            Reached the goal in {play.moves ?? 0} move{play.moves === 1 ? '' : 's'}, following every rule.
+          </p>
+          <div className="card-actions">
+            <button type="button" onClick={() => actorBridge.player()?.restart()}>Play again</button>
+            <button type="button" onClick={exitToAuthoring}>{viaShare ? 'Remix this puzzle' : 'Back to editing'}</button>
+          </div>
+        </div>
+      )}
+      {play.atGoal && play.goalViolated && (
+        <p className="banner banner--fail">Goal reached — but a design rule was broken on the way.</p>
       )}
       {reproduced && !play.atGoal && (
-        <p className="banner banner--fail" role="status">
+        <p className="banner banner--fail">
           You reproduced the failure — the same trapped state as the ghost. No winning route remains.
         </p>
       )}
       {play.trapped && !play.atGoal && !reproduced && (
-        <p className="banner banner--fail" role="status">
+        <p className="banner banner--fail">
           Trapped — no route to the goal remains. R restarts.
         </p>
       )}

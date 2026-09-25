@@ -8,7 +8,7 @@ import {
   type CompileProgress,
   type ThemeKey,
 } from '../../shared/api.js';
-import { levelSchema, type Level, type Operation } from '../../shared/schema.js';
+import { levelSchema, type Cardinal, type Level, type Operation } from '../../shared/schema.js';
 import { unfamiliarLevel } from '../core/fixtures/unfamiliar.js';
 import { vaultEmptyLevel } from '../core/fixtures/vault-empty.js';
 import { twinKeysLevel, overpassLevel, gauntletLevel } from '../core/fixtures/gallery.js';
@@ -290,6 +290,7 @@ interface PlaySlice {
   trapped: boolean;
   atGoal: boolean;
   goalViolated: boolean;
+  moves?: number;
 }
 
 interface RepairSlice {
@@ -362,6 +363,10 @@ interface AppState {
   explain: ExplainSlice;
   /** Temporary, verifier-owned evidence shown by the failure replay. */
   evidence: FailureEvidence | null;
+  /** Manual play: the camera chases the player (true) or holds the overview. */
+  followCamera: boolean;
+  /** The world direction the camera faces; drives camera-relative controls. */
+  facing: Cardinal;
   recoveryStatus: 'ready' | 'malformed' | 'unavailable';
   explainCheck: (kind: CheckKind) => Promise<void>;
   submitPrompt: (prompt: string, clarificationContext?: string) => Promise<void>;
@@ -419,6 +424,7 @@ const PLAY_INITIAL: PlaySlice = {
   trapped: false,
   atGoal: false,
   goalViolated: false,
+  moves: 0,
 };
 
 const REPAIR_INITIAL: RepairSlice = {
@@ -708,6 +714,8 @@ export const useApp = create<AppState>()((set, get) => ({
   repair: REPAIR_INITIAL,
   explain: EXPLAIN_INITIAL,
   evidence: null,
+  followCamera: true,
+  facing: 'N',
   recoveryStatus: initialRecoveryRead.status === 'malformed'
     ? 'malformed'
     : initialRecoveryRead.status === 'unavailable'

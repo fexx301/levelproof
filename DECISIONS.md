@@ -2,6 +2,30 @@
 
 Build-window decisions and measured evidence, newest first. Dates are 2026.
 
+## Sep 25 (UI pass — the chrome catches up with the world)
+
+- **Play mode** is now the payoff instead of a debugger: a follow camera that
+  eases from the overview into a chase view and keeps the author's orbit, a
+  small adventurer (eyes face the direction of travel, walking bob) instead of
+  a capsule, camera-relative controls (W / ↑ is always "away from me"; the
+  on-screen pad is laid out the same way and keeps the grid direction in its
+  accessible name), place names instead of ids, and a **Level complete** card
+  with a confetti burst (skipped under reduced motion).
+- **Hierarchy**: the build/compile button reads as primary even before text is
+  typed; **Play** is a distinct green action; "Building style" moved from the
+  top of the panel to a compact row under the examples; sentence-case section
+  titles; quieter section frames.
+- **Blank canvas** invites a world in the viewport itself (four build chips),
+  then shows a live "Building your world" status.
+- **Space**: the full-width rule bar became chips over the viewport; the
+  first-run guide no longer repeats the example prompts.
+- **Phones**: secondary actions sit behind **More**, the prompt follows the 3D
+  view directly, and the checks follow the work instead of preceding it.
+- **Budget**: cached answers are served before the daily model budget is
+  charged (per-address burst window unchanged; daily default 500).
+- **Rendering**: z-fighting between sand islands and foundation blocks fixed;
+  near plane 10 → 40 cm.
+
 ## Sep 25 (strategic pass — the world matches the prompt)
 
 - **The gap, measured on production**: a judge-style prompt (“a spooky forest

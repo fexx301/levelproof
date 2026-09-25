@@ -51,6 +51,8 @@ export interface PlayerStateInfo {
   trapped: boolean;
   atGoal: boolean;
   goalViolated: boolean;
+  /** Completed moves since spawn or restart. */
+  moves: number;
 }
 
 export interface PlayerCallbacks {
@@ -108,23 +110,36 @@ function pointAt(step: PathStep, distance: number): THREE.Vector3 {
 const TRAIL_FAIL = 0x8a3630;
 const TRAIL_PASS = 0x4fbe82;
 
-function actorBody(color: number, emissive: number, opacity: number): THREE.Mesh {
-  const mesh = new THREE.Mesh(
-    new THREE.CapsuleGeometry(ACTOR_RADIUS_CM, ACTOR_BODY_CM, 6, 12),
-    new THREE.MeshStandardMaterial({
-      color,
-      emissive,
-      emissiveIntensity: 1.0,
-      transparent: opacity < 1,
-      opacity,
-      roughness: 0.5,
-    }),
-  );
-  mesh.castShadow = true;
-  return mesh;
+/** Bright contact ring at the actor's feet so it grounds and stays findable. */
+/**
+ * The player: a small adventurer (legs, body, head, brass scarf, satchel) whose
+ * eyes face its direction of travel. Built around the same center point as
+ * the old capsule, so movement and camera framing are unchanged.
+ */
+function playerFigure(): THREE.Group {
+  const figure = new THREE.Group();
+  const cloth = new THREE.MeshStandardMaterial({ color: 0xe9e2d0, emissive: 0x3a3830, emissiveIntensity: 0.6, roughness: 0.6 });
+  const dark = new THREE.MeshStandardMaterial({ color: 0x2a2724, roughness: 0.5 });
+  const brass = new THREE.MeshStandardMaterial({ color: 0xc9a227, emissive: 0x5a4510, emissiveIntensity: 0.5, metalness: 0.4, roughness: 0.4 });
+  const leather = new THREE.MeshStandardMaterial({ color: 0x7a5230, roughness: 0.8 });
+  const part = (geometry: THREE.BufferGeometry, material: THREE.Material, x: number, y: number, z: number): THREE.Mesh => {
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.position.set(x, y, z);
+    mesh.castShadow = true;
+    figure.add(mesh);
+    return mesh;
+  };
+  const floor = -ACTOR_CENTER_OFFSET_CM;
+  for (const side of [-1, 1]) part(new THREE.CapsuleGeometry(9, 26, 4, 8), dark, side * 11, floor + 22, 0);
+  part(new THREE.CapsuleGeometry(24, 42, 6, 12), cloth, 0, floor + 78, 0);
+  part(new THREE.SphereGeometry(21, 16, 12), cloth, 0, floor + 136, 0);
+  for (const side of [-1, 1]) part(new THREE.SphereGeometry(3.6, 8, 6), dark, side * 7.5, floor + 139, 18);
+  const scarf = part(new THREE.TorusGeometry(19, 6, 8, 20), brass, 0, floor + 108, 0);
+  scarf.rotation.x = Math.PI / 2;
+  part(new THREE.BoxGeometry(28, 32, 14), leather, 0, floor + 84, -26);
+  return figure;
 }
 
-/** Bright contact ring at the actor's feet so it grounds and stays findable. */
 function underRing(color: number): THREE.Mesh {
   const mesh = new THREE.Mesh(
     new THREE.RingGeometry(30, 42, 24),
@@ -515,13 +530,19 @@ export class PlayerActor {
   private visitedModules: Set<string>;
   private animation: { points: THREE.Vector3[]; length: number; distance: number; move: MoveRecord } | null = null;
 
+  private readonly figure: THREE.Group;
+  private yaw = 0;
+  private moves = 0;
+  private celebrated = false;
+
   constructor(ctx: ActorContext, callbacks: PlayerCallbacks) {
     this.ctx = ctx;
     this.callbacks = callbacks;
     this.state = initialState(ctx.compiled);
     this.visitedModules = new Set([this.state.moduleId]);
     this.mesh = new THREE.Group();
-    this.mesh.add(actorBody(0xd7d2c4, 0x6e6a5e, 1), underRing(0xf2eee4));
+    this.figure = playerFigure();
+    this.mesh.add(this.figure, underRing(0xf2eee4));
     this.placeAtSpawn();
     ctx.scene.add(this.mesh);
     ctx.world.resetWorld();
@@ -555,7 +576,10 @@ export class PlayerActor {
         destination.y + ACTOR_CENTER_OFFSET_CM,
         destination.z,
       );
+      this.faceToward(move.segments[0]!, destination, true);
+      this.moves += 1;
       this.emit();
+      this.maybeCelebrate();
       return;
     }
     const points = move.segments.map((p) => new THREE.Vector3(p.x, p.y, p.z));
@@ -566,6 +590,9 @@ export class PlayerActor {
 
   restart(): void {
     this.animation = null;
+    this.moves = 0;
+    this.celebrated = false;
+    this.figure.position.y = 0;
     this.state = initialState(this.ctx.compiled);
     this.keys = [];
     this.switches = [];
@@ -585,26 +612,98 @@ export class PlayerActor {
 
   dispose(): void {
     this.unregister();
+    this.stopConfetti?.();
     this.ctx.follow(null);
     this.ctx.world.resetWorld();
     this.ctx.scene.remove(this.mesh);
-    for (const child of this.mesh.children) {
+    this.mesh.traverse((child) => {
       if (child instanceof THREE.Mesh) {
         child.geometry.dispose();
         (child.material as THREE.Material).dispose();
       }
+    });
+  }
+
+  private faceToward(from: { x: number; z: number }, to: { x: number; z: number }, snap: boolean): void {
+    const dx = to.x - from.x;
+    const dz = to.z - from.z;
+    if (Math.abs(dx) + Math.abs(dz) < 1) return;
+    const target = Math.atan2(dx, dz);
+    if (snap) {
+      this.yaw = target;
+      this.figure.rotation.y = target;
+      return;
     }
+    let delta = target - this.yaw;
+    while (delta > Math.PI) delta -= Math.PI * 2;
+    while (delta < -Math.PI) delta += Math.PI * 2;
+    this.yaw += delta * 0.25;
+    this.figure.rotation.y = this.yaw;
+  }
+
+  private stopConfetti: (() => void) | null = null;
+
+  /** A short celebration when the goal is reached without breaking a rule. */
+  private maybeCelebrate(): void {
+    if (this.celebrated || this.state.moduleId !== this.ctx.compiled.goal) return;
+    if (goalRequirementViolated(this.ctx.compiled, this.state, this.visitedModules)) return;
+    this.celebrated = true;
+    if (reducedMotion()) return;
+    const count = 140;
+    const positions = new Float32Array(count * 3);
+    const colors = new Float32Array(count * 3);
+    const velocities: THREE.Vector3[] = [];
+    const palette = [0xd4af37, 0x3fa66a, 0xe9e2d0, 0xd57064, 0x73b5c3].map((hex) => new THREE.Color(hex));
+    const origin = this.mesh.position;
+    for (let i = 0; i < count; i++) {
+      positions.set([origin.x, origin.y + 40, origin.z], i * 3);
+      const color = palette[i % palette.length]!;
+      colors.set([color.r, color.g, color.b], i * 3);
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 120 + Math.random() * 220;
+      velocities.push(new THREE.Vector3(Math.cos(angle) * speed, 380 + Math.random() * 320, Math.sin(angle) * speed));
+    }
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    const material = new THREE.PointsMaterial({ size: 16, vertexColors: true, transparent: true, depthWrite: false });
+    const points = new THREE.Points(geometry, material);
+    this.ctx.scene.add(points);
+    let age = 0;
+    const unregister = this.ctx.register((dt) => {
+      age += dt;
+      const attribute = geometry.getAttribute('position') as THREE.BufferAttribute;
+      for (let i = 0; i < count; i++) {
+        const velocity = velocities[i]!;
+        velocity.y -= 900 * dt;
+        attribute.setXYZ(i, attribute.getX(i) + velocity.x * dt, attribute.getY(i) + velocity.y * dt, attribute.getZ(i) + velocity.z * dt);
+      }
+      attribute.needsUpdate = true;
+      material.opacity = Math.max(0, 1 - age / 2.2);
+      if (age > 2.2) this.stopConfetti?.();
+    });
+    this.stopConfetti = () => {
+      unregister();
+      this.ctx.scene.remove(points);
+      geometry.dispose();
+      material.dispose();
+      this.stopConfetti = null;
+    };
   }
 
 
   private update = (dt: number): void => {
     if (!this.animation) return;
     this.animation.distance += WALK_SPEED_CM_S * dt;
+    // A light walking bob; the collision-free path itself never changes.
+    this.figure.position.y = Math.abs(Math.sin(this.animation.distance * 0.045)) * 5;
     if (this.animation.distance >= this.animation.length) {
       const move = this.animation.move;
       const endpoint = move.segments[move.segments.length - 1]!;
       this.mesh.position.set(endpoint.x, endpoint.y + ACTOR_CENTER_OFFSET_CM, endpoint.z);
+      this.figure.position.y = 0;
       this.animation = null;
+      this.moves += 1;
       this.state = move.after;
       this.visitedModules.add(move.after.moduleId);
       this.ctx.world.updateState(move.after);
@@ -617,6 +716,7 @@ export class PlayerActor {
         this.ctx.world.activateSwitch(move.events.activatedSwitch);
       }
       this.emit();
+      this.maybeCelebrate();
       return;
     }
     const { points, distance } = this.animation;
@@ -627,6 +727,7 @@ export class PlayerActor {
         const t = segment === 0 ? 0 : remaining / segment;
         const position = points[i - 1]!.clone().lerp(points[i]!, t);
         this.mesh.position.set(position.x, position.y + ACTOR_CENTER_OFFSET_CM, position.z);
+        this.faceToward(points[i - 1]!, points[i]!, false);
         return;
       }
       remaining -= segment;
@@ -644,6 +745,7 @@ export class PlayerActor {
       trapped,
       atGoal,
       goalViolated,
+      moves: this.moves,
     });
   }
 }

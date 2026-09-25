@@ -78,6 +78,14 @@ function CompileProgressCard() {
   );
 }
 
+/** True when the current level is the empty blank-canvas seed. */
+export function useLevelIsBlank(): boolean {
+  return useApp((s) => {
+    const level = s.draft?.level ?? s.acceptedLevel;
+    return level.modules.length <= 3 && level.keys.length === 0 && level.doors.length === 0;
+  });
+}
+
 /** The prompt panel (§12): describe a change, watch it compile. */
 export function PromptPanel() {
   const text = useApp((s) => s.promptDraft);
@@ -89,10 +97,7 @@ export function PromptPanel() {
   const submitPrompt = useApp((s) => s.submitPrompt);
   const hasKey = useApp((s) => (s.draft?.level ?? s.acceptedLevel).keys.length > 0);
   const isVault = useApp((s) => (s.draft?.level ?? s.acceptedLevel).modules.some((m) => m.id === 'key-balcony'));
-  const isBlank = useApp((s) => {
-    const level = s.draft?.level ?? s.acceptedLevel;
-    return level.modules.length <= 3 && level.keys.length === 0 && level.doors.length === 0;
-  });
+  const isBlank = useLevelIsBlank();
   const changeSummary = useApp((s) => s.changeSummary);
   const history = useApp((s) => s.history);
   const loadSceneLevel = useApp((s) => s.loadLevel);
@@ -138,29 +143,9 @@ export function PromptPanel() {
 
 
   return (
-    <section className="prompt-panel" aria-label="Describe a change">
-      <div className="prompt-toolbar">
-        <span className="panel-note">Building style</span>
-        <label className="theme-picker">
-          <span className="visually-hidden">Architecture theme</span>
-          <select
-            aria-label="Architecture theme"
-            value={theme ?? ''}
-            onChange={(event) => {
-              const value = event.target.value;
-              const parsed = value === '' ? null : themeKeySchema.safeParse(value);
-              setTheme(parsed === null ? null : parsed.success ? parsed.data : null);
-            }}
-          >
-            <option value="">From the scene</option>
-            {Object.entries(THEME_LABELS).map(([value, label]) => (
-              <option key={value} value={value}>{label}</option>
-            ))}
-          </select>
-        </label>
-      </div>
+    <section className="prompt-panel" aria-label={isBlank ? 'Describe a world' : 'Describe a change'}>
       <label className="prompt-label" htmlFor="prompt-input">
-        Describe a change
+        {isBlank ? 'Describe a world' : 'Describe a change'}
       </label>
       <textarea
         id="prompt-input"
@@ -181,7 +166,7 @@ export function PromptPanel() {
       <div className="prompt-actions">
         <button
           type="button"
-          className="prompt-submit"
+          className="prompt-submit button--primary"
           disabled={locked || text.trim().length === 0}
           onClick={submit}
         >
@@ -245,16 +230,35 @@ export function PromptPanel() {
           Changed: {changeSummary}
         </p>
       )}
-      <p className="panel-note">
-        {typeof navigator !== 'undefined' &&
-        /Mac|iP/.test(
-          (navigator as Navigator & { userAgentData?: { platform?: string } }).userAgentData
-            ?.platform ?? navigator.platform,
-        )
-          ? '⌘⏎'
-          : 'Ctrl+⏎'}{' '}
-        compiles
-      </p>
+      <div className="prompt-meta">
+        <span className="panel-note">
+          {typeof navigator !== 'undefined' &&
+          /Mac|iP/.test(
+            (navigator as Navigator & { userAgentData?: { platform?: string } }).userAgentData
+              ?.platform ?? navigator.platform,
+          )
+            ? '⌘⏎'
+            : 'Ctrl+⏎'}{' '}
+          {isBlank ? 'builds' : 'compiles'}
+        </span>
+        <label className="theme-picker">
+          <span className="panel-note">Style</span>
+          <select
+            aria-label="Architecture theme"
+            value={theme ?? ''}
+            onChange={(event) => {
+              const value = event.target.value;
+              const parsed = value === '' ? null : themeKeySchema.safeParse(value);
+              setTheme(parsed === null ? null : parsed.success ? parsed.data : null);
+            }}
+          >
+            <option value="">From the scene</option>
+            {Object.entries(THEME_LABELS).map(([value, label]) => (
+              <option key={value} value={value}>{label}</option>
+            ))}
+          </select>
+        </label>
+      </div>
       {history.length > 0 && (
         <details className="inspector">
           <summary><DisclosureGlyph />History</summary>

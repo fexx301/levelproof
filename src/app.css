@@ -187,7 +187,6 @@ button:focus-visible {
 }
 
 .header-actions .reset-button {
-  min-width: 11rem;
   text-align: center;
 }
 
@@ -208,19 +207,6 @@ button:focus-visible {
   color: var(--color-fail);
   font-size: var(--text-xs);
   padding: var(--space-1) var(--space-2);
-}
-
-.rule-bar {
-  border-bottom: 1px solid var(--color-line);
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-4);
-}
-
-.rule-bar:focus-visible {
-  outline: 2px solid var(--color-focus);
-  outline-offset: -2px;
 }
 
 .recovery-notice {
@@ -1354,23 +1340,11 @@ details.inspector[open] summary .disclosure-glyph {
     max-height: 45%;
   }
 
+  /* The prompt comes first on phones; the checks follow the work. */
   .app[data-mode='authoring'] .check-strip {
-    margin: 0 0 var(--space-3);
-    order: -1;
-  }
-
-  .app[data-mode='authoring'] .check-strip-pin {
-    background: var(--color-panel);
-    border-bottom: 1px solid var(--color-line);
-    box-shadow: var(--shadow-strip-down);
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-    margin: 0 calc(-1 * var(--space-4));
-    padding: var(--space-3) var(--space-4);
-    position: sticky;
-    top: calc(-1 * var(--space-3));
-    z-index: 1;
+    box-shadow: none;
+    margin: var(--space-2) 0 0;
+    position: static;
   }
 }
 
@@ -1652,4 +1626,334 @@ details.inspector[open] summary .disclosure-glyph {
 
 .compile-progress-time {
   white-space: nowrap;
+}
+
+
+/* ---- UI pass: hierarchy, play, welcome, phone ---- */
+
+/* The primary action reads as primary even before text is entered. */
+.prompt-submit {
+  font-size: var(--text-sm);
+  min-height: 40px;
+  min-width: 9rem;
+}
+
+.prompt-submit:disabled {
+  background: color-mix(in oklab, var(--color-accent) 20%, var(--color-panel));
+  border-color: color-mix(in oklab, var(--color-accent) 40%, var(--color-line));
+  color: color-mix(in oklab, var(--color-text) 55%, var(--color-panel));
+}
+
+.button--play {
+  background: color-mix(in oklab, var(--color-pass) 22%, var(--color-panel));
+  border-color: var(--color-pass);
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+.button--play:not(:disabled):hover {
+  background: color-mix(in oklab, var(--color-pass) 36%, var(--color-panel));
+  border-color: var(--color-pass);
+}
+
+/* Sentence-case section titles in the UI face; quieter section frames. */
+.panel-title,
+.card-title,
+.check-strip-head h2 {
+  font-size: var(--text-sm);
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.prompt-label {
+  font-size: var(--text-md);
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+details.inspector summary,
+.scene-object-picker summary {
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.panel,
+.scene-object-picker {
+  border-color: var(--color-rule-soft);
+}
+
+.panel--active {
+  border-color: var(--color-muted);
+}
+
+.prompt-meta {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  justify-content: space-between;
+}
+
+.theme-picker {
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* Viewport top bar: framing control and the active rules, over the world. */
+.viewport-top {
+  align-items: flex-start;
+  display: flex;
+  gap: var(--space-2);
+  left: var(--space-4);
+  pointer-events: none;
+  position: absolute;
+  right: var(--space-4);
+  top: var(--space-4);
+  z-index: 1;
+}
+
+.viewport-top > * {
+  pointer-events: auto;
+}
+
+.viewport-home {
+  flex: none;
+  position: static;
+}
+
+.viewport-rules {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  max-width: min(60%, 36rem);
+  padding-top: 6px;
+}
+
+.viewport-rules .rule-chip {
+  backdrop-filter: blur(6px);
+  background: color-mix(in oklab, var(--color-bg) 78%, transparent);
+}
+
+.viewport-rules:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.viewport-preview-badge {
+  left: auto;
+  right: var(--space-4);
+  transform: none;
+}
+
+/* Blank canvas: an invitation in the world itself. */
+.viewport-welcome {
+  backdrop-filter: blur(8px);
+  background: color-mix(in oklab, var(--color-panel) 90%, transparent);
+  border: 1px solid color-mix(in oklab, var(--color-accent) 40%, var(--color-line));
+  border-radius: 12px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4);
+  display: grid;
+  gap: var(--space-2);
+  left: 50%;
+  padding: var(--space-4) 20px;
+  position: absolute;
+  text-align: center;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(540px, calc(100% - 2 * var(--space-4)));
+  z-index: 2;
+}
+
+.viewport-welcome h2 {
+  font-size: 24px;
+  margin: 0;
+}
+
+.viewport-welcome p {
+  color: var(--color-muted);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.viewport-welcome-chips {
+  display: grid;
+  gap: var(--space-2);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: var(--space-2);
+}
+
+.viewport-welcome-chips button {
+  background: color-mix(in oklab, var(--color-accent) 8%, var(--color-panel));
+  border-color: color-mix(in oklab, var(--color-accent) 50%, var(--color-line));
+  font-size: var(--text-sm);
+  min-height: 46px;
+  white-space: normal;
+}
+
+.viewport-welcome-chips button:not(:disabled):hover {
+  background: color-mix(in oklab, var(--color-accent) 20%, var(--color-panel));
+  border-color: var(--color-accent);
+}
+
+.viewport-welcome .viewport-welcome-hint {
+  font-size: var(--text-xs);
+}
+
+.viewport-welcome--busy {
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-4);
+  width: min(420px, calc(100% - 2 * var(--space-4)));
+}
+
+.viewport-welcome .viewport-welcome-kicker {
+  color: var(--color-accent-strong);
+  font-size: var(--text-md);
+  font-weight: 600;
+}
+
+.viewport-welcome .viewport-welcome-latest {
+  color: var(--color-text);
+  font-family: var(--font-data);
+  font-size: var(--text-xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Play: a head row with the camera toggle, a camera-relative pad, a win card. */
+.play-head {
+  align-items: center;
+  display: flex;
+  gap: var(--space-2);
+  justify-content: space-between;
+}
+
+.play-camera-toggle[aria-pressed='true'] {
+  border-color: var(--color-pass);
+}
+
+.dpad button {
+  font-size: 18px;
+  min-height: 40px;
+}
+
+.dpad-center {
+  color: var(--color-text);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+}
+
+.play-win {
+  background: color-mix(in oklab, var(--color-pass) 14%, var(--color-panel));
+  border: 1px solid var(--color-pass);
+  border-radius: var(--radius-md);
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3);
+}
+
+.play-win-title {
+  color: var(--color-pass);
+  font-size: 20px;
+  font-weight: 700;
+  margin: 0;
+}
+
+.play-win-note {
+  font-size: var(--text-sm);
+  margin: 0;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .play-win {
+    animation: win-pop 380ms cubic-bezier(0.2, 0.9, 0.3, 1.2);
+  }
+}
+
+@keyframes win-pop {
+  from { opacity: 0; transform: scale(0.94); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+/* Header: secondary actions inline on desktop, behind "More" on phones. */
+.header-secondary {
+  display: contents;
+}
+
+.header-menu-toggle {
+  display: none;
+}
+
+@media (max-width: 760px) {
+  .app-sub {
+    display: none;
+  }
+
+  .app-header {
+    align-items: center;
+    gap: var(--space-2);
+  }
+
+  .header-actions {
+    margin-left: 0;
+    width: 100%;
+  }
+
+  .scene-select-label {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .scene-select {
+    width: 100%;
+  }
+
+  .header-menu-toggle {
+    display: inline-flex;
+  }
+
+  .header-secondary {
+    display: none;
+  }
+
+  .header-secondary.is-open {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    order: 10;
+    width: 100%;
+  }
+
+  .viewport-rules {
+    max-width: 70%;
+  }
+
+  .viewport-welcome {
+    padding: var(--space-3);
+  }
+
+  .viewport-welcome h2 {
+    font-size: 20px;
+  }
+
+  .viewport-welcome p:not(.viewport-welcome-hint):not(.viewport-welcome-kicker):not(.viewport-welcome-latest) {
+    display: none;
+  }
+}
+
+.header-menu-toggle,
+.button--play {
+  align-items: center;
+  justify-content: center;
+}
+
+.dpad-center {
+  font-size: var(--text-xs);
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+  padding: 0 var(--space-1);
+  white-space: normal;
 }

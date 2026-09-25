@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react';
-import { BUILD_PROMPTS, EXAMPLE_PROMPTS, MAKEOVER_PROMPT } from './example-prompts.js';
 import { useApp } from '../state/store.js';
 
 const GUIDE_KEY = 'levelproof:getting-started:dismissed';
@@ -24,14 +23,6 @@ export function GettingStarted() {
   const mode = useApp((s) => s.mode);
   const play = useApp((s) => s.play);
   const repair = useApp((s) => s.repair);
-  const submitPrompt = useApp((s) => s.submitPrompt);
-  const setPromptDraft = useApp((s) => s.setPromptDraft);
-  const samplePrompt = useApp((s) => {
-    const level = s.draft?.level ?? s.acceptedLevel;
-    if (level.modules.length <= 3 && level.keys.length === 0) return BUILD_PROMPTS[0].prompt;
-    return level.modules.some((m) => m.id === 'key-balcony') ? EXAMPLE_PROMPTS.baseline : MAKEOVER_PROMPT;
-  });
-
   useEffect(() => {
     try {
       setDismissed(window.localStorage.getItem(GUIDE_KEY) === '1');
@@ -55,7 +46,6 @@ export function GettingStarted() {
 
   if (dismissed) return null;
   const completed = steps.filter((step) => step.complete).length;
-  const described = steps[0]?.complete ?? false;
 
   const dismiss = (): void => {
     setDismissed(true);
@@ -87,18 +77,6 @@ export function GettingStarted() {
           </li>
         ))}
       </ol>
-      {!described && (
-        <button
-          type="button"
-          className="example-chip"
-          onClick={() => {
-            setPromptDraft(samplePrompt);
-            void submitPrompt(samplePrompt);
-          }}
-        >
-          Try the sample request
-        </button>
-      )}
     </section>
   );
 }

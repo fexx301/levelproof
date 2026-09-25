@@ -41,6 +41,16 @@ tiles…), and key looks (torch, lantern, gem, crown, scroll, keycard…). The
 engine never reads scenery — a dragon never blocks a door — and the preview
 says so.
 
+## Play it
+
+**Play the level** drops you into the world you just made: the camera eases
+in behind a small adventurer and follows it, W / ↑ always walks away from you
+(controls are relative to the camera; drag to look around, **Camera:
+overview** to see everything), keys vanish into your inventory, doors open
+and seal as the engine says, and reaching the goal without breaking a rule
+ends in a **Level complete** card. It is the same movement engine the
+checker explored — nothing the player can do was left unchecked.
+
 ## Watch it break
 
 ![The switch trap: the ghost replays the route that strands the player](assets/trap-loop.gif)

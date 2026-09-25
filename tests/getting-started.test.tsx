@@ -22,10 +22,10 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe('getting started guide', () => {
-  it('shows a real-workflow sample action and can be dismissed', async () => {
+  it('shows the workflow steps without duplicating the example prompts, and can be dismissed', async () => {
     render(<GettingStarted />);
     expect(await screen.findByRole('heading', { name: 'Describe → test → repair' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Try the sample request' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Try the sample request' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
     expect(screen.queryByRole('heading', { name: 'Describe → test → repair' })).toBeNull();
     expect(window.localStorage.getItem('levelproof:getting-started:dismissed')).toBe('1');

@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { Cardinal, Level, ThemeKey } from '../shared/schema';
+import type { Level, ThemeKey } from '../shared/schema';
 import { verify, type Report } from './core/verifier';
 import { compileLevel } from './core/topology';
 import { actorBridge } from './render/bridge';
 import { mountScene, type SceneHandle } from './render/scene';
 import { SCENES, useApp } from './state/store';
 import { CheckStrip, RuleChips } from './ui/check-strip';
+import { useLevelIsBlank } from './ui/prompt-panel';
 import { PlayPanel } from './ui/play-panel';
 import { PlaytesterPanel, witnessOptions } from './ui/playtester';
 import { PromptPanel } from './ui/prompt-panel';
@@ -14,23 +15,10 @@ import { ResultCards } from './ui/result-cards';
 import { savedSceneOptionLabel } from './state/persistence';
 import { GettingStarted } from './ui/getting-started';
 import { SceneObjectPicker } from './ui/scene-object-picker';
+import { KEY_INTENTS, relativeCardinal } from './ui/relative-direction';
+import { BUILD_PROMPTS } from './ui/example-prompts';
 
 type Mode = 'authoring' | 'watching' | 'playing';
-
-const KEY_DIRECTIONS: Record<string, Cardinal> = {
-  w: 'N',
-  W: 'N',
-  ArrowUp: 'N',
-  s: 'S',
-  S: 'S',
-  ArrowDown: 'S',
-  a: 'W',
-  A: 'W',
-  ArrowLeft: 'W',
-  d: 'E',
-  D: 'E',
-  ArrowRight: 'E',
-};
 
 /**
  * The authoring surface (§12): the diorama, the prompt panel, active-rule
@@ -67,6 +55,7 @@ export function App() {
   const startPlay = useApp((s) => s.startPlay);
   const exitToAuthoring = useApp((s) => s.exitToAuthoring);
   const [resetArmed, setResetArmed] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const resetArmTimer = useRef<number | null>(null);
   useEffect(() => {
     return () => {
@@ -156,56 +145,68 @@ export function App() {
           )}
           {mode === 'authoring' && (
             <>
-              <button type="button" onClick={undo} disabled={!previousAccepted}>
-                Undo
-              </button>
-              <button type="button" onClick={saveScene}>
-                {draft ? 'Save accepted checkpoint' : 'Save checkpoint'}
-              </button>
-              <button type="button" onClick={shareCurrent}>
-                {draft ? 'Share accepted' : 'Share'}
-              </button>
-              {selectedSaved && (
-                <button type="button" onClick={() => deleteSaved(selectedSaved.recordKey)}>
-                  Remove saved
-                </button>
-              )}
-              {headerNote !== null && <span className="control-status">{headerNote}</span>}
-              {draft && (
-                <button type="button" onClick={discardDraft}>
-                  Return to accepted
-                </button>
-              )}
-              <button type="button" onClick={startPlay}>
-                {draft ? 'Play the draft' : 'Play the level'}
-              </button>
-              {resetArmed && (
-                <span role="status" className="control-status">
-                  Reset armed — press again within 3 seconds
-                </span>
-              )}
               <button
                 type="button"
-                title={`Reset to the original ${originLabel}`}
-                className={`reset-button${resetArmed ? ' button--danger' : ''}`}
-                onClick={() => {
-                  if (resetArmTimer.current !== null) {
-                    window.clearTimeout(resetArmTimer.current);
-                    resetArmTimer.current = null;
-                  }
-                  if (resetArmed) {
-                    resetVault();
-                    setResetArmed(false);
-                  } else {
-                    setResetArmed(true);
-                    resetArmTimer.current = window.setTimeout(() => {
-                      setResetArmed(false);
-                      resetArmTimer.current = null;
-                    }, 3000);
-                  }
-                }}
+                className="header-menu-toggle"
+                aria-expanded={menuOpen}
+                aria-controls="header-secondary"
+                onClick={() => setMenuOpen((open) => !open)}
               >
-                {resetArmed ? 'Confirm start over' : 'Start over'}
+                {menuOpen ? 'Close menu' : 'More'}
+              </button>
+              <div id="header-secondary" className={`header-secondary${menuOpen ? ' is-open' : ''}`}>
+                <button type="button" onClick={undo} disabled={!previousAccepted}>
+                  Undo
+                </button>
+                <button type="button" onClick={saveScene}>
+                  {draft ? 'Save accepted checkpoint' : 'Save checkpoint'}
+                </button>
+                <button type="button" onClick={shareCurrent}>
+                  {draft ? 'Share accepted' : 'Share'}
+                </button>
+                {selectedSaved && (
+                  <button type="button" onClick={() => deleteSaved(selectedSaved.recordKey)}>
+                    Remove saved
+                  </button>
+                )}
+                {draft && (
+                  <button type="button" onClick={discardDraft}>
+                    Return to accepted
+                  </button>
+                )}
+                {resetArmed && (
+                  <span role="status" className="control-status">
+                    Reset armed — press again within 3 seconds
+                  </span>
+                )}
+                <button
+                  type="button"
+                  title={`Reset to the original ${originLabel}`}
+                  className={`reset-button${resetArmed ? ' button--danger' : ''}`}
+                  onClick={() => {
+                    if (resetArmTimer.current !== null) {
+                      window.clearTimeout(resetArmTimer.current);
+                      resetArmTimer.current = null;
+                    }
+                    if (resetArmed) {
+                      resetVault();
+                      setResetArmed(false);
+                    } else {
+                      setResetArmed(true);
+                      resetArmTimer.current = window.setTimeout(() => {
+                        setResetArmed(false);
+                        resetArmTimer.current = null;
+                      }, 3000);
+                    }
+                  }}
+                >
+                  {resetArmed ? 'Confirm start over' : 'Start over'}
+                </button>
+              </div>
+              {headerNote !== null && <span className="control-status">{headerNote}</span>}
+              <button type="button" className="button--play" onClick={startPlay}>
+                <span aria-hidden="true">▶ </span>
+                {draft ? 'Play the draft' : 'Play the level'}
               </button>
             </>
           )}
@@ -216,9 +217,6 @@ export function App() {
           )}
         </div>
       </header>
-      <div className="rule-bar" id="rules" tabIndex={-1} role="group" aria-label="Active rules">
-        <RuleChips level={level} />
-      </div>
       {recoveryStatus === 'malformed' && (
         <div className="recovery-notice recovery-notice--error" role="alert">
           <span>Saved session recovery is unreadable. It has been left untouched; clear that recovery entry to start a new one.</span>
@@ -258,6 +256,50 @@ export function App() {
   );
 }
 
+/**
+ * The blank canvas invites a whole world: build chips in the viewport itself,
+ * then a live status while the model works (the full feed is in the panel).
+ */
+function BlankCanvasWelcome() {
+  const blank = useLevelIsBlank();
+  const busy = useApp((s) => s.busy);
+  const pending = useApp((s) => s.pendingRule !== null);
+  const progress = useApp((s) => s.compileProgress);
+  const submitPrompt = useApp((s) => s.submitPrompt);
+  const setPromptDraft = useApp((s) => s.setPromptDraft);
+  if (!blank || pending) return null;
+  if (busy) {
+    const latest = progress?.recent.at(-1) ?? progress?.headlines.at(-1) ?? 'Reading your description…';
+    return (
+      <div className="viewport-welcome viewport-welcome--busy" role="status">
+        <p className="viewport-welcome-kicker">Building your world</p>
+        <p className="viewport-welcome-latest">{latest}</p>
+      </div>
+    );
+  }
+  return (
+    <section className="viewport-welcome" aria-label="Start a world">
+      <h2>Describe a world</h2>
+      <p>One sentence becomes a playable 3D puzzle — and the engine proves it can be won before you keep it.</p>
+      <div className="viewport-welcome-chips">
+        {BUILD_PROMPTS.map((build) => (
+          <button
+            key={build.label}
+            type="button"
+            onClick={() => {
+              setPromptDraft(build.prompt);
+              void submitPrompt(build.prompt);
+            }}
+          >
+            {build.label}
+          </button>
+        ))}
+      </div>
+      <p className="viewport-welcome-hint">…or write your own in the panel.</p>
+    </section>
+  );
+}
+
 function Viewport({ level, mode, report, theme, previewing }: { level: Level; mode: Mode; report: Report; theme: ThemeKey | null; previewing: boolean }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<SceneHandle | null>(null);
@@ -277,6 +319,9 @@ function Viewport({ level, mode, report, theme, previewing }: { level: Level; mo
     try {
       handle = mountScene(host, compileLevel(level), theme ?? undefined);
       sceneRef.current = handle;
+      handle.onFacing((facing) => {
+        if (useApp.getState().facing !== facing) useApp.setState({ facing });
+      });
       setSceneFailure(null);
     } catch {
       host.querySelectorAll('canvas').forEach((canvas) => canvas.remove());
@@ -384,10 +429,11 @@ function Viewport({ level, mode, report, theme, previewing }: { level: Level; mo
         actor.restart();
         return;
       }
-      const dir = KEY_DIRECTIONS[event.key];
-      if (dir) {
+      // Camera-relative: W / ↑ always walks away from the viewer.
+      const intent = KEY_INTENTS[event.key];
+      if (intent) {
         event.preventDefault();
-        actor.move(dir);
+        actor.move(relativeCardinal(useApp.getState().facing, intent));
       }
     };
     window.addEventListener('keydown', onKey);
@@ -399,15 +445,34 @@ function Viewport({ level, mode, report, theme, previewing }: { level: Level; mo
     };
   }, [level, mode, theme]);
 
+  // Manual play chases the player unless the author asked for the overview.
+  const followCamera = useApp((st) => st.followCamera);
+  useEffect(() => {
+    sceneRef.current?.setFollow(followCamera);
+  }, [followCamera, mode, level, theme]);
+
   const viewportLabel =
     mode === 'playing'
-      ? '3D view of the current level — WASD or arrows to move, R restart'
+      ? '3D view of the current level — WASD or arrows to move (relative to the camera), R restart'
       : '3D view of the current level — drag to orbit, scroll to zoom, arrow keys orbit when focused';
   return (
     <div className="viewport" ref={hostRef} role="region" aria-label={viewportLabel}>
-      <button className="viewport-home" type="button" onClick={() => sceneRef.current?.frameLevel()}>
-        Frame level
-      </button>
+      <div className="viewport-top">
+        <button
+          className="viewport-home"
+          type="button"
+          onClick={() => {
+            if (mode === 'playing') useApp.setState({ followCamera: false });
+            sceneRef.current?.frameLevel();
+          }}
+        >
+          Frame level
+        </button>
+        <div className="viewport-rules" id="rules" tabIndex={-1} role="group" aria-label="Active rules">
+          <RuleChips level={level} />
+        </div>
+      </div>
+      {mode === 'authoring' && !previewing && <BlankCanvasWelcome />}
       {previewing && (
         <p className="viewport-preview-badge" role="status">
           Preview — not applied yet

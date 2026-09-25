@@ -29,6 +29,8 @@ function makeHandle() {
     setEvidence: vi.fn(),
     spawnPlayer: vi.fn(),
     setKeyboardOrbit: vi.fn(),
+    setFollow: vi.fn(),
+    onFacing: vi.fn(),
     setAnalysis: vi.fn(),
     setAnalysisVisible: vi.fn(),
   };

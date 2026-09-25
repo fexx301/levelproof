@@ -143,6 +143,10 @@ export interface SceneHandle {
   spawnPlayer(callbacks: PlayerCallbacks): PlayerActor;
   /** Arrow-key orbiting is disabled while manual play owns the arrows. */
   setKeyboardOrbit(enabled: boolean): void;
+  /** Manual play: chase the player (true) or hold the overview (false). */
+  setFollow(enabled: boolean): void;
+  /** The world direction the camera faces, for camera-relative controls. */
+  onFacing(handler: ((facing: Cardinal) => void) | null): void;
   /** Overlay the engine's per-module recovery analysis on the floors. */
   setAnalysis(map: { stranded: string[]; unreachable: string[] } | null): void;
   /** Analysis overlays are the author's view — never shown while playing. */
@@ -734,6 +738,66 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel, theme?: T
   const actorUpdates = new Set<(dt: number, elapsed: number) => void>();
   let lastTime = performance.now();
   let frame = 0;
+  // ---- Follow camera (manual play) ----
+  // Entering play eases from the overview to a chase view around the player,
+  // keeping the author's viewing angle; afterwards the camera translates with
+  // the player, so orbiting and zooming stay in the author's hands.
+  let followTarget: THREE.Object3D | null = null;
+  let followEnabled = true;
+  const followLast = new THREE.Vector3();
+  const chaseFrom = { target: new THREE.Vector3(), position: new THREE.Vector3() };
+  const chaseTo = { target: new THREE.Vector3(), position: new THREE.Vector3() };
+  let chaseProgress = 1;
+  const CHASE_DISTANCE_CM = 1900;
+  const CHASE_ELEVATION = THREE.MathUtils.degToRad(42);
+  const beginChase = (): void => {
+    if (followTarget === null) return;
+    const focus = followTarget.position.clone();
+    const view = camera.position.clone().sub(controls.target);
+    const horizontal = Math.hypot(view.x, view.z) || 1;
+    const chaseDir = new THREE.Vector3(
+      (view.x / horizontal) * Math.cos(CHASE_ELEVATION),
+      Math.sin(CHASE_ELEVATION),
+      (view.z / horizontal) * Math.cos(CHASE_ELEVATION),
+    );
+    chaseFrom.target.copy(controls.target);
+    chaseFrom.position.copy(camera.position);
+    chaseTo.target.copy(focus);
+    chaseTo.position.copy(focus).addScaledVector(chaseDir, CHASE_DISTANCE_CM);
+    followLast.copy(focus);
+    chaseProgress = reducedMotion() ? 1 : 0;
+    if (chaseProgress === 1) {
+      controls.target.copy(chaseTo.target);
+      camera.position.copy(chaseTo.position);
+    }
+  };
+  const updateFollow = (dt: number): void => {
+    if (followTarget === null || !followEnabled) return;
+    const focus = followTarget.position;
+    if (chaseProgress < 1) {
+      chaseProgress = Math.min(1, chaseProgress + dt / 0.8);
+      const t = chaseProgress * chaseProgress * (3 - 2 * chaseProgress);
+      const shift = focus.clone().sub(chaseTo.target);
+      chaseTo.target.add(shift);
+      chaseTo.position.add(shift);
+      controls.target.lerpVectors(chaseFrom.target, chaseTo.target, t);
+      camera.position.lerpVectors(chaseFrom.position, chaseTo.position, t);
+    } else {
+      const delta = focus.clone().sub(followLast);
+      camera.position.add(delta);
+      controls.target.add(delta);
+    }
+    followLast.copy(focus);
+  };
+  // Camera-relative controls: which world direction is "forward" on screen.
+  const computeFacing = (): Cardinal => {
+    const fx = controls.target.x - camera.position.x;
+    const fz = controls.target.z - camera.position.z;
+    return Math.abs(fz) >= Math.abs(fx) ? (fz < 0 ? 'N' : 'S') : fx > 0 ? 'E' : 'W';
+  };
+  let facing: Cardinal = computeFacing();
+  let facingHandler: ((facing: Cardinal) => void) | null = null;
+
   // Adaptive quality: after warm-up, sustained slow frames first lower the
   // render resolution, then drop terrain shadows and particles. Gameplay,
   // the diorama, and every overlay are unaffected.
@@ -771,8 +835,13 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel, theme?: T
     lastTime = now;
     for (const update of actorUpdates) update(dt, now);
     for (const update of decorUpdates) update(dt, now);
-    // No automatic chase: the full route remains spatially stable in play.
+    updateFollow(dt);
     controls.update();
+    const nextFacing = computeFacing();
+    if (nextFacing !== facing) {
+      facing = nextFacing;
+      facingHandler?.(facing);
+    }
     renderer.render(scene, camera);
     frame = requestAnimationFrame(tick);
   };
@@ -788,7 +857,7 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel, theme?: T
     renderer.setSize(w, h);
     cachedFit = computeFit();
     scenery.setFogRange(cachedFit);
-    frameHome();
+    if (followTarget === null || !followEnabled) frameHome();
   };
   const observer = new ResizeObserver(resize);
   observer.observe(host);
@@ -1151,7 +1220,11 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel, theme?: T
       actorUpdates.add(update);
       return () => actorUpdates.delete(update);
     },
-    follow: () => { /* overview is intentionally stable across actor moves */ },
+    follow: (target) => {
+      followTarget = target;
+      if (target !== null && followEnabled) beginChase();
+      else if (target === null) frameHome();
+    },
     world: mechanisms.events,
   };
 
@@ -1226,6 +1299,16 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel, theme?: T
     spawnPlayer(callbacks) {
       return new PlayerActor(actorContext, callbacks);
     },
+    setFollow(enabled) {
+      if (followEnabled === enabled) return;
+      followEnabled = enabled;
+      if (enabled) beginChase();
+      else frameHome();
+    },
+    onFacing(handler) {
+      facingHandler = handler;
+      handler?.(facing);
+    },
     setKeyboardOrbit(enabled) {
       if (enabled) {
         controls.listenToKeyEvents(renderer.domElement);
@@ -1241,6 +1324,7 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel, theme?: T
       // canvas; otherwise a late empty hit can clear the store's selection
       // during the remount and make the UI/ring disappear.
       pickHandler = null;
+      facingHandler = null;
       pointerDown.active = false;
       cancelAnimationFrame(frame);
       motionQuery.removeEventListener('change', syncDamping);

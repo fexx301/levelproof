@@ -87,7 +87,8 @@ test('shows an added object in the preview, applies the same candidate, then sav
 
   await page.getByRole('button', { name: 'Play it yourself' }).click();
   const playPanel = page.getByRole('region', { name: 'Play' });
-  await expect(playPanel.getByText('entrance', { exact: true })).toBeVisible();
+  const location = playPanel.getByRole('status');
+  await expect(location).toHaveAttribute('data-module', 'entrance');
   const journey: Array<[string, string]> = [
     ['north', 'lower-hall'], ['north', 'gallery-ramp'], ['north', 'gallery'], ['north', 'bridge-landing'],
     ['east', 'vault-approach'], ['east', 'vault-entry'], ['east', 'treasure-landing'],
@@ -96,9 +97,9 @@ test('shows an added object in the preview, applies the same candidate, then sav
     await playPanel.getByRole('button', { name: `Move ${direction}` }).click();
     // Each move animates to completion; software WebGL in CI renders the
     // dressed scene at a few frames per second, so allow for slow frames.
-    await expect(playPanel.getByText(destination, { exact: true })).toBeVisible({ timeout: 20_000 });
+    await expect(location).toHaveAttribute('data-module', destination, { timeout: 20_000 });
   }
-  await expect(playPanel.getByRole('status').filter({ hasText: 'Goal reached' })).toHaveText('Goal reached');
+  await expect(playPanel).toContainText('Level complete');
   await page.getByRole('button', { name: 'Back to editing (Esc)' }).click();
 
   await page.getByRole('button', { name: 'Save checkpoint' }).click();
