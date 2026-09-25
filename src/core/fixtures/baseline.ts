@@ -27,4 +27,14 @@ export const baselineLevel: Level = {
     { id: 'vault-door', a: 'vault-approach', b: 'vault-entry', conditions: { requiresKey: 'brass-key' } },
   ],
   requirements: [{ type: 'collectBeforeGoal', keyId: 'brass-key' }],
+  // Cosmetic dressing (§12 visual identity): never read by the engine.
+  scenery: { environment: 'meadow', lighting: 'dusk', architecture: 'limestone' },
+  props: [
+    { id: 'hoard-brazier', prop: 'brazier', x: 4, z: 1 },
+    { id: 'gate-torch', prop: 'torch', x: 1, z: 5 },
+    { id: 'west-ruin', prop: 'ruin', x: 0, z: 3 },
+    { id: 'north-pillar', prop: 'pillar', x: 2, z: 0 },
+    { id: 'vault-banner', prop: 'banner', x: 3, z: 0 },
+    { id: 'far-pillar', prop: 'pillar', x: 4, z: 0 },
+  ],
 };

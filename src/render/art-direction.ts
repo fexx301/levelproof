@@ -1,7 +1,7 @@
 import type { CompiledLevel } from '../core/topology.js';
-import type { ThemeKey } from '../../shared/api.js';
+import type { Environment, ThemeKey } from '../../shared/schema.js';
 
-export type { ThemeKey } from '../../shared/api.js';
+export type { ThemeKey } from '../../shared/schema.js';
 
 /** Presentation only: no theme field enters the level schema or verifier. */
 export interface ArtDirection {
@@ -32,9 +32,34 @@ const sceneDirections: Record<'vault' | 'twins' | 'overpass' | 'gauntlet', ArtDi
   gauntlet: themeDirections.basalt,
 };
 
+/** A sensible building material when the scenery names a world but no architecture. */
+const environmentArchitecture: Partial<Record<Environment, ThemeKey>> = {
+  snow: 'ivory',
+  volcanic: 'basalt',
+  cavern: 'basalt',
+  swamp: 'patina',
+  sea: 'patina',
+  desert: 'limestone',
+  meadow: 'limestone',
+  forest: 'limestone',
+  space: 'futuristic',
+  city: 'futuristic',
+};
+
+/** The resolved architecture: the author's editor override, then the scene's
+ * own scenery, then a scene-derived default. */
+export function resolvedArchitecture(compiled: CompiledLevel, theme?: ThemeKey): ThemeKey | undefined {
+  if (theme !== undefined) return theme;
+  const scenery = compiled.level.scenery;
+  if (scenery?.architecture !== undefined) return scenery.architecture;
+  if (scenery?.environment !== undefined) return environmentArchitecture[scenery.environment];
+  return undefined;
+}
+
 /** The author's chosen theme overrides the scene-derived default. */
 export function artDirection(compiled: CompiledLevel, theme?: ThemeKey): ArtDirection {
-  if (theme !== undefined) return themeDirections[theme];
+  const resolved = resolvedArchitecture(compiled, theme);
+  if (resolved !== undefined) return themeDirections[resolved];
   if (compiled.moduleById.has('grand-gallery')) return sceneDirections.twins;
   if (compiled.moduleById.has('under-passage')) return sceneDirections.overpass;
   if (compiled.moduleById.has('gauntlet-ramp')) return sceneDirections.gauntlet;

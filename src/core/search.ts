@@ -237,6 +237,9 @@ export function touchesProtected(operations: Operation[], protectedIds: Set<stri
     if (op.kind === 'setDoorConditions' || op.kind === 'removeDoor') {
       if (protectedIds.has(op.id)) return true;
     }
+    if (op.kind === 'moveProp' || op.kind === 'removeProp' || op.kind === 'setKeyLook') {
+      if (protectedIds.has(op.id)) return true;
+    }
   }
   return false;
 }

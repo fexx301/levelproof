@@ -23,6 +23,9 @@ export const MODEL_OPTIONS: Record<string, ModelCallOptions> = {
   // default truncated their JSON into guaranteed schema failures.
   'google/gemini-2.5-flash-lite': { useSchema: false, maxTokens: 8000 },
   'google/gemini-3.7-flash': { useSchema: false, maxTokens: 8000 },
+  // Low effort lets the model skip deliberation on simple edits; streamed
+  // builds stay interactive (measured 2026-09-25, docs/model-eval.md).
+  'google/gemini-3.8-flash': { useSchema: false, maxTokens: 8000, reasoningEffort: 'low' },
 };
 
 export function callOptionsFor(model: string): StructuredOptions {

@@ -1,5 +1,5 @@
-import { compile } from './_lib/compile-service.js';
-import { compileRequestSchema } from '../shared/api.js';
+import { compile, type CompileOutcome } from './_lib/compile-service.js';
+import { compileRequestSchema, type CompileProgress } from '../shared/api.js';
 import { enforceRequestBudget, readLimitedJson } from './_lib/request-guard.js';
 
 /**
@@ -9,8 +9,51 @@ import { enforceRequestBudget, readLimitedJson } from './_lib/request-guard.js';
  * sensitive is logged. The client applies the returned operations
  * deterministically through the shared core. Named-method export: the
  * default export is treated as the legacy (req, res) signature.
+ *
+ * With `Accept: application/x-ndjson` the same compile streams live progress
+ * (the model's reasoning headlines and each operation as it is written) and
+ * ends with one "result" event holding the normal status and body.
  */
 export const maxDuration = 60;
+
+function outcomeResponse(outcome: CompileOutcome): { status: number; body: Record<string, unknown> } {
+  if (outcome.result === null) {
+    const status =
+      outcome.error === 'missing_provider_config' ? 503
+        : outcome.error === 'cancelled' ? 499
+          : outcome.error === 'nothing_to_revise' ? 400
+            : 502;
+    return {
+      status,
+      body: {
+        error:
+          outcome.error === 'missing_provider_config'
+            ? 'provider_not_configured'
+            : outcome.error === 'cancelled'
+              ? 'request_cancelled'
+              : outcome.error === 'nothing_to_revise'
+                ? 'nothing_to_revise'
+                : 'compilation_failed',
+        ...(outcome.providerError !== undefined ? { providerError: outcome.providerError } : {}),
+        attempts: outcome.attempts,
+        totalCostUsd: outcome.totalCostUsd,
+        generationCostUsd: outcome.generationCostUsd,
+      },
+    };
+  }
+  return {
+    status: 200,
+    body: {
+      result: outcome.result,
+      baseRevision: outcome.baseRevision,
+      ...(outcome.theme !== undefined ? { theme: outcome.theme } : {}),
+      cached: outcome.cached,
+      attempts: outcome.attempts,
+      totalCostUsd: outcome.totalCostUsd,
+      generationCostUsd: outcome.generationCostUsd,
+    },
+  };
+}
 
 export async function POST(request: Request): Promise<Response> {
   if (request.method !== 'POST') {
@@ -38,33 +81,45 @@ export async function POST(request: Request): Promise<Response> {
     ...parsed.data,
     history: parsed.data.history?.map((h) => h.prompt),
   };
-  const outcome = await compile(process.env, input, { signal: request.signal });
 
-  if (outcome.result === null) {
-    return Response.json(
-      {
-        error:
-          outcome.error === 'missing_provider_config'
-            ? 'provider_not_configured'
-            : outcome.error === 'cancelled'
-              ? 'request_cancelled'
-              : 'compilation_failed',
-        ...(outcome.providerError !== undefined ? { providerError: outcome.providerError } : {}),
-        attempts: outcome.attempts,
-        totalCostUsd: outcome.totalCostUsd,
-        generationCostUsd: outcome.generationCostUsd,
+  if ((request.headers.get('accept') ?? '').includes('application/x-ndjson')) {
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        const send = (event: unknown): void => {
+          try {
+            controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`));
+          } catch {
+            // The client went away; the compile is cancelled through its signal.
+          }
+        };
+        const onProgress = (progress: CompileProgress): void => send({ event: 'progress', progress });
+        try {
+          const outcome = await compile(process.env, input, { signal: request.signal, onProgress });
+          const { status, body } = outcomeResponse(outcome);
+          send({ event: 'result', status, body });
+        } catch {
+          send({ event: 'result', status: 500, body: { error: 'compilation_failed' } });
+        } finally {
+          try {
+            controller.close();
+          } catch {
+            // Already closed by a disconnect.
+          }
+        }
       },
-      { status: outcome.error === 'missing_provider_config' ? 503 : outcome.error === 'cancelled' ? 499 : 502 },
-    );
+    });
+    return new Response(stream, {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/x-ndjson; charset=utf-8',
+        'Cache-Control': 'no-store',
+        'X-Accel-Buffering': 'no',
+      },
+    });
   }
 
-  return Response.json({
-    result: outcome.result,
-    baseRevision: outcome.baseRevision,
-    ...(outcome.theme !== undefined ? { theme: outcome.theme } : {}),
-    cached: outcome.cached,
-    attempts: outcome.attempts,
-    totalCostUsd: outcome.totalCostUsd,
-    generationCostUsd: outcome.generationCostUsd,
-  });
+  const outcome = await compile(process.env, input, { signal: request.signal });
+  const { status, body } = outcomeResponse(outcome);
+  return Response.json(body, { status });
 }

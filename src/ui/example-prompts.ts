@@ -29,3 +29,32 @@ export const EXAMPLE_PROMPTS = {
  */
 export const TWIST_PROMPT =
   'Suggest a twist for this puzzle: add one interesting mechanic — a seal-switch trap, a keyed gate, or a new keyed route — that fits the existing scene. Implement it as a single patch.';
+
+/**
+ * From-scratch builds offered on the blank canvas. Each is a live compile
+ * (cached after its first run) and deliberately exercises scenery plus a real
+ * mechanic, so a first-time visitor sees the world match the words.
+ */
+export const BUILD_PROMPTS = [
+  {
+    label: 'Haunted forest keep',
+    prompt: 'Build a haunted forest keep at night: a gatehouse, a courtyard, and a crumbling tower with the key at the top. The treasure room is locked behind a door that needs the key, and a dragon statue guards it.',
+  },
+  {
+    label: 'Frozen observatory',
+    prompt: 'Build a frozen observatory on a snowy peak at dusk: two balconies reached by ramps, a silver key on one and a gold key on the other, and a vault door that needs both keys.',
+  },
+  {
+    label: 'Pirate cove',
+    prompt: 'Build a pirate cove on the open sea: three small docks joined by bridges over the water, a torch that unlocks the captain\'s gate, and a treasure chest on the goal dock.',
+  },
+  {
+    label: 'Lava temple',
+    prompt: 'Build a lava temple at night: a basalt causeway over a lava moat, braziers along the path, a gem that unlocks the inner sanctum, and a pressure plate that seals the entrance behind the player.',
+  },
+] as const;
+
+/** Scene-agnostic edits for any existing puzzle. */
+export const MAKEOVER_PROMPT =
+  'Make it a spooky forest at night: dead trees around it, lanterns along the path, and a dragon statue guarding the goal.';
+export const SHORTCUT_PROMPT = 'Add a bridge that shortcuts straight to the goal.';

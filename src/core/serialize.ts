@@ -26,9 +26,31 @@ function canonicalModule(m: LevelModule) {
   };
 }
 
+function canonicalKey(k: Level['keys'][number]) {
+  return { id: k.id, moduleId: k.moduleId, ...(k.look !== undefined ? { look: k.look } : {}) };
+}
+
+/** Scenery fields appear only when present, so levels without scenery keep
+ * the exact revision identity they had before scenery existed. */
+function canonicalScenery(level: Level) {
+  const scenery = level.scenery;
+  const sceneryFields = scenery === undefined
+    ? {}
+    : {
+        ...(scenery.environment !== undefined ? { environment: scenery.environment } : {}),
+        ...(scenery.lighting !== undefined ? { lighting: scenery.lighting } : {}),
+        ...(scenery.architecture !== undefined ? { architecture: scenery.architecture } : {}),
+      };
+  const props = [...(level.props ?? [])].sort(byId).map((p) => ({ id: p.id, prop: p.prop, x: p.x, z: p.z }));
+  return {
+    ...(Object.keys(sceneryFields).length > 0 ? { scenery: sceneryFields } : {}),
+    ...(props.length > 0 ? { props } : {}),
+  };
+}
+
 export function canonicalJson(level: Level): string {
   const modules = [...level.modules].sort(byId).map(canonicalModule);
-  const keys = [...level.keys].sort(byId).map((k) => ({ id: k.id, moduleId: k.moduleId }));
+  const keys = [...level.keys].sort(byId).map(canonicalKey);
   const switches = [...level.switches].sort(byId).map((s) => ({ id: s.id, moduleId: s.moduleId }));
   const doors = [...level.doors]
     .sort(byId)
@@ -45,6 +67,7 @@ export function canonicalJson(level: Level): string {
     goal: level.goal,
     doors,
     requirements,
+    ...canonicalScenery(level),
   });
 }
 
@@ -85,7 +108,7 @@ export function revisionId(level: Level): string {
 export function encodeLevelShare(level: Level): string {
   const json = JSON.stringify({
     modules: [...level.modules].sort(byId).map(canonicalModule),
-    keys: [...level.keys].sort(byId).map((k) => ({ id: k.id, moduleId: k.moduleId })),
+    keys: [...level.keys].sort(byId).map(canonicalKey),
     switches: [...level.switches].sort(byId).map((sw) => ({ id: sw.id, moduleId: sw.moduleId })),
     spawn: level.spawn,
     goal: level.goal,
@@ -95,6 +118,7 @@ export function encodeLevelShare(level: Level): string {
     requirements: [...level.requirements]
       .sort((a, b) => (requirementId(a) < requirementId(b) ? -1 : requirementId(a) > requirementId(b) ? 1 : 0))
       .map(canonicalRequirement),
+    ...canonicalScenery(level),
   });
   const b64 =
     typeof btoa === 'function' ? b64UrlEncodeBrowser(json) : Buffer.from(json, 'utf8').toString('base64');

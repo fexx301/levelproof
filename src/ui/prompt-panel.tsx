@@ -1,5 +1,6 @@
+import { useEffect, useState } from 'react';
 import { DisclosureGlyph } from './check-strip.js';
-import { EXAMPLE_PROMPTS, TWIST_PROMPT } from './example-prompts.js';
+import { BUILD_PROMPTS, EXAMPLE_PROMPTS, MAKEOVER_PROMPT, SHORTCUT_PROMPT, TWIST_PROMPT } from './example-prompts.js';
 import { useApp } from '../state/store.js';
 import { themeKeySchema, type ThemeKey } from '../../shared/api.js';
 
@@ -15,6 +16,68 @@ function costText(costUsd: number | null): string {
   return costUsd === null ? 'cost unavailable' : `$${costUsd.toFixed(5)}`;
 }
 
+function stageText(progress: NonNullable<ReturnType<typeof useApp.getState>['compileProgress']>): string {
+  if (progress.stage === 'sending') return progress.revising ? 'Sending the engine’s findings to the model…' : 'Sending your request…';
+  if (progress.stage === 'thinking') return progress.revising ? 'The model is revising against the engine’s findings' : 'The model is planning';
+  if (progress.stage === 'writing') return `Writing the edit — ${progress.operations} operation${progress.operations === 1 ? '' : 's'} so far`;
+  if (progress.stage === 'checking') return 'The engine is checking the result';
+  if (progress.stage === 'retrying') return 'Retrying';
+  return 'Revising';
+}
+
+/**
+ * Live compile progress: the model's own reasoning headlines and each
+ * operation as it streams in. Everything shown is provisional until the
+ * finished result passes strict parsing and the engine.
+ */
+function CompileProgressCard() {
+  const progress = useApp((s) => s.compileProgress);
+  const cancel = useApp((s) => s.cancelCompile);
+  const active = progress !== null;
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!active) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 250);
+    return () => window.clearInterval(timer);
+  }, [active]);
+  if (progress === null) return null;
+  const seconds = Math.max(0, (now - progress.startedAt) / 1000);
+  const recent = progress.recent.slice(-7);
+  return (
+    <section className={`compile-progress${progress.revising ? ' is-revising' : ''}`} aria-label="Compile progress" aria-live="polite">
+      <div className="compile-progress-head">
+        <span className="compile-progress-pulse" aria-hidden="true" />
+        <strong>{stageText(progress)}</strong>
+        <span className="compile-progress-time">{seconds.toFixed(0)} s</span>
+      </div>
+      {progress.revising && progress.note !== null && (
+        <p className="compile-progress-finding">
+          <span>Engine found:</span> {progress.note}
+        </p>
+      )}
+      {!progress.revising && progress.stage === 'retrying' && progress.note !== null && (
+        <p className="compile-progress-finding">{progress.note}</p>
+      )}
+      {progress.headlines.length > 0 && (
+        <ol className="compile-progress-headlines" aria-label="Model plan">
+          {progress.headlines.slice(-4).map((headline, index, list) => (
+            <li key={headline} className={index === list.length - 1 ? 'is-current' : ''}>{headline}</li>
+          ))}
+        </ol>
+      )}
+      {recent.length > 0 && (
+        <ul className="compile-progress-ops" aria-label="Operations written so far">
+          {recent.map((label, index) => <li key={`${progress.operations}-${index}`}>{label}</li>)}
+        </ul>
+      )}
+      <div className="compile-progress-foot">
+        <span className="panel-note">Streamed live · nothing changes until you apply</span>
+        <button type="button" className="example-chip" onClick={cancel}>Cancel</button>
+      </div>
+    </section>
+  );
+}
+
 /** The prompt panel (§12): describe a change, watch it compile. */
 export function PromptPanel() {
   const text = useApp((s) => s.promptDraft);
@@ -25,6 +88,11 @@ export function PromptPanel() {
   const meta = useApp((s) => s.lastCompileMeta);
   const submitPrompt = useApp((s) => s.submitPrompt);
   const hasKey = useApp((s) => (s.draft?.level ?? s.acceptedLevel).keys.length > 0);
+  const isVault = useApp((s) => (s.draft?.level ?? s.acceptedLevel).modules.some((m) => m.id === 'key-balcony'));
+  const isBlank = useApp((s) => {
+    const level = s.draft?.level ?? s.acceptedLevel;
+    return level.modules.length <= 3 && level.keys.length === 0 && level.doors.length === 0;
+  });
   const changeSummary = useApp((s) => s.changeSummary);
   const history = useApp((s) => s.history);
   const loadSceneLevel = useApp((s) => s.loadLevel);
@@ -43,17 +111,26 @@ export function PromptPanel() {
 
   // One-click examples: the cache-verified canonical demo prompts, so a
   // first-time visitor can reach the signature moment without reading docs.
-  const examples: { label: string; prompt: string }[] = [
-    { label: 'Key + locked door', prompt: EXAMPLE_PROMPTS.baseline },
-    {
-      label: 'The switch trap',
-      // Self-sufficient on a fresh scene; the canonical second step once the
-      // baseline (any key) is already in place.
-      prompt: hasKey ? EXAMPLE_PROMPTS.trap : EXAMPLE_PROMPTS.trapOneShot,
-    },
-    { label: 'Remove the ramp', prompt: EXAMPLE_PROMPTS.removeRamp },
-    { label: 'Suggest a twist', prompt: TWIST_PROMPT },
-  ];
+  const examples: { label: string; prompt: string }[] = isBlank
+    ? BUILD_PROMPTS.map((entry) => ({ label: entry.label, prompt: entry.prompt }))
+    : isVault
+      ? [
+          { label: 'Key + locked door', prompt: EXAMPLE_PROMPTS.baseline },
+          {
+            label: 'The switch trap',
+            // Self-sufficient on a fresh scene; the canonical second step once the
+            // baseline (any key) is already in place.
+            prompt: hasKey ? EXAMPLE_PROMPTS.trap : EXAMPLE_PROMPTS.trapOneShot,
+          },
+          { label: 'Spooky night makeover', prompt: MAKEOVER_PROMPT },
+          { label: 'Remove the ramp', prompt: EXAMPLE_PROMPTS.removeRamp },
+          { label: 'Suggest a twist', prompt: TWIST_PROMPT },
+        ]
+      : [
+          { label: 'Spooky night makeover', prompt: MAKEOVER_PROMPT },
+          { label: 'Add a shortcut', prompt: SHORTCUT_PROMPT },
+          { label: 'Suggest a twist', prompt: TWIST_PROMPT },
+        ];
   const runExample = (prompt: string) => {
     setText(prompt);
     void submitPrompt(prompt);
@@ -63,7 +140,7 @@ export function PromptPanel() {
   return (
     <section className="prompt-panel" aria-label="Describe a change">
       <div className="prompt-toolbar">
-        <span className="panel-note">Architecture</span>
+        <span className="panel-note">Building style</span>
         <label className="theme-picker">
           <span className="visually-hidden">Architecture theme</span>
           <select
@@ -75,7 +152,7 @@ export function PromptPanel() {
               setTheme(parsed === null ? null : parsed.success ? parsed.data : null);
             }}
           >
-            <option value="">Auto</option>
+            <option value="">From the scene</option>
             {Object.entries(THEME_LABELS).map(([value, label]) => (
               <option key={value} value={value}>{label}</option>
             ))}
@@ -92,7 +169,9 @@ export function PromptPanel() {
         maxLength={2000}
         rows={3}
         placeholder={
-          'Click a floor, key, switch, or door in the scene to select it — then describe the change. Or: put a brass key on the side balcony and lock the vault with it.'
+          isBlank
+            ? 'Describe a whole puzzle world — “a haunted forest keep with the key at the top of a tower and a dragon guarding the treasure room”.'
+            : 'Describe a change, or click something in the scene first — “lock the vault with a key on the balcony”, “make it a snowy night”.'
         }
         onChange={(event) => setText(event.target.value)}
         onKeyDown={(event) => {
@@ -106,7 +185,7 @@ export function PromptPanel() {
           disabled={locked || text.trim().length === 0}
           onClick={submit}
         >
-          {busy ? 'Compiling…' : 'Compile'}
+          {busy ? 'Building…' : isBlank ? 'Build it' : 'Compile'}
         </button>
         <span
           className={`compile-status${meta?.cached ? ' is-cached' : ''}`}
@@ -146,8 +225,9 @@ export function PromptPanel() {
           ))}
         </div>
       )}
+      <CompileProgressCard />
       <div className="example-prompts" role="group" aria-label="Example prompts">
-        <span className="panel-note">Try:</span>
+        <span className="panel-note">{isBlank ? 'Build:' : 'Try:'}</span>
         {examples.map((example) => (
           <button
             key={example.label}

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { EXAMPLE_PROMPTS } from './example-prompts.js';
+import { BUILD_PROMPTS, EXAMPLE_PROMPTS, MAKEOVER_PROMPT } from './example-prompts.js';
 import { useApp } from '../state/store.js';
 
 const GUIDE_KEY = 'levelproof:getting-started:dismissed';
@@ -25,6 +25,12 @@ export function GettingStarted() {
   const play = useApp((s) => s.play);
   const repair = useApp((s) => s.repair);
   const submitPrompt = useApp((s) => s.submitPrompt);
+  const setPromptDraft = useApp((s) => s.setPromptDraft);
+  const samplePrompt = useApp((s) => {
+    const level = s.draft?.level ?? s.acceptedLevel;
+    if (level.modules.length <= 3 && level.keys.length === 0) return BUILD_PROMPTS[0].prompt;
+    return level.modules.some((m) => m.id === 'key-balcony') ? EXAMPLE_PROMPTS.baseline : MAKEOVER_PROMPT;
+  });
 
   useEffect(() => {
     try {
@@ -63,36 +69,36 @@ export function GettingStarted() {
   return (
     <section className="getting-started" aria-label="Getting started">
       <div className="getting-started-head">
-        <div>
-          <p className="guide-kicker">First run</p>
-          <h2>Describe → test → repair</h2>
-        </div>
+        <h2>Describe → test → repair</h2>
         <button type="button" className="guide-dismiss" onClick={dismiss}>
           Dismiss
         </button>
       </div>
-      <p className="panel-note">
-        Make one change, inspect the proposal, and let the verifier show whether the puzzle still works.
-      </p>
       <ol className="guide-steps" aria-label={`${completed} of ${steps.length} guide steps complete`}>
         {steps.map((step, index) => (
-          <li key={step.label} className={step.complete ? 'is-complete' : ''}>
+          <li key={step.label} className={step.complete ? 'is-complete' : ''} title={step.detail}>
             <span className="guide-step-number" aria-hidden="true">
               {step.complete ? '✓' : index + 1}
             </span>
             <span>
               <strong>{step.label}</strong>
-              <small>{step.detail}</small>
+              <small className="visually-hidden">{step.detail}</small>
             </span>
           </li>
         ))}
       </ol>
       {!described && (
-        <button type="button" onClick={() => void submitPrompt(EXAMPLE_PROMPTS.baseline)}>
+        <button
+          type="button"
+          className="example-chip"
+          onClick={() => {
+            setPromptDraft(samplePrompt);
+            void submitPrompt(samplePrompt);
+          }}
+        >
           Try the sample request
         </button>
       )}
-      <p className="guide-footnote">Sample request uses the real compile → preview → approval workflow.</p>
     </section>
   );
 }

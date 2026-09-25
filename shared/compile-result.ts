@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { BOUNDS, idSchema, operationSchema, requirementSchema } from './schema.js';
+import { normalizeSceneryVocabulary } from './scenery-aliases.js';
 
 /**
  * The four compile results (§10): patch, clarification, rule_proposal,
@@ -45,10 +46,11 @@ export type RuleProposalResult = Extract<CompileResult, { type: 'rule_proposal' 
 /**
  * The strict wire contract forces null placeholders for type-specific
  * fields, and some providers wrap JSON in markdown fences. Neither carries
- * meaning, so strip both recursively before strict validation.
+ * meaning, so strip both recursively before strict validation. Cosmetic
+ * scenery words are mapped to the supported vocabulary (never gameplay).
  */
 export function normalizeWirePayload(raw: string): unknown {
-  return stripNulls(JSON.parse(stripCodeFences(raw)));
+  return normalizeSceneryVocabulary(stripNulls(JSON.parse(stripCodeFences(raw))));
 }
 
 function stripCodeFences(raw: string): string {

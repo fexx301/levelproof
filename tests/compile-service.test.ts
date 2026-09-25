@@ -54,7 +54,7 @@ describe('compile prompt guardrails', () => {
   it('defaults unspecified doors to open and forbids invented conditions', () => {
     const prompt = buildSystemPrompt(vaultEmptyLevel, revisionId(vaultEmptyLevel));
 
-    expect(PROMPT_VERSION).toBe('prompt-8');
+    expect(PROMPT_VERSION).toBe('prompt-9');
     expect(prompt).toContain('A door with no explicitly requested lock or switch behavior is an OPEN, passable door');
     expect(prompt).toContain('Never invent a key, switch, or other condition for a door');
     expect(prompt).toContain('if the intended condition or location is materially ambiguous, ask one concise clarification');
@@ -270,5 +270,68 @@ describe('result binding and provider error classes (§10, §11)', () => {
     expect(outcome.result).toBeNull();
     expect(outcome.providerError).toBe('rate_limited');
     expect(outcome.attempts.every((a) => a.errorKind === 'rate_limited')).toBe(true);
+  });
+});
+
+describe('AI↔engine revision requests', () => {
+  const unwinnableOps = [
+    { kind: 'addDoor' as const, door: { id: 'vault-door', a: 'vault-approach', b: 'vault-entry', conditions: { requiresKey: 'ghost-key' } } },
+  ];
+
+  it('sends the engine’s own findings about the earlier attempt to the model', async () => {
+    // The key sits behind a door that needs that same key; the revised
+    // attempt then locks the vault with it, so the goal becomes unreachable.
+    const keyed = applyOperations(vaultEmptyLevel, [
+      { kind: 'addItem', itemType: 'key', id: 'ghost-key', moduleId: 'key-balcony' },
+      { kind: 'addDoor', door: { id: 'balcony-door', a: 'key-walk', b: 'key-balcony', conditions: { requiresKey: 'ghost-key' } } },
+    ]);
+    expect(keyed.ok).toBe(true);
+    if (!keyed.ok) return;
+    const seen: string[] = [];
+    const fn: CallModel = async (_config, messages) => {
+      seen.push(messages.at(-1)!.content);
+      return ok(validPatch);
+    };
+    const outcome = await compile(ENV, { level: keyed.level, prompt: 'Lock the vault with the key.', revision: { operations: unwinnableOps } }, { callModel: fn });
+    expect(outcome.result?.type).toBe('patch');
+    expect(seen[0]).toContain('ENGINE CHECK OF YOUR PREVIOUS ATTEMPT');
+    expect(seen[0]).toContain('The level cannot be won');
+    expect(seen[0]).toContain('"vault-door"');
+  });
+
+  it('refuses to spend a model call when the engine finds nothing to fix', async () => {
+    const model = scriptedModel([ok(validPatch)]);
+    const outcome = await compile(ENV, { level: vaultEmptyLevel, prompt: 'Fix it.', revision: { operations: [] } }, { callModel: model.fn });
+    expect(outcome.error).toBe('nothing_to_revise');
+    expect(model.calls).toHaveLength(0);
+  });
+
+  it('streams reasoning headlines and each completed operation as progress', async () => {
+    const patch = JSON.stringify({
+      type: 'patch',
+      rationale: 'dress the vault',
+      assumptions: [],
+      operations: [
+        { kind: 'setScenery', environment: 'forest', lighting: 'night' },
+        { kind: 'addProp', id: 'guardian', prop: 'dragon', x: 5, z: 1 },
+      ],
+    });
+    const fn: CallModel = async (_config, _messages, _options, _signal, onDelta) => {
+      onDelta?.({ reasoning: '**Reading the Vault**\n' });
+      onDelta?.({ reasoning: 'thinking **Placing the Dragon**' });
+      for (let i = 0; i < patch.length; i += 11) onDelta?.({ content: patch.slice(i, i + 11) });
+      return ok(patch);
+    };
+    const events: unknown[] = [];
+    const outcome = await compile(ENV, { level: vaultEmptyLevel, prompt: 'Make it a haunted forest with a dragon.' }, { callModel: fn, onProgress: (event) => events.push(event) });
+    expect(outcome.result?.type).toBe('patch');
+    expect(events).toEqual([
+      { stage: 'thinking', attempt: 1 },
+      { stage: 'thinking', attempt: 1, headline: 'Reading the Vault' },
+      { stage: 'thinking', attempt: 1, headline: 'Placing the Dragon' },
+      { stage: 'writing', attempt: 1, operations: 1, latest: '✦ scenery: forest, night' },
+      { stage: 'writing', attempt: 1, operations: 2, latest: '✦ dragon: guardian' },
+      { stage: 'checking', attempt: 1 },
+    ]);
   });
 });

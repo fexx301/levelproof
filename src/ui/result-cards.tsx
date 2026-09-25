@@ -3,9 +3,12 @@ import { useEffect, useRef } from 'react';
 import { useApp } from '../state/store.js';
 import { requirementId, requirementText } from '../core/level.js';
 import { verify } from '../core/verifier.js';
-import { describeOperations } from '../core/operation-description.js';
-import type { Level, Operation } from '../../shared/schema.js';
+import { describeOperations, summarizeChange } from '../core/operation-description.js';
+import { SCENERY_OPERATION_KINDS, type Level, type Operation } from '../../shared/schema.js';
 import type { ThemeKey } from '../../shared/api.js';
+import type { Report } from '../core/verifier.js';
+import { answerText, CHECK_QUESTIONS, DisclosureGlyph } from './check-strip.js';
+import type { CheckKind } from '../state/store.js';
 
 const THEME_LABELS: Record<ThemeKey, string> = {
   limestone: 'Limestone ruin',
@@ -46,36 +49,53 @@ export function ResultCards() {
   const sceneChanges = (operations: Operation[], before: Level, candidate: Level, title: string) => {
     const descriptions = describeOperations(operations, before, candidate);
     if (descriptions.length === 0) return <p className="card-note">No scene geometry changes.</p>;
+    const list = (
+      <ul className="preview-change-list" aria-label={title}>
+        {descriptions.map((description, index) => <li key={`change-${index}`}>{description}</li>)}
+      </ul>
+    );
     return (
       <div className="preview-changes">
-        <p className="card-title">{title}</p>
         <div className="preview-legend" aria-label="Scene marker key">
           <span className="preview-legend-before">Before / removed</span>
           <span className="preview-legend-after">Proposed / added</span>
         </div>
-        <ul className="preview-change-list" aria-label={title}>
-          {descriptions.map((description, index) => <li key={`${operations[index]?.kind ?? 'change'}-${index}`}>{description}</li>)}
-        </ul>
+        {descriptions.length <= 4 ? (
+          <>
+            <p className="card-title">{title}</p>
+            {list}
+          </>
+        ) : (
+          <details className="preview-details">
+            <summary><DisclosureGlyph />{title}: all {descriptions.length} changes</summary>
+            {list}
+          </details>
+        )}
       </div>
     );
   };
 
   if (pendingChange?.kind === 'patch') {
     const candidateReport = verify(pendingChange.candidate);
+    const hasScenery = pendingChange.operations.some((operation) => SCENERY_OPERATION_KINDS.has(operation.kind));
+    const revision = pendingChange.revision;
     return (
       <section ref={previewRef} className="card card--preview" aria-label="Edit preview">
         <div className="card-heading-row">
-          <h2 className="card-title">Edit preview</h2>
+          <h2 className="card-title">{pendingChange.aiFix ? 'AI fix — preview' : 'Edit preview'}</h2>
           <span className="preview-badge">{pendingChange.operations.length} op{pendingChange.operations.length === 1 ? '' : 's'}</span>
         </div>
+        <p className="card-summary">{summarizeChange(pendingChange.base, pendingChange.candidate)}</p>
         <p className="card-text">{pendingChange.rationale}</p>
+        {revision !== undefined && <RevisionNote revision={revision} aiFix={pendingChange.aiFix === true} />}
+        <EnginePrecheck report={candidateReport} />
         <p className="card-note">
-          Nothing has changed yet. Review the red/green scene markers, then apply when the edit looks right.
+          Nothing has changed yet — the scene shows the proposal. Apply {candidateReport.accepted ? 'accepts it as your new checkpoint.' : 'keeps it as a draft you can repair; your accepted checkpoint stays safe.'}
         </p>
         {sceneChanges(pendingChange.operations, pendingChange.base, pendingChange.candidate, 'Proposed scene changes')}
-        <p className="card-note">
-          Apply will {candidateReport.accepted ? 'accept this checkpoint.' : 'leave a draft for repair or review.'}
-        </p>
+        {hasScenery && (
+          <p className="card-note">Scenery (trees, statues, creatures, water) is decoration: the engine ignores it, and it never blocks or changes play.</p>
+        )}
         {pendingChange.nextTheme !== null && (
           <p className="card-note">Theme on apply: {THEME_LABELS[pendingChange.nextTheme]}</p>
         )}
@@ -191,5 +211,53 @@ export function ResultCards() {
       <p className="card-text">The reviewed requirement change is now part of the current scene.</p>
       {draft && <p className="card-note">The accepted checkpoint remains available while this draft is repaired or discarded.</p>}
     </section>
+  );
+}
+
+/** What the engine would conclude if the proposal were applied. */
+function EnginePrecheck({ report }: { report: Report }) {
+  const rows: Array<{ kind: CheckKind; status: Report['checks']['solution']['status'] }> = [
+    { kind: 'solution', status: report.checks.solution.status },
+    { kind: 'requirements', status: report.checks.requirements.status },
+    { kind: 'recovery', status: report.checks.recovery.status },
+  ];
+  return (
+    <div className="precheck" aria-label="Engine pre-check of this proposal">
+      <p className="precheck-title">Engine pre-check</p>
+      <ul>
+        {rows.map((row) => (
+          <li key={row.kind} className={`precheck-row precheck-row--${row.status}`}>
+            <span>{CHECK_QUESTIONS[row.kind].question}</span>
+            <strong>{answerText(row.kind, row.status)}</strong>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/** The AI↔engine loop, disclosed: what the engine found and what the revision did. */
+function RevisionNote({ revision, aiFix }: { revision: { findings: string[]; outcome: 'fixed' | 'improved' | 'unresolved' }; aiFix: boolean }) {
+  const headline = aiFix
+    ? revision.outcome === 'fixed'
+      ? 'The AI proposed a fix and the engine confirms every check passes.'
+      : revision.outcome === 'improved'
+        ? 'The AI proposed a fix that resolves some findings; review what remains.'
+        : 'The AI’s proposal does not resolve the findings — the checked repairs below may do better.'
+    : revision.outcome === 'fixed'
+      ? 'Revised once: the model’s first build could not be won, so the engine’s findings went back to the model and this revision fixes them.'
+      : revision.outcome === 'improved'
+        ? 'Revised once after the engine’s check; the revision is better but still fails a check.'
+        : 'The model’s first build could not be won and its revision did not fix it; showing the first build so you can repair it.';
+  return (
+    <div className={`revision-note revision-note--${revision.outcome}`}>
+      <p>{headline}</p>
+      <details>
+        <summary><DisclosureGlyph />What the engine found</summary>
+        <ul>
+          {revision.findings.map((finding) => <li key={finding}>{finding}</li>)}
+        </ul>
+      </details>
+    </div>
   );
 }

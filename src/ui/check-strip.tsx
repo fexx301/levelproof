@@ -20,17 +20,19 @@ export function RuleChips({ level }: { level: Level }) {
   );
 }
 
-function statusText(status: CheckedResult['status']): string {
-  switch (status) {
-    case 'pass':
-      return 'pass';
-    case 'fail':
-      return 'fail';
-    case 'unknown':
-      return 'check incomplete';
-    case 'not_applicable':
-      return 'not applicable';
-  }
+/** Plain-language questions, each backed by the named exhaustive check. */
+export const CHECK_QUESTIONS: Record<CheckKind, { question: string; technical: string }> = {
+  solution: { question: 'Can it be won?', technical: 'Solution' },
+  requirements: { question: 'Does it follow your rules?', technical: 'Design requirements' },
+  recovery: { question: 'Can a player get stuck?', technical: 'Recovery' },
+};
+
+/** The answer to the question, not the raw status: "stuck? — Never". */
+export function answerText(kind: CheckKind, status: CheckedResult['status']): string {
+  if (status === 'unknown') return 'Check incomplete';
+  if (status === 'not_applicable') return kind === 'requirements' ? 'No rules set' : 'Not applicable';
+  if (kind === 'recovery') return status === 'pass' ? 'Never' : 'Yes';
+  return status === 'pass' ? 'Yes' : 'No';
 }
 
 
@@ -50,29 +52,35 @@ export function DisclosureGlyph() {
  * rather than silently blocking acceptance.
  */
 export function CheckStrip({ report, ms }: { report: Report; ms: number }) {
-  const checks: Array<{ name: string; result: CheckedResult; kind: CheckKind }> = [
-    { name: 'Solution', result: report.checks.solution, kind: 'solution' },
-    { name: 'Design requirements', result: report.checks.requirements, kind: 'requirements' },
-    { name: 'Recovery', result: report.checks.recovery, kind: 'recovery' },
+  const checks: Array<{ result: CheckedResult; kind: CheckKind }> = [
+    { result: report.checks.solution, kind: 'solution' },
+    { result: report.checks.requirements, kind: 'requirements' },
+    { result: report.checks.recovery, kind: 'recovery' },
   ];
   return (
     <section className="check-strip" aria-label="Verification checks">
       <div className="check-strip-pin">
         <div className="check-strip-head">
-          <h2>Checks</h2>
+          <h2>Engine checks</h2>
           <a href="#rules">Under these game rules</a>
         </div>
         <p className={`acceptance${report.accepted ? ' is-accepted' : ''}`} role="status">
-          {report.accepted ? 'Accepted' : 'Not accepted'}
+          <span>{report.accepted ? 'Accepted' : 'Not accepted'}</span>
+          <span className="acceptance-note">{report.complete ? `${report.exploredCount} reachable states checked` : 'exploration incomplete'}</span>
         </p>
       </div>
-      {checks.map(({ name, result, kind }) => (
-        <div key={name} className={`check check--${result.status}`}>
+      {checks.map(({ result, kind }) => (
+        <div key={kind} className={`check check--${result.status}`}>
           <h3 className="check-name">
-            <span>{name}</span>
-            <span className="check-status">{statusText(result.status)}</span>
+            <span>
+              {CHECK_QUESTIONS[kind].question}
+              <span className="check-technical">{CHECK_QUESTIONS[kind].technical}</span>
+            </span>
+            <span className="check-status">{answerText(kind, result.status)}</span>
           </h3>
-          <p className="check-explanation">{result.explanation}</p>
+          {result.status !== 'pass' && result.status !== 'not_applicable' && (
+            <p className="check-explanation">{result.explanation}</p>
+          )}
           <ExplainCheck kind={kind} failing={result.status === 'fail'} replayable={result.witness !== undefined} />
         </div>
       ))}
@@ -86,11 +94,19 @@ export function CheckStrip({ report, ms }: { report: Report; ms: number }) {
           <DisclosureGlyph />
           Inspector
         </summary>
+        <ul className="inspector-body inspector-checks">
+          {checks.map(({ result, kind }) => (
+            <li key={kind}>{CHECK_QUESTIONS[kind].technical}: {result.explanation}</li>
+          ))}
+        </ul>
         <p className="inspector-body">
           {report.revisionId} · catalog {report.catalogVersion} · verifier {report.verifierVersion} ·{' '}
           {report.exploredCount} states explored · {ms.toFixed(1)} ms
           {!report.complete && ` · ${report.completionExplanation}`}
           {report.invalidReasons.length > 0 && ` · ${report.invalidReasons.join(' · ')}`}
+        </p>
+        <p className="check-note">
+          Exhaustive bounded exploration — one successful route never proves no bypasses or dead ends.
         </p>
       </details>
       {report.recoveryMap !== undefined &&
@@ -104,9 +120,6 @@ export function CheckStrip({ report, ms }: { report: Report; ms: number }) {
             .
           </p>
         )}
-      <p className="check-note">
-        Exhaustive bounded exploration — one successful route never proves no bypasses or dead ends.
-      </p>
     </section>
   );
 }

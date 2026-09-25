@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { Cardinal, Level } from '../shared/schema';
+import type { Cardinal, Level, ThemeKey } from '../shared/schema';
 import { verify, type Report } from './core/verifier';
 import { compileLevel } from './core/topology';
 import { actorBridge } from './render/bridge';
@@ -80,6 +80,16 @@ export function App() {
     const result = verify(level);
     return { report: result, ms: performance.now() - t0 };
   }, [level]);
+  // An AI proposal is shown as the world it would create, not as markers on
+  // the old one; nothing is applied until the author approves.
+  const preview = useApp((s) => s.preview);
+  const pendingTheme = useApp((s) => s.pendingRule?.nextTheme ?? null);
+  const previewing = mode === 'authoring' && preview?.source === 'ai';
+  const viewLevel = previewing ? preview.candidate : level;
+  const viewReport = useMemo(() => (viewLevel === level ? report : verify(viewLevel)), [viewLevel, level, report]);
+  const viewTheme = previewing ? (pendingTheme ?? theme) : theme;
+  const originSceneId = useApp((s) => s.originSceneId);
+  const originLabel = SCENES.find((scene) => scene.id === originSceneId)?.label ?? 'the scene';
 
   // Escape exits any non-authoring mode (the header control promises it).
   useEffect(() => {
@@ -124,6 +134,7 @@ export function App() {
                 value={sceneId}
                 onChange={(event) => loadScene(event.target.value)}
               >
+                {sceneId === '' && <option value="">Unsaved puzzle</option>}
                 <optgroup label="Scenes">
                   {SCENES.map((scene) => (
                     <option key={scene.id} value={scene.id}>
@@ -175,6 +186,7 @@ export function App() {
               )}
               <button
                 type="button"
+                title={`Reset to the original ${originLabel}`}
                 className={`reset-button${resetArmed ? ' button--danger' : ''}`}
                 onClick={() => {
                   if (resetArmTimer.current !== null) {
@@ -193,7 +205,7 @@ export function App() {
                   }
                 }}
               >
-                {resetArmed ? 'Confirm reset' : 'Reset to the empty vault'}
+                {resetArmed ? 'Confirm start over' : 'Start over'}
               </button>
             </>
           )}
@@ -220,7 +232,7 @@ export function App() {
         </div>
       )}
       <main className="app-main">
-        <Viewport level={level} mode={mode} report={report} />
+        <Viewport level={viewLevel} mode={mode} report={viewReport} theme={viewTheme} previewing={previewing} />
         <aside
           className="side-panel"
           ref={panelRef}
@@ -229,8 +241,8 @@ export function App() {
         >
           {mode === 'authoring' && (
             <>
-              <GettingStarted />
               <PromptPanel />
+              <GettingStarted />
               <SceneObjectPicker level={level} />
               <ResultCards />
               <RepairPanel report={report} />
@@ -246,13 +258,12 @@ export function App() {
   );
 }
 
-function Viewport({ level, mode, report }: { level: Level; mode: Mode; report: Report }) {
+function Viewport({ level, mode, report, theme, previewing }: { level: Level; mode: Mode; report: Report; theme: ThemeKey | null; previewing: boolean }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<SceneHandle | null>(null);
   const [sceneFailure, setSceneFailure] = useState<string | null>(null);
   const [sceneAttempt, setSceneAttempt] = useState(0);
   const witnessKind = useApp((s) => s.ghost.witnessKind);
-  const theme = useApp((s) => s.theme);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -397,6 +408,11 @@ function Viewport({ level, mode, report }: { level: Level; mode: Mode; report: R
       <button className="viewport-home" type="button" onClick={() => sceneRef.current?.frameLevel()}>
         Frame level
       </button>
+      {previewing && (
+        <p className="viewport-preview-badge" role="status">
+          Preview — not applied yet
+        </p>
+      )}
       {level.switches.length > 0 && (
         <p className="viewport-legend">Hexagonal plates can open gates · Triangular plates can seal routes</p>
       )}

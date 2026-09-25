@@ -41,6 +41,15 @@ export const twinKeysLevel: Level = {
     { type: 'collectBeforeGoal', keyId: 'silver-key' },
     { type: 'collectBeforeGoal', keyId: 'gold-key' },
   ],
+  scenery: { environment: 'snow', lighting: 'dusk', architecture: 'ivory' },
+  props: [
+    { id: 'silver-lantern', prop: 'lantern', x: 4, z: 5 },
+    { id: 'gold-lantern', prop: 'lantern', x: 8, z: 5 },
+    { id: 'vault-warden-w', prop: 'statue', x: 5, z: 2 },
+    { id: 'vault-warden-e', prop: 'statue', x: 7, z: 2 },
+    { id: 'frost-crystal', prop: 'crystal', x: 5, z: 7 },
+    { id: 'stair-crystal', prop: 'crystal', x: 7, z: 7 },
+  ],
 };
 
 export const overpassLevel: Level = {
@@ -76,6 +85,14 @@ export const overpassLevel: Level = {
     { id: 'lower-seal', a: 'under-north', b: 'key-deep', conditions: { closesAfterSwitch: 'bridge-relay' } },
   ],
   requirements: [{ type: 'collectBeforeGoal', keyId: 'pass-key' }],
+  scenery: { environment: 'sea', lighting: 'day', architecture: 'patina' },
+  props: [
+    { id: 'dock-barrels', prop: 'barrel', x: 9, z: 11 },
+    { id: 'harbor-lantern', prop: 'lantern', x: 8, z: 11 },
+    { id: 'relay-console', prop: 'console', x: 6, z: 9 },
+    { id: 'signal-mast', prop: 'antenna', x: 7, z: 6 },
+    { id: 'reef-rocks', prop: 'rock', x: 5, z: 10 },
+  ],
 };
 
 export const gauntletLevel: Level = {
@@ -110,4 +127,15 @@ export const gauntletLevel: Level = {
     { id: 'treasure-door', a: 'sanctum', b: 'treasure-room', conditions: { requiresSwitch: 'vault-seal' } },
   ],
   requirements: [{ type: 'collectBeforeGoal', keyId: 'brass-key' }],
+  scenery: { environment: 'volcanic', lighting: 'night', architecture: 'basalt' },
+  props: [
+    { id: 'vault-dragon', prop: 'dragon', x: 8, z: 9 },
+    { id: 'approach-brazier', prop: 'brazier', x: 7, z: 8 },
+    { id: 'hoard-chest', prop: 'chest', x: 7, z: 6 },
+    { id: 'hoard-brazier', prop: 'brazier', x: 7, z: 6 },
+    { id: 'moat-west', prop: 'lava', x: 6, z: 6 },
+    { id: 'moat-west-2', prop: 'lava', x: 6, z: 7 },
+    { id: 'moat-east', prop: 'lava', x: 8, z: 6 },
+    { id: 'moat-east-2', prop: 'lava', x: 8, z: 7 },
+  ],
 };

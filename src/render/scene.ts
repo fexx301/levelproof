@@ -6,6 +6,10 @@ import { GEOMETRY, centerPoint, dirDelta, portPoint, type Vec3 } from '../core/c
 import { doorPassable, initialState } from '../core/movement.js';
 import { craftedBox, rampGeometry, sceneBounds, framingPoints, fitOverview } from './craft.js';
 import { createMechanisms, type WorldVisuals } from './mechanisms.js';
+import { buildKeyLook } from './props.js';
+import { atmosphere, buildScenery, GROUND_Y } from './scenery.js';
+import type { PreviewMarker } from './preview-diff.js';
+import { revisionId } from '../core/serialize.js';
 import { artDirection, switchSignature, type ArtDirection, type ThemeKey } from './art-direction.js';
 import type { Level } from '../../shared/schema.js';
 import { neighbor, type CompiledLevel } from '../core/topology.js';
@@ -447,6 +451,7 @@ function addItems(
   decorUpdates: DecorUpdate[],
   visuals: WorldVisuals,
   tag?: (root: THREE.Object3D, id: string) => void,
+  dark = false,
 ): void {
   for (const key of compiled.level.keys) {
     const m = compiled.moduleById.get(key.moduleId);
@@ -459,19 +464,26 @@ function addItems(
     keyMat.emissive.setHex(style.color);
     keyMat.emissiveIntensity = 0.15;
     keyMat.roughness = 0.35;
-    const bow = new THREE.Mesh(new THREE.TorusGeometry(26, 9, 10, style.sides), keyMat);
-    bow.position.x = -36;
-    const shaft = new THREE.Mesh(craftedBox(72, 12, 12), keyMat);
-    shaft.position.x = 8;
-    for (const [x, h] of [
-      [28, 24],
-      [8, 18],
-    ] as const) {
-      const tooth = new THREE.Mesh(craftedBox(12, h, 12), keyMat);
-      tooth.position.set(x, -6 - h / 2, 0);
-      group.add(tooth);
+    const look = buildKeyLook(key.look ?? 'key', style.color, keyMat, dark);
+    if (look.parts.length > 0) {
+      // Cosmetic look (a torch, a gem): same float, spin, and collection.
+      group.add(...look.parts);
+      if (look.update !== undefined) decorUpdates.push((dt, elapsed) => { if (!reducedMotion()) look.update!(dt, elapsed); });
+    } else {
+      const bow = new THREE.Mesh(new THREE.TorusGeometry(26, 9, 10, style.sides), keyMat);
+      bow.position.x = -36;
+      const shaft = new THREE.Mesh(craftedBox(72, 12, 12), keyMat);
+      shaft.position.x = 8;
+      for (const [x, h] of [
+        [28, 24],
+        [8, 18],
+      ] as const) {
+        const tooth = new THREE.Mesh(craftedBox(12, h, 12), keyMat);
+        tooth.position.set(x, -6 - h / 2, 0);
+        group.add(tooth);
+      }
+      group.add(bow, shaft);
     }
-    group.add(bow, shaft);
     group.scale.setScalar(1.6);
     const baseY = c.y + 105;
     group.position.set(c.x, baseY, c.z);
@@ -574,6 +586,10 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel, theme?: T
   const mats = buildMats(direction);
   const world = new THREE.Group();
   scene.add(world);
+  const environment = compiled.level.scenery?.environment ?? 'void';
+  const lighting = compiled.level.scenery?.lighting ?? 'day';
+  const air = atmosphere(environment, lighting);
+  const dark = lighting === 'night' || environment === 'cavern' || environment === 'space';
   // mesh -> entity id, for click-to-select (§12 "select, then describe").
   const meshToEntity = new Map<THREE.Object3D, string>();
   const visuals: WorldVisuals = { keys: new Map(), switches: new Map(), doors: new Map() };
@@ -587,7 +603,22 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel, theme?: T
   }
   addDoorFrames(world, mats, compiled, visuals, tag);
   const decorUpdates: DecorUpdate[] = [];
-  addItems(world, mats, compiled, decorUpdates, visuals, tag);
+  addItems(world, mats, compiled, decorUpdates, visuals, tag, dark);
+  // Scenery: cosmetic world dressing the engine never reads. Landmarks join
+  // the pickable world ("move this statue"); terrain and scatter do not.
+  const cameraVector = new THREE.Vector3(...direction.camera);
+  const scenery = buildScenery(compiled.level, {
+    environment,
+    lighting,
+    accent: direction.trim,
+    stone: direction.wall,
+    cameraSide: { x: cameraVector.x, z: cameraVector.z },
+    reduced: reducedMotion,
+  });
+  for (const landmark of scenery.landmarks) {
+    world.add(landmark.object);
+    tag(landmark.object, landmark.id);
+  }
   // Everything solid casts and receives; upper floors shadow lower ones.
   world.traverse((obj) => {
     if (obj instanceof THREE.Mesh) {
@@ -595,12 +626,27 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel, theme?: T
       obj.receiveShadow = true;
     }
   });
+  for (const landmark of scenery.landmarks) {
+    if (landmark.tile) landmark.object.traverse((obj) => { if (obj instanceof THREE.Mesh) obj.castShadow = false; });
+  }
+  scene.add(scenery.environmentRoot);
+  for (const light of scenery.lights) scene.add(light);
+  decorUpdates.push(scenery.update);
+  if (environment !== 'void') {
+    scene.background = new THREE.Color(air.horizon);
+    scene.fog = scenery.fog;
+  }
+  renderer.toneMappingExposure = air.exposure;
 
   // Lighting: warm key light with real shadows, cool sky fill, faint ambient.
-  scene.add(new THREE.HemisphereLight(direction.sky, COLORS.groundLight, 1.4));
+  // The scene's lighting (day, dusk, night) sets color, strength, and angle.
+  const sunColor = lighting === 'day' ? direction.light : air.sunColor;
+  const hemiSky = lighting === 'day' && environment === 'void' ? direction.sky : air.hemiSky;
+  scene.add(new THREE.HemisphereLight(hemiSky, air.hemiGround, air.hemiIntensity));
   const center = layoutCenter(compiled);
-  const sun = new THREE.DirectionalLight(direction.light, 2.4);
-  sun.position.set(center.x - 1800, 6200, center.z + 1000);
+  const sun = new THREE.DirectionalLight(sunColor, air.sunIntensity);
+  const sunReach = 6400 * (1 - air.sunElevation) + 1600;
+  sun.position.set(center.x - sunReach * 0.87, 6400 * air.sunElevation + 900, center.z + sunReach * 0.48);
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
   sun.shadow.camera.near = 500;
@@ -611,7 +657,7 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel, theme?: T
   sun.shadow.blurSamples = 12;
   scene.add(sun);
   scene.add(sun.target);
-  const fill = new THREE.DirectionalLight(COLORS.fillLight, 0.8);
+  const fill = new THREE.DirectionalLight(lighting === 'day' ? COLORS.fillLight : air.fillColor, air.fillIntensity);
   fill.position.set(center.x + 2500, 1400, center.z - 1800);
   fill.target.position.set(center.x, center.y, center.z);
   scene.add(fill, fill.target);
@@ -661,6 +707,7 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel, theme?: T
   frameHome();
   cachedFit = computeFit();
   frameHome();
+  scenery.setFogRange(cachedFit);
   // Keyboard orbit only while the canvas itself is focused, so arrows stay
   // free for manual play; damping follows reduced-motion changes live.
   renderer.domElement.tabIndex = 0;
@@ -675,8 +722,39 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel, theme?: T
   const actorUpdates = new Set<(dt: number, elapsed: number) => void>();
   let lastTime = performance.now();
   let frame = 0;
+  // Adaptive quality: after warm-up, sustained slow frames first lower the
+  // render resolution, then drop terrain shadows and particles. Gameplay,
+  // the diorama, and every overlay are unaffected.
+  let qualityLevel = 0;
+  let warmupFrames = 40;
+  let sampledFrames = 0;
+  let slowFrames = 0;
+  const adaptQuality = (frameMs: number): void => {
+    if (qualityLevel >= 2) return;
+    if (warmupFrames > 0) {
+      warmupFrames -= 1;
+      return;
+    }
+    sampledFrames += 1;
+    if (frameMs > 34) slowFrames += 1;
+    if (sampledFrames < 45) return;
+    if (slowFrames > 30) {
+      qualityLevel += 1;
+      if (qualityLevel === 1 && renderer.getPixelRatio() > 1) {
+        renderer.setPixelRatio(1);
+        renderer.setSize(host.clientWidth || 800, host.clientHeight || 600);
+      } else {
+        qualityLevel = 2;
+        scenery.reduceDetail();
+      }
+      warmupFrames = 20;
+    }
+    sampledFrames = 0;
+    slowFrames = 0;
+  };
   const tick = () => {
     const now = performance.now();
+    adaptQuality(now - lastTime);
     const dt = Math.min((now - lastTime) / 1000, 0.1);
     lastTime = now;
     for (const update of actorUpdates) update(dt, now);
@@ -697,6 +775,7 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel, theme?: T
     camera.updateProjectionMatrix();
     renderer.setSize(w, h);
     cachedFit = computeFit();
+    scenery.setFogRange(cachedFit);
     frameHome();
   };
   const observer = new ResizeObserver(resize);
@@ -787,6 +866,16 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel, theme?: T
     return null;
   };
 
+  const propMarkerPosition = (level: Level, marker: PreviewMarker): Vec3 | null => {
+    if (marker.cell === undefined) return null;
+    const host = level.modules
+      .filter((module) => module.x === marker.cell!.x && module.z === marker.cell!.z)
+      .sort((a, b) => b.h - a.h)[0];
+    const x = marker.cell.x * GEOMETRY.cellPitchCm + GEOMETRY.cellPitchCm / 2;
+    const z = marker.cell.z * GEOMETRY.cellPitchCm + GEOMETRY.cellPitchCm / 2;
+    return { x, y: host ? centerPoint(host).y : GROUND_Y, z };
+  };
+
   const moduleWash = (level: Level, id: string, material: THREE.Material): THREE.Mesh | null => {
     const module = level.modules.find((entry) => entry.id === id);
     if (module === undefined) return null;
@@ -830,16 +919,51 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel, theme?: T
     previewGroup.visible = false;
   };
 
+  const stillInPlace = (before: Level, after: Level, marker: PreviewMarker): boolean => {
+    if (marker.kind === 'module') {
+      const a = before.modules.find((m) => m.id === marker.id);
+      const b = after.modules.find((m) => m.id === marker.id);
+      return a !== undefined && b !== undefined && a.x === b.x && a.z === b.z && a.h === b.h;
+    }
+    if (marker.kind === 'item') {
+      const find = (level: Level) => [...level.keys, ...level.switches].find((item) => item.id === marker.id)?.moduleId;
+      return find(before) !== undefined && find(before) === find(after);
+    }
+    if (marker.kind === 'door') return after.doors.some((door) => door.id === marker.id);
+    return false;
+  };
+
   const buildPreview = (preview: PreviewState): void => {
     clearPreview();
     // The state layer validates the complete candidate before it reaches the
     // renderer. A stale preview is ignored rather than re-applied locally;
     // this is what keeps atomic rule changes (remove key + requirement) intact.
-    if (preview.baseRevision !== compiled.revisionId) return;
+    // The scene may show either side of the edit: the base with markers, or
+    // (for AI proposals) the candidate itself. Anything else is stale.
+    if (preview.baseRevision !== compiled.revisionId && revisionId(preview.candidate) !== compiled.revisionId) return;
     const { before, candidate: after } = preview;
+    // When the scene already shows the proposal itself, green "added" rings
+    // only add clutter: keep a soft wash on new floors and red markers for
+    // what the proposal removes or moves away.
+    const showingCandidate = compiled.revisionId !== preview.baseRevision;
     for (const marker of previewDiff(before, after)) {
       const level = marker.phase === 'old' ? before : after;
       const material = marker.phase === 'old' ? previewMats.old : previewMats.fresh;
+      // On the proposal itself, "old" markers only mean something for what
+      // is gone or has moved; an entity changed in place is already visible.
+      if (showingCandidate && marker.phase === 'old' && stillInPlace(before, after, marker)) continue;
+      if (showingCandidate && marker.phase === 'fresh') {
+        if (marker.kind === 'module') {
+          const wash = moduleWash(level, marker.id, previewTileMats.fresh);
+          if (wash) previewGroup.add(wash);
+        }
+        continue;
+      }
+      if (marker.kind === 'prop') {
+        const p = propMarkerPosition(level, marker);
+        if (p) ringAt(p.x, p.y, p.z, material, 1.4);
+        continue;
+      }
       const a = positionInLevel(level, marker.moduleId);
       if (!a) continue;
       if (marker.kind === 'module') {
@@ -966,6 +1090,8 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel, theme?: T
         return { x: (ca.x + cb.x) / 2, y: (ca.y + cb.y) / 2, z: (ca.z + cb.z) / 2 };
       }
     }
+    const landmark = scenery.landmarks.find((entry) => entry.id === id);
+    if (landmark) return { x: landmark.base.x, y: landmark.base.y, z: landmark.base.z };
     return null;
   };
   const raycaster = new THREE.Raycaster();
@@ -1122,6 +1248,7 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel, theme?: T
       };
       disposeAll(world);
       disposeAll(stage);
+      scenery.dispose();
       for (const overlay of [analysisGroup, previewGroup, selectionGroup, protectedGroup, evidenceGroup]) {
         for (const child of [...overlay.children]) {
           overlay.remove(child);

@@ -1,6 +1,13 @@
 import { create } from 'zustand';
 import type { RuleProposalResult, CompileResult } from '../../shared/compile-result.js';
-import { compileOkResponseSchema, explainOkResponseSchema, themeKeySchema, type ThemeKey } from '../../shared/api.js';
+import {
+  compileOkResponseSchema,
+  compileStreamEventSchema,
+  explainOkResponseSchema,
+  themeKeySchema,
+  type CompileProgress,
+  type ThemeKey,
+} from '../../shared/api.js';
 import { levelSchema, type Level, type Operation } from '../../shared/schema.js';
 import { unfamiliarLevel } from '../core/fixtures/unfamiliar.js';
 import { vaultEmptyLevel } from '../core/fixtures/vault-empty.js';
@@ -10,6 +17,8 @@ import { applyOperations, applyRuleProposal, requirementText } from '../core/lev
 import { findRepairs, touchesProtected, type RepairCandidate } from '../core/search.js';
 import { verify, type Report } from '../core/verifier.js';
 import { buildFailureEvidence, type FailureEvidence } from '../core/failure-evidence.js';
+import { engineFindings } from '../core/engine-findings.js';
+import { summarizeChange } from '../core/operation-description.js';
 import type { MoveRecord } from '../core/movement.js';
 import { validateRoute } from '../core/replay.js';
 import { decodeLevelShare, encodeLevelShare, revisionId } from '../core/serialize.js';
@@ -129,6 +138,10 @@ type PendingChange =
       prompt: string;
       nextTheme: ThemeKey | null;
       baseRevision: string;
+      /** AI↔engine loop: the engine findings a revision answered, and whether it fixed them. */
+      revision?: { findings: string[]; outcome: 'fixed' | 'improved' | 'unresolved' };
+      /** An AI proposal that repairs the current draft rather than a new request. */
+      aiFix?: boolean;
     }
   | {
       kind: 'rule';
@@ -147,6 +160,127 @@ interface CompileMeta {
   attempts: number;
   model: string;
 }
+
+export interface CompileProgressState {
+  startedAt: number;
+  stage: 'sending' | CompileProgress['stage'] | 'revising';
+  /** Headlines of the model's reasoning summary, in order. */
+  headlines: string[];
+  operations: number;
+  /** The most recent streamed operation labels (unvalidated until the end). */
+  recent: string[];
+  attempt: number;
+  note: string | null;
+  /** True while the model is revising against the engine's findings. */
+  revising?: boolean;
+}
+
+function progressStart(note: string | null = null, stage: CompileProgressState['stage'] = 'sending'): CompileProgressState {
+  return { startedAt: Date.now(), stage, headlines: [], operations: 0, recent: [], attempt: 1, note };
+}
+
+function applyProgress(state: CompileProgressState, event: CompileProgress): CompileProgressState {
+  switch (event.stage) {
+    case 'thinking':
+      return {
+        ...state,
+        stage: 'thinking',
+        attempt: event.attempt,
+        headlines: event.headline !== undefined && !state.headlines.includes(event.headline) ? [...state.headlines, event.headline] : state.headlines,
+      };
+    case 'writing':
+      return {
+        ...state,
+        stage: 'writing',
+        attempt: event.attempt,
+        operations: event.operations,
+        recent: event.latest !== undefined ? [...state.recent, event.latest].slice(-40) : state.recent,
+      };
+    case 'checking':
+      return { ...state, stage: 'checking', attempt: event.attempt };
+    case 'retrying':
+      return { ...state, stage: 'retrying', attempt: event.attempt, note: event.reason, operations: 0, recent: [] };
+  }
+}
+
+/**
+ * POST /api/compile, preferring the streamed form. Progress events update the
+ * UI; the final result carries exactly what the plain endpoint returns. An
+ * older server (or a test fixture) answering with plain JSON still works.
+ */
+async function postCompile(
+  body: Record<string, unknown>,
+  signal: AbortSignal,
+  onProgress: (event: CompileProgress) => void,
+): Promise<{ ok: boolean; status: number; body: unknown }> {
+  const response = await fetch('/api/compile', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/x-ndjson, application/json' },
+    signal,
+    body: JSON.stringify(body),
+  });
+  // Minimal fetch doubles may omit headers; treat them as plain JSON.
+  const contentType = response.headers?.get?.('content-type') ?? '';
+  if (!contentType.includes('application/x-ndjson') || response.body === null || response.body === undefined) {
+    return { ok: response.ok, status: response.status, body: await response.json() };
+  }
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let final: { status: number; body: unknown } | null = null;
+  const handle = (line: string): void => {
+    if (line.trim().length === 0) return;
+    let raw: unknown;
+    try {
+      raw = JSON.parse(line);
+    } catch {
+      return;
+    }
+    const event = compileStreamEventSchema.safeParse(raw);
+    if (!event.success) return;
+    if (event.data.event === 'progress') onProgress(event.data.progress);
+    else final = { status: event.data.status, body: event.data.body };
+  };
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let newline: number;
+    while ((newline = buffer.indexOf('\n')) >= 0) {
+      handle(buffer.slice(0, newline));
+      buffer = buffer.slice(newline + 1);
+    }
+  }
+  handle(buffer);
+  if (final === null) throw new Error('The compile stream ended without a result.');
+  const settled = final as { status: number; body: unknown };
+  return { ok: settled.status >= 200 && settled.status < 300, status: settled.status, body: settled.body };
+}
+
+const REMOVAL_KINDS = new Set<Operation['kind']>(['removeModule', 'removeItem', 'removeDoor', 'removeProp']);
+
+/**
+ * An additive build that cannot be won is almost never what the author
+ * meant, so it gets one automatic AI↔engine revision. Edits that remove
+ * things are shown exactly as asked: breaking a level can be the point.
+ */
+export function shouldAutoRevise(base: Level, candidate: Level, operations: Operation[]): boolean {
+  if (operations.length === 0 || operations.some((operation) => REMOVAL_KINDS.has(operation.kind))) return false;
+  const before = verify(base);
+  const after = verify(candidate);
+  return after.valid && after.complete && after.checks.solution.status === 'fail' && before.checks.solution.status !== 'fail';
+}
+
+/** Fewer failing checks is better; an unwinnable level is worst. */
+function reportScore(report: Report): number {
+  if (!report.valid) return 100;
+  return (report.checks.solution.status === 'fail' ? 10 : 0) +
+    (report.checks.requirements.status === 'fail' ? 3 : 0) +
+    (report.checks.recovery.status === 'fail' ? 2 : 0) +
+    (report.complete ? 0 : 1);
+}
+
+export const AI_FIX_PROMPT = 'Fix the failing checks in this puzzle without losing its idea.';
 
 interface GhostSlice {
   witnessKind: WitnessKind | null;
@@ -190,6 +324,8 @@ interface AppState {
   acceptedLevel: Level;
   /** Current scene: a static scene id or "saved:<id>" for a saved puzzle. */
   sceneId: string;
+  /** The gallery scene this editing lineage started from ("Start over" target). */
+  originSceneId: SceneId;
   /** The one complete, validated preview payload rendered as scene markers. */
   preview: PreviewState | null;
   /** Identity of the accepted checkpoint, independent from an open draft. */
@@ -227,6 +363,8 @@ interface AppState {
   lastPrompt: string | null;
   lastCompileMeta: CompileMeta | null;
   busy: boolean;
+  /** Live progress of the running compile (streamed model plan and operations). */
+  compileProgress: CompileProgressState | null;
   error: string | null;
   mode: Mode;
   ghost: GhostSlice;
@@ -238,6 +376,9 @@ interface AppState {
   recoveryStatus: 'ready' | 'malformed' | 'unavailable';
   explainCheck: (kind: CheckKind) => Promise<void>;
   submitPrompt: (prompt: string, clarificationContext?: string) => Promise<void>;
+  /** Ask the model to repair the failing draft; the engine judges the result. */
+  requestAiFix: () => Promise<void>;
+  cancelCompile: () => void;
   approveRule: () => void;
   declineRule: () => void;
   applyPatch: () => void;
@@ -305,30 +446,6 @@ const EXPLAIN_INITIAL: ExplainSlice = {
   busy: false,
   error: null,
 };
-
-/** One-line human summary of an applied patch (§12 visible edits). */
-function summarizeOperations(operations: Operation[]): string {
-  const counts = new Map<string, number>();
-  const names: string[] = [];
-  for (const op of operations) {
-    if (op.kind === 'addModule') names.push(`${op.module.template} "${op.module.id}"`);
-    else if (op.kind === 'removeModule') names.push(`removed "${op.id}"`);
-    else if (op.kind === 'moveModule') names.push(`moved "${op.id}"`);
-    else if (op.kind === 'addItem') names.push(`${op.itemType} "${op.id}"`);
-    else if (op.kind === 'removeItem') names.push(`removed ${op.kind === 'removeItem' ? 'item' : ''} "${op.id}"`);
-    else if (op.kind === 'moveItem') names.push(`moved "${op.id}"`);
-    else if (op.kind === 'addDoor') names.push(`door "${op.door.id}"`);
-    else if (op.kind === 'removeDoor') names.push(`removed door "${op.id}"`);
-    else if (op.kind === 'moveSpawn') names.push('spawn moved');
-    else if (op.kind === 'moveGoal') names.push('goal moved');
-    else if (op.kind === 'setModulePorts') names.push(`re-ported "${op.id}"`);
-    else if (op.kind === 'setDoorConditions') names.push(`re-conditioned door "${op.id}"`);
-    void counts;
-  }
-  if (names.length === 0) return 'No changes.';
-  const shown = names.slice(0, 3).join(', ');
-  return names.length > 3 ? `${shown} +${names.length - 3} more` : shown;
-}
 
 /** Theme words in a prompt → the theme side-channel (presentation only). */
 function themeFromPrompt(prompt: string): ThemeKey | undefined {
@@ -541,6 +658,10 @@ export const useApp = create<AppState>()((set, get) => ({
   acceptedSceneId: initialRecovery === null
     ? initialWindow.viaShare ? '' : 'balcony-vault'
     : recoveredSceneId(initialRecovery.acceptedSceneId, ''),
+  originSceneId: (() => {
+    const candidates = [initialRecovery?.sceneId, initialRecovery?.acceptedSceneId];
+    return (SCENES.find((scene) => candidates.includes(scene.id))?.id ?? 'balcony-vault') as SceneId;
+  })(),
   preview: initialRecovery?.pending === null || initialRecovery === null
     ? null
     : (() => {
@@ -577,6 +698,7 @@ export const useApp = create<AppState>()((set, get) => ({
   lastPrompt: initialRecovery?.lastPrompt ?? null,
   lastCompileMeta: initialRecovery?.lastCompileMeta ?? null,
   busy: false,
+  compileProgress: null,
   error: null,
   mode: initialWindow.mode,
   viaShare: initialWindow.viaShare,
@@ -671,7 +793,7 @@ export const useApp = create<AppState>()((set, get) => ({
     activeCompileController?.abort();
     const controller = new AbortController();
     activeCompileController = controller;
-    set({ busy: true, error: null, evidence: null, promptDraft: prompt });
+    set({ busy: true, error: null, evidence: null, promptDraft: prompt, compileProgress: progressStart() });
     const selection = state.selection;
     const history = state.promptHistory;
     const base = state.draft?.level ?? state.acceptedLevel;
@@ -680,96 +802,124 @@ export const useApp = create<AppState>()((set, get) => ({
     // the request is in flight (scene picker, reset), the result is stale and
     // is discarded instead of applied to the wrong level.
     const boundRevision = revisionId(base);
-    try {
-      const response = await fetch('/api/compile', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        signal: controller.signal,
-        body: JSON.stringify({
-          level: base,
-          prompt,
-          clarificationContext,
-          selection,
-          protectedIds: state.protectedIds,
-          history: history.map((h) => ({ prompt: h })),
-          ...(requestedTheme !== null ? { theme: requestedTheme } : {}),
-        }),
-      });
-      const body: unknown = await response.json();
+    const onProgress = (event: CompileProgress): void => {
       if (generation !== contextGeneration) return;
-      if (!response.ok) {
-        set({ busy: false, error: `${extractError(body)} Your prompt is still available — try again when the service is ready.`, lastResult: null, lastCompileMeta: null });
+      set({ compileProgress: applyProgress(get().compileProgress ?? progressStart(), event) });
+    };
+    const requestBody: Record<string, unknown> = {
+      level: base,
+      prompt,
+      clarificationContext,
+      selection,
+      protectedIds: state.protectedIds,
+      history: history.map((h) => ({ prompt: h })),
+      ...(requestedTheme !== null ? { theme: requestedTheme } : {}),
+    };
+    const fail = (message: string, extra: Partial<AppState> = {}): void => {
+      set({ busy: false, compileProgress: null, error: message, lastResult: null, lastCompileMeta: null, ...extra });
+    };
+    const stillCurrent = (): boolean => revisionId(get().draft?.level ?? get().acceptedLevel) === boundRevision;
+    try {
+      const first = await postCompile(requestBody, controller.signal, onProgress);
+      if (generation !== contextGeneration) return;
+      if (!first.ok) {
+        fail(`${extractError(first.body)} Your prompt is still available — try again when the service is ready.`);
         return;
       }
-      const parsed = compileOkResponseSchema.safeParse(body);
+      const parsed = compileOkResponseSchema.safeParse(first.body);
       if (!parsed.success) {
-        set({ busy: false, error: 'The compile response failed validation.', lastResult: null, lastCompileMeta: null });
+        fail('The compile response failed validation.');
         return;
       }
       const { result, baseRevision, cached, attempts, totalCostUsd, generationCostUsd, theme } = parsed.data;
-      const stillCurrent = revisionId(get().draft?.level ?? get().acceptedLevel) === boundRevision;
-      if (generation !== contextGeneration || !stillCurrent || baseRevision !== boundRevision) {
-        set({
-          busy: false,
-          error: 'The scene changed while compiling; the result was discarded.',
-          lastResult: null,
-          lastCompileMeta: null,
-        });
+      if (!stillCurrent() || baseRevision !== boundRevision) {
+        fail('The scene changed while compiling; the result was discarded.');
         return;
       }
       const proposedOperations = result.type === 'patch' || result.type === 'rule_proposal' ? result.operations : [];
       const keptAtResponse = get().protectedIds;
       if (keptAtResponse.length > 0 && touchesProtected(proposedOperations, new Set(keptAtResponse))) {
-        set({
-          busy: false,
-          error: 'The proposal changes an object marked Keep these. Nothing changed. Remove that object from Keep these or revise the request.',
-          lastResult: null,
-          lastPrompt: prompt,
-          lastCompileMeta: null,
-        });
+        fail('The proposal changes an object marked Keep these. Nothing changed. Remove that object from Keep these or revise the request.', { lastPrompt: prompt });
         return;
       }
       const model = attempts.length > 0 ? (attempts.at(-1)?.model ?? 'unknown') : 'cache';
-      set({
-        lastResult: result,
-        lastPrompt: prompt,
-        lastCompileMeta: { cached, totalCostUsd, generationCostUsd: generationCostUsd ?? null, attempts: attempts.length, model },
-      });
+      let meta: CompileMeta = { cached, totalCostUsd, generationCostUsd: generationCostUsd ?? null, attempts: attempts.length, model };
+      set({ lastResult: result, lastPrompt: prompt, lastCompileMeta: meta });
       const nextTheme = theme ?? requestedTheme;
 
       if (result.type === 'patch') {
         const applied = applyOperations(base, result.operations);
         if (!applied.ok) {
-          set({ busy: false, error: `The proposed edit was rejected: ${applied.errors[0]}`, lastResult: null });
+          fail(`The proposed edit was rejected: ${applied.errors[0]}`);
           return;
         }
+        let chosen = { result, candidate: applied.level };
+        let revision: { findings: string[]; outcome: 'fixed' | 'improved' | 'unresolved' } | undefined;
+        if (shouldAutoRevise(base, applied.level, result.operations)) {
+          // The AI↔engine loop: the engine found the build unwinnable, so the
+          // model gets its verified findings and one chance to revise.
+          const firstReport = verify(applied.level);
+          const findings = engineFindings(applied.level, firstReport);
+          set({ compileProgress: { ...progressStart(findings[0] ?? null, 'revising'), startedAt: get().compileProgress?.startedAt ?? Date.now(), revising: true } });
+          revision = { findings, outcome: 'unresolved' };
+          try {
+            const second = await postCompile({ ...requestBody, revision: { operations: result.operations } }, controller.signal, onProgress);
+            if (generation !== contextGeneration) return;
+            const revised = second.ok ? compileOkResponseSchema.safeParse(second.body) : null;
+            if (revised?.success && revised.data.result.type === 'patch' && revised.data.baseRevision === boundRevision && stillCurrent()) {
+              const revisedResult = revised.data.result;
+              const revisedApplied = applyOperations(base, revisedResult.operations);
+              const kept = get().protectedIds;
+              if (revisedApplied.ok && !(kept.length > 0 && touchesProtected(revisedResult.operations, new Set(kept)))) {
+                const revisedReport = verify(revisedApplied.level);
+                if (reportScore(revisedReport) < reportScore(firstReport)) {
+                  chosen = { result: revisedResult, candidate: revisedApplied.level };
+                  revision = { findings, outcome: revisedReport.checks.solution.status === 'fail' ? 'improved' : 'fixed' };
+                }
+              }
+              meta = {
+                cached: meta.cached && revised.data.cached,
+                totalCostUsd: meta.totalCostUsd === null || revised.data.totalCostUsd === null ? null : meta.totalCostUsd + revised.data.totalCostUsd,
+                generationCostUsd: meta.generationCostUsd === null || (revised.data.generationCostUsd ?? null) === null ? null : meta.generationCostUsd + (revised.data.generationCostUsd ?? 0),
+                attempts: meta.attempts + revised.data.attempts.length,
+                model: revised.data.attempts.at(-1)?.model ?? meta.model,
+              };
+            }
+          } catch {
+            if (generation !== contextGeneration || controller.signal.aborted) return;
+          }
+        }
         set({
+          lastResult: chosen.result,
+          lastCompileMeta: meta,
           pendingRule: {
             kind: 'patch',
             base,
-            candidate: applied.level,
-            operations: result.operations,
-            rationale: result.rationale,
-            assumptions: result.assumptions,
+            candidate: chosen.candidate,
+            operations: chosen.result.operations,
+            rationale: chosen.result.rationale,
+            assumptions: chosen.result.assumptions,
             prompt,
             nextTheme,
             baseRevision: boundRevision,
+            ...(revision !== undefined ? { revision } : {}),
           },
           repairReplay: null,
           preview: {
             source: 'ai',
             baseRevision: boundRevision,
             before: base,
-            candidate: applied.level,
-            operations: result.operations,
+            candidate: chosen.candidate,
+            operations: chosen.result.operations,
           },
           selection: [],
           busy: false,
+          compileProgress: null,
         });
       } else if (result.type === 'rule_proposal') {
         const applied = applyRuleProposal(base, result);
         if (!applied.ok) {
-          set({ busy: false, error: `The rule proposal was rejected: ${applied.errors[0]}`, lastResult: null });
+          fail(`The rule proposal was rejected: ${applied.errors[0]}`);
           return;
         }
         set({
@@ -784,18 +934,119 @@ export const useApp = create<AppState>()((set, get) => ({
           },
           selection: [],
           busy: false,
+          compileProgress: null,
         });
       } else {
-        set({ pendingRule: null, preview: null, busy: false });
+        set({ pendingRule: null, preview: null, busy: false, compileProgress: null });
       }
     } catch (error) {
       if (generation === contextGeneration) {
         const message = error instanceof Error ? error.message : 'Network error.';
-        set({ busy: false, error: `${message} Your prompt is still available — try again when the service is ready.` });
+        set({ busy: false, compileProgress: null, error: `${message} Your prompt is still available — try again when the service is ready.` });
       }
     } finally {
       if (activeCompileController === controller) activeCompileController = null;
     }
+  },
+
+  requestAiFix: async () => {
+    const state = get();
+    if (state.busy || state.pendingRule !== null || state.draft === null) return;
+    const base = state.draft.level;
+    const baseReport = verify(base);
+    const findings = engineFindings(base, baseReport);
+    if (findings.length === 0) return;
+    const generation = ++contextGeneration;
+    activeCompileController?.abort();
+    const controller = new AbortController();
+    activeCompileController = controller;
+    const boundRevision = revisionId(base);
+    set({ busy: true, error: null, evidence: null, preview: null, compileProgress: { ...progressStart(findings[0] ?? null, 'revising'), revising: true } });
+    const onProgress = (event: CompileProgress): void => {
+      if (generation !== contextGeneration) return;
+      set({ compileProgress: applyProgress(get().compileProgress ?? progressStart(), event) });
+    };
+    const fail = (message: string): void => set({ busy: false, compileProgress: null, error: message });
+    try {
+      const response = await postCompile({
+        level: base,
+        prompt: AI_FIX_PROMPT,
+        protectedIds: state.protectedIds,
+        history: state.promptHistory.map((h) => ({ prompt: h })),
+        ...(state.theme !== null ? { theme: state.theme } : {}),
+        revision: { operations: [] },
+      }, controller.signal, onProgress);
+      if (generation !== contextGeneration) return;
+      if (!response.ok) {
+        fail(`${extractError(response.body)} The draft is unchanged.`);
+        return;
+      }
+      const parsed = compileOkResponseSchema.safeParse(response.body);
+      if (!parsed.success) {
+        fail('The fix response failed validation. The draft is unchanged.');
+        return;
+      }
+      const { result, baseRevision, cached, attempts, totalCostUsd, generationCostUsd } = parsed.data;
+      if (baseRevision !== boundRevision || revisionId(get().draft?.level ?? get().acceptedLevel) !== boundRevision) {
+        fail('The scene changed while the AI was working; the fix was discarded.');
+        return;
+      }
+      set({
+        lastResult: result,
+        lastPrompt: AI_FIX_PROMPT,
+        lastCompileMeta: { cached, totalCostUsd, generationCostUsd: generationCostUsd ?? null, attempts: attempts.length, model: attempts.at(-1)?.model ?? 'cache' },
+      });
+      if (result.type !== 'patch') {
+        set({ busy: false, compileProgress: null, pendingRule: null, preview: null });
+        return;
+      }
+      const kept = get().protectedIds;
+      if (kept.length > 0 && touchesProtected(result.operations, new Set(kept))) {
+        fail('The AI fix would change an object marked Keep these, so it was not offered.');
+        return;
+      }
+      const applied = applyOperations(base, result.operations);
+      if (!applied.ok) {
+        fail(`The AI fix was rejected by the engine: ${applied.errors[0]}`);
+        return;
+      }
+      const fixedReport = verify(applied.level);
+      const outcome = fixedReport.accepted ? 'fixed' : reportScore(fixedReport) < reportScore(baseReport) ? 'improved' : 'unresolved';
+      set({
+        pendingRule: {
+          kind: 'patch',
+          base,
+          candidate: applied.level,
+          operations: result.operations,
+          rationale: result.rationale,
+          assumptions: result.assumptions,
+          prompt: AI_FIX_PROMPT,
+          nextTheme: get().theme,
+          baseRevision: boundRevision,
+          aiFix: true,
+          revision: { findings, outcome },
+        },
+        preview: { source: 'ai', baseRevision: boundRevision, before: base, candidate: applied.level, operations: result.operations },
+        repairReplay: null,
+        selection: [],
+        busy: false,
+        compileProgress: null,
+      });
+    } catch (error) {
+      if (generation === contextGeneration) {
+        fail(`${error instanceof Error ? error.message : 'Network error.'} The draft is unchanged.`);
+      }
+    } finally {
+      if (activeCompileController === controller) activeCompileController = null;
+    }
+  },
+
+  cancelCompile: () => {
+    if (!get().busy) return;
+    contextGeneration += 1;
+    activeCompileController?.abort();
+    activeCompileController = null;
+    set({ busy: false, compileProgress: null, error: 'Compile cancelled. Your prompt is still here.' });
   },
 
   approveRule: () => {
@@ -823,7 +1074,7 @@ export const useApp = create<AppState>()((set, get) => ({
     const summary =
       proposal.newRequirements.length > 0
         ? `Rule: ${proposal.newRequirements.map(requirementText).join('; ')}`
-        : summarizeOperations(proposal.operations);
+        : summarizeChange(currentBase, level);
     const accepted = settleDraft(set, get, base, level, true, summary, pendingRule.nextTheme, nextPromptHistory);
     if (accepted) {
       set({
@@ -859,7 +1110,7 @@ export const useApp = create<AppState>()((set, get) => ({
     }
     const priorHistory = get().history;
     const nextPromptHistory = [...get().promptHistory, pendingRule.prompt].slice(-6);
-    const summary = summarizeOperations(pendingRule.operations);
+    const summary = summarizeChange(currentBase, applied.level);
     const accepted = settleDraft(set, get, pendingRule.base, applied.level, false, summary, pendingRule.nextTheme, nextPromptHistory);
     if (accepted) {
       set({
@@ -886,6 +1137,7 @@ export const useApp = create<AppState>()((set, get) => ({
       lastCompileMeta: null,
       error: null,
       busy: false,
+      compileProgress: null,
       theme: acceptedTheme,
       promptHistory: [...acceptedPromptHistory],
       changeSummary: null,
@@ -921,6 +1173,7 @@ export const useApp = create<AppState>()((set, get) => ({
       lastCompileMeta: null,
       error: null,
       busy: false,
+      compileProgress: null,
       changeSummary: null,
       mode: 'authoring',
       ghost: GHOST_INITIAL,
@@ -935,8 +1188,10 @@ export const useApp = create<AppState>()((set, get) => ({
 
   resetVault: () => {
     invalidateContext();
+    const origin = get().originSceneId;
+    const originScene = SCENES.find((scene) => scene.id === origin);
     set({
-      acceptedLevel: initialLevel(),
+      acceptedLevel: originScene !== undefined && origin !== 'balcony-vault' ? originScene.level : initialLevel(),
       acceptedTheme: null,
       acceptedPromptHistory: [],
       theme: null,
@@ -950,6 +1205,7 @@ export const useApp = create<AppState>()((set, get) => ({
       lastCompileMeta: null,
       error: null,
       busy: false,
+      compileProgress: null,
       changeSummary: null,
       mode: 'authoring',
       viaShare: false,
@@ -963,8 +1219,8 @@ export const useApp = create<AppState>()((set, get) => ({
       selection: [],
       protectedIds: [],
       evidence: null,
-      sceneId: 'balcony-vault',
-      acceptedSceneId: 'balcony-vault',
+      sceneId: origin,
+      acceptedSceneId: origin,
     });
   },
 
@@ -1013,6 +1269,7 @@ export const useApp = create<AppState>()((set, get) => ({
         lastCompileMeta: null,
         error: null,
         busy: false,
+        compileProgress: null,
         mode: 'authoring',
         ghost: GHOST_INITIAL,
         play: PLAY_INITIAL,
@@ -1031,6 +1288,7 @@ export const useApp = create<AppState>()((set, get) => ({
     }
 
     set({
+      ...(scene !== undefined ? { originSceneId: scene.id } : {}),
       acceptedLevel: level,
       acceptedSceneId: id,
       acceptedTheme: theme,
@@ -1046,6 +1304,7 @@ export const useApp = create<AppState>()((set, get) => ({
       lastCompileMeta: null,
       error: null,
       busy: false,
+      compileProgress: null,
       mode: 'authoring',
       ghost: GHOST_INITIAL,
       play: PLAY_INITIAL,
@@ -1073,7 +1332,7 @@ export const useApp = create<AppState>()((set, get) => ({
 
   startPlay: () => {
     invalidateContext();
-    set({ mode: 'playing', ghost: GHOST_INITIAL, play: PLAY_INITIAL, pendingRule: null, preview: null, lastResult: null, lastPrompt: null, lastCompileMeta: null, busy: false, evidence: null });
+    set({ mode: 'playing', ghost: GHOST_INITIAL, play: PLAY_INITIAL, pendingRule: null, preview: null, lastResult: null, lastPrompt: null, lastCompileMeta: null, busy: false, compileProgress: null, evidence: null });
   },
 
   exitToAuthoring: () => set({ mode: 'authoring', ghost: GHOST_INITIAL, play: PLAY_INITIAL, evidence: null }),
@@ -1223,6 +1482,7 @@ export const useApp = create<AppState>()((set, get) => ({
       lastCompileMeta: null,
       error: null,
       busy: false,
+      compileProgress: null,
       mode: 'authoring',
       ghost: GHOST_INITIAL,
       play: PLAY_INITIAL,
@@ -1364,6 +1624,7 @@ export const useApp = create<AppState>()((set, get) => ({
       lastCompileMeta: null,
       error: null,
       busy: false,
+      compileProgress: null,
     });
   },
 

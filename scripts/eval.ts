@@ -36,6 +36,7 @@ const PRICES: Record<string, [number, number]> = {
   'deepseek/deepseek-v3.2': [0.2689, 0.3999],
   'qwen/qwen-plus': [0.26, 0.78],
   'google/gemini-3.7-flash': [0.75, 3.75],
+  'google/gemini-3.8-flash': [0.75, 3.75],
 };
 
 interface Grade {

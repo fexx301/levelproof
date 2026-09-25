@@ -44,6 +44,9 @@ export function RepairPanel({ report }: { report: Report }) {
   const watchReplay = useApp((s) => s.watchReplay);
 
   const protectedIds = useApp((s) => s.protectedIds);
+  const requestAiFix = useApp((s) => s.requestAiFix);
+  const busy = useApp((s) => s.busy);
+  const pendingChange = useApp((s) => s.pendingRule);
 
   if (!draft || draft.report.accepted) {
     // A repair was applied and the level is green again: offer the replay of
@@ -67,19 +70,27 @@ export function RepairPanel({ report }: { report: Report }) {
   return (
     <section className="panel" aria-label="Repairs">
       <h2 className="panel-title">Repairs</h2>
-      {repair.status === 'idle' || repair.status === 'running' ? (
-        <>
-          <p className="panel-note">Search checked fixes that keep every active rule.</p>
-          <button
-            type="button"
-            disabled={repair.status === 'running'}
-            style={{ minWidth: '8rem' }}
-            onClick={() => runRepairs(report)}
-          >
-            {repair.status === 'running' ? 'Searching…' : 'Find repairs'}
+      <div className="repair-options">
+        <div className="repair-option">
+          <button type="button" className="button--accent" disabled={busy || pendingChange !== null} onClick={() => void requestAiFix()}>
+            Ask the AI to fix it
           </button>
-        </>
-      ) : (
+          <p className="panel-note">Sends the engine’s findings to the model and asks for a fix that keeps your idea. The engine checks the proposal before you see it.</p>
+        </div>
+        {(repair.status === 'idle' || repair.status === 'running') && (
+          <div className="repair-option">
+            <button
+              type="button"
+              disabled={repair.status === 'running'}
+              onClick={() => runRepairs(report)}
+            >
+              {repair.status === 'running' ? 'Searching…' : 'Find checked repairs'}
+            </button>
+            <p className="panel-note">A deterministic search: only fixes that pass every check and keep every rule.</p>
+          </div>
+        )}
+      </div>
+      {repair.status === 'idle' || repair.status === 'running' ? null : (
         <>
           <p className="panel-note">
             {repair.note} {repair.explored} candidate{repair.explored === 1 ? '' : 's'} checked in{' '}

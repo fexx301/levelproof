@@ -5,7 +5,11 @@
  * strict mode requires every property in `required`.
  */
 
+import { BOUNDS, ENVIRONMENTS, KEY_LOOKS, LIGHTINGS, PROP_KINDS, THEME_KEYS } from '../../shared/schema.js';
+
 const idJson = { type: 'string', pattern: '^[a-z][a-z0-9-]{1,31}$' } as const;
+const cellJson = { type: 'integer', minimum: 0, maximum: 15 } as const;
+const nullableEnum = (values: readonly string[]) => ({ type: ['string', 'null'], enum: [...values, null] }) as const;
 const cardinalJson = { type: 'string', enum: ['N', 'E', 'S', 'W'] } as const;
 const nullableCardinalJson = { type: ['string', 'null'], enum: ['N', 'E', 'S', 'W', null] } as const;
 
@@ -123,12 +127,13 @@ const operationJson = {
     {
       type: 'object',
       additionalProperties: false,
-      required: ['kind', 'itemType', 'id', 'moduleId'],
+      required: ['kind', 'itemType', 'id', 'moduleId', 'look'],
       properties: {
         kind: { type: 'string', enum: ['addItem'] },
         itemType: { type: 'string', enum: ['key', 'switch'] },
         id: idJson,
         moduleId: idJson,
+        look: nullableEnum(KEY_LOOKS),
       },
     },
     {
@@ -185,6 +190,47 @@ const operationJson = {
       required: ['kind', 'id'],
       properties: { kind: { type: 'string', enum: ['removeDoor'] }, id: idJson },
     },
+    {
+      type: 'object',
+      additionalProperties: false,
+      required: ['kind', 'environment', 'lighting', 'architecture'],
+      properties: {
+        kind: { type: 'string', enum: ['setScenery'] },
+        environment: nullableEnum(ENVIRONMENTS),
+        lighting: nullableEnum(LIGHTINGS),
+        architecture: nullableEnum(THEME_KEYS),
+      },
+    },
+    {
+      type: 'object',
+      additionalProperties: false,
+      required: ['kind', 'id', 'prop', 'x', 'z'],
+      properties: {
+        kind: { type: 'string', enum: ['addProp'] },
+        id: idJson,
+        prop: { type: 'string', enum: [...PROP_KINDS] },
+        x: cellJson,
+        z: cellJson,
+      },
+    },
+    {
+      type: 'object',
+      additionalProperties: false,
+      required: ['kind', 'id', 'x', 'z'],
+      properties: { kind: { type: 'string', enum: ['moveProp'] }, id: idJson, x: cellJson, z: cellJson },
+    },
+    {
+      type: 'object',
+      additionalProperties: false,
+      required: ['kind', 'id'],
+      properties: { kind: { type: 'string', enum: ['removeProp'] }, id: idJson },
+    },
+    {
+      type: 'object',
+      additionalProperties: false,
+      required: ['kind', 'id', 'look'],
+      properties: { kind: { type: 'string', enum: ['setKeyLook'] }, id: idJson, look: { type: 'string', enum: [...KEY_LOOKS] } },
+    },
   ],
 } as const;
 
@@ -198,7 +244,7 @@ export const compileResultJsonSchema = {
         type: { type: 'string', enum: ['patch'] },
         rationale: { type: 'string' },
         assumptions: { type: 'array', items: { type: 'string' }, maxItems: 8 },
-        operations: { type: 'array', items: operationJson, maxItems: 16 },
+        operations: { type: 'array', items: operationJson, maxItems: BOUNDS.maxOpsPerPatch },
       },
     },
     {
@@ -230,7 +276,7 @@ export const compileResultJsonSchema = {
         reason: { type: 'string' },
         oldRequirements: { type: 'array', items: requirementJson, maxItems: 3 },
         newRequirements: { type: 'array', items: requirementJson, maxItems: 3 },
-        operations: { type: 'array', items: operationJson, maxItems: 16 },
+        operations: { type: 'array', items: operationJson, maxItems: BOUNDS.maxOpsPerPatch },
       },
     },
     {

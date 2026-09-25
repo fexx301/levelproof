@@ -1,5 +1,6 @@
 import {
   BOUNDS,
+  GROUND_TILE_PROPS,
   levelSchema,
   operationSchema,
   type Level,
@@ -141,6 +142,28 @@ export function validateLevel(level: Level): string[] {
     }
   }
 
+  // Scenery props are cosmetic, but their ids share the entity namespace so
+  // "this statue" and "that door" can never be ambiguous.
+  const propIds = new Set<string>();
+  const propsPerCell = new Map<string, number>();
+  for (const prop of lvl.props ?? []) {
+    if (propIds.has(prop.id)) errors.push(`Duplicate prop id "${prop.id}".`);
+    if (moduleIds.has(prop.id) || keyIds.has(prop.id) || switchIds.has(prop.id) || doorIds.has(prop.id)) {
+      errors.push(`Prop "${prop.id}" reuses the id of another scene entity.`);
+    }
+    propIds.add(prop.id);
+    const cell = `${prop.x},${prop.z}`;
+    const count = (propsPerCell.get(cell) ?? 0) + 1;
+    propsPerCell.set(cell, count);
+    if (count === 5) errors.push(`Cell (${prop.x}, ${prop.z}) holds more than 4 props.`);
+    if (GROUND_TILE_PROPS.has(prop.prop)) {
+      const groundModule = lvl.modules.find((m) => m.x === prop.x && m.z === prop.z && m.h === 0);
+      if (groundModule !== undefined) {
+        errors.push(`${prop.prop} tile "${prop.id}" must sit on open ground; cell (${prop.x}, ${prop.z}) holds ground-level module "${groundModule.id}".`);
+      }
+    }
+  }
+
   errors.push(...validateGeometry(lvl));
 
   // Doors sit on connected edges; at most one door per edge (§4.3).
@@ -223,7 +246,8 @@ export function applyOperations(base: Level, operations: Operation[]): ApplyResu
         if (list.some((i) => i.id === op.id) || other.some((i) => i.id === op.id)) {
           return fail(`Item "${op.id}" already exists.`);
         }
-        list.push({ id: op.id, moduleId: op.moduleId });
+        if (op.look !== undefined && op.itemType !== 'key') return fail(`Only keys have a look; "${op.id}" is a switch.`);
+        list.push({ id: op.id, moduleId: op.moduleId, ...(op.look !== undefined ? { look: op.look } : {}) });
         break;
       }
       case 'moveItem': {
@@ -274,8 +298,48 @@ export function applyOperations(base: Level, operations: Operation[]): ApplyResu
         draft.doors.splice(index, 1);
         break;
       }
+      case 'setScenery': {
+        const next = {
+          ...draft.scenery,
+          ...(op.environment !== undefined ? { environment: op.environment } : {}),
+          ...(op.lighting !== undefined ? { lighting: op.lighting } : {}),
+          ...(op.architecture !== undefined ? { architecture: op.architecture } : {}),
+        };
+        if (op.environment === undefined && op.lighting === undefined && op.architecture === undefined) {
+          return fail('setScenery needs an environment, lighting, or architecture.');
+        }
+        draft.scenery = next;
+        break;
+      }
+      case 'addProp': {
+        const props = draft.props ?? [];
+        if (props.some((p) => p.id === op.id)) return fail(`Prop "${op.id}" already exists.`);
+        draft.props = [...props, { id: op.id, prop: op.prop, x: op.x, z: op.z }];
+        break;
+      }
+      case 'moveProp': {
+        const prop = draft.props?.find((p) => p.id === op.id);
+        if (!prop) return fail(`Unknown prop "${op.id}".`);
+        prop.x = op.x;
+        prop.z = op.z;
+        break;
+      }
+      case 'removeProp': {
+        const props = draft.props ?? [];
+        if (!props.some((p) => p.id === op.id)) return fail(`Unknown prop "${op.id}".`);
+        draft.props = props.filter((p) => p.id !== op.id);
+        break;
+      }
+      case 'setKeyLook': {
+        const key = draft.keys.find((k) => k.id === op.id);
+        if (!key) return fail(`Unknown key "${op.id}".`);
+        key.look = op.look;
+        break;
+      }
     }
   }
+  // An emptied scenery list is the same level as one that never had it.
+  if (draft.props !== undefined && draft.props.length === 0) delete draft.props;
 
   const errors = validateLevel(draft);
   if (errors.length > 0) return { ok: false, errors };

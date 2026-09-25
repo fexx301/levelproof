@@ -1,13 +1,12 @@
 import { z } from 'zod';
 import { compileResultSchema } from './compile-result.js';
-import { BOUNDS, idSchema, levelSchema } from './schema.js';
+import { BOUNDS, idSchema, levelSchema, operationSchema, themeKeySchema } from './schema.js';
 
 /** Wire contract for POST /api/compile (§10). */
 
-/** Presentation themes are deliberately kept outside Level semantics. */
-export const THEME_KEYS = ['limestone', 'ivory', 'patina', 'basalt', 'futuristic'] as const;
-export const themeKeySchema = z.enum(THEME_KEYS);
-export type ThemeKey = z.infer<typeof themeKeySchema>;
+/** Architecture palettes never affect Level semantics; the author's explicit
+ * choice overrides the scene's own scenery.architecture. */
+export { THEME_KEYS, themeKeySchema, type ThemeKey } from './schema.js';
 
 export const compileRequestSchema = z.strictObject({
   level: levelSchema,
@@ -24,6 +23,9 @@ export const compileRequestSchema = z.strictObject({
   /** Presentation theme the author asked for ("make it a stone ruin").
    * Presentation only — never part of level semantics. */
   theme: themeKeySchema.optional(),
+  /** AI↔engine revision: an earlier attempt's operations (empty = repair the
+   * current scene). The server recomputes the engine findings itself. */
+  revision: z.strictObject({ operations: z.array(operationSchema).max(BOUNDS.maxOpsPerPatch) }).optional(),
 });
 export type CompileRequest = z.infer<typeof compileRequestSchema>;
 
@@ -81,3 +83,22 @@ export const explainOkResponseSchema = z.strictObject({
   generationCostUsd: z.number().nullable().optional(),
 });
 export type ExplainOkResponse = z.infer<typeof explainOkResponseSchema>;
+
+/**
+ * Streaming compile (Accept: application/x-ndjson): newline-delimited progress
+ * events, ending with exactly one "result" event that carries the status and
+ * body the plain JSON endpoint would have returned.
+ */
+export const compileProgressSchema = z.discriminatedUnion('stage', [
+  z.strictObject({ stage: z.literal('thinking'), attempt: z.number().int(), headline: z.string().max(120).optional() }),
+  z.strictObject({ stage: z.literal('writing'), attempt: z.number().int(), operations: z.number().int(), latest: z.string().max(160).optional() }),
+  z.strictObject({ stage: z.literal('checking'), attempt: z.number().int() }),
+  z.strictObject({ stage: z.literal('retrying'), attempt: z.number().int(), reason: z.string().max(300) }),
+]);
+export type CompileProgress = z.infer<typeof compileProgressSchema>;
+
+export const compileStreamEventSchema = z.union([
+  z.strictObject({ event: z.literal('progress'), progress: compileProgressSchema }),
+  z.strictObject({ event: z.literal('result'), status: z.number().int(), body: z.unknown() }),
+]);
+export type CompileStreamEvent = z.infer<typeof compileStreamEventSchema>;

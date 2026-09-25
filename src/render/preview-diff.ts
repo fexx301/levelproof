@@ -3,10 +3,12 @@ import type { Level, LevelModule } from '../../shared/schema.js';
 /** A location marker for a before/after edit preview. */
 export interface PreviewMarker {
   phase: 'old' | 'fresh';
-  kind: 'module' | 'item' | 'door' | 'spawn' | 'goal';
+  kind: 'module' | 'item' | 'door' | 'spawn' | 'goal' | 'prop';
   id: string;
+  /** Host module; empty for props, which are placed by grid cell instead. */
   moduleId: string;
   otherModuleId?: string;
+  cell?: { x: number; z: number };
 }
 
 function sameModule(a: LevelModule, b: LevelModule): boolean {
@@ -99,6 +101,21 @@ export function previewDiff(before: Level, after: Level): PreviewMarker[] {
   if (before.goal !== after.goal) {
     markers.push({ phase: 'old', kind: 'goal', id: 'goal', moduleId: before.goal });
     markers.push({ phase: 'fresh', kind: 'goal', id: 'goal', moduleId: after.goal });
+  }
+
+  const beforeProps = new Map((before.props ?? []).map((prop) => [prop.id, prop] as const));
+  const afterProps = new Map((after.props ?? []).map((prop) => [prop.id, prop] as const));
+  for (const [id, prop] of beforeProps) {
+    const next = afterProps.get(id);
+    if (next === undefined || next.x !== prop.x || next.z !== prop.z || next.prop !== prop.prop) {
+      markers.push({ phase: 'old', kind: 'prop', id, moduleId: '', cell: { x: prop.x, z: prop.z } });
+    }
+    if (next !== undefined && (next.x !== prop.x || next.z !== prop.z || next.prop !== prop.prop)) {
+      markers.push({ phase: 'fresh', kind: 'prop', id, moduleId: '', cell: { x: next.x, z: next.z } });
+    }
+  }
+  for (const [id, prop] of afterProps) {
+    if (!beforeProps.has(id)) markers.push({ phase: 'fresh', kind: 'prop', id, moduleId: '', cell: { x: prop.x, z: prop.z } });
   }
 
   return markers;

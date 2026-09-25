@@ -343,14 +343,14 @@ button:focus-visible {
 .getting-started {
   display: grid;
   gap: var(--space-2);
-  padding: var(--space-4);
+  padding: var(--space-2) var(--space-3);
   border: 1px solid color-mix(in oklab, var(--color-accent) 42%, var(--color-line));
   background: color-mix(in oklab, var(--color-accent) 7%, var(--color-panel));
 }
 
 .getting-started h2 {
   margin: 0;
-  font-size: var(--text-md);
+  font-size: var(--text-sm);
 }
 
 .getting-started-head {
@@ -376,19 +376,20 @@ button:focus-visible {
 }
 
 .guide-steps {
-  display: grid;
-  gap: var(--space-2);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-3);
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
 .guide-steps li {
-  display: grid;
-  grid-template-columns: 24px 1fr;
-  gap: var(--space-2);
-  align-items: start;
+  display: flex;
+  gap: var(--space-1);
+  align-items: center;
   color: var(--color-muted);
+  font-size: var(--text-xs);
 }
 
 .guide-steps li.is-complete {
@@ -398,8 +399,8 @@ button:focus-visible {
 .guide-step-number {
   display: grid;
   place-items: center;
-  width: 24px;
-  height: 24px;
+  width: 20px;
+  height: 20px;
   border: 1px solid var(--color-line);
   border-radius: 50%;
   color: var(--color-accent-strong);
@@ -1094,7 +1095,7 @@ details.inspector[open] summary .disclosure-glyph {
 
 .acceptance {
   font-family: var(--font-data);
-  font-size: var(--text-lg);
+  font-size: var(--text-md);
   font-weight: 600;
   margin: 0;
 }
@@ -1111,7 +1112,23 @@ details.inspector[open] summary .disclosure-glyph {
   border: 0;
   border-top: 1px solid var(--color-rule-soft);
   border-radius: 0;
-  padding: var(--space-3) 0;
+  padding: var(--space-2) 0;
+}
+
+.check-technical {
+  display: block;
+  color: var(--color-muted);
+  font-family: var(--font-data);
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 0.02em;
+}
+
+.inspector-checks {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding-left: var(--space-4);
 }
 
 .check--pass {
@@ -1351,4 +1368,284 @@ details.inspector[open] summary .disclosure-glyph {
     top: calc(-1 * var(--space-3));
     z-index: 1;
   }
+}
+
+
+/* ---- Live compile progress (streamed plan and operations) ---- */
+.compile-progress {
+  border: 1px solid color-mix(in oklab, var(--color-accent) 45%, var(--color-line));
+  border-radius: var(--radius-md);
+  background: color-mix(in oklab, var(--color-accent) 6%, var(--color-panel));
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3);
+}
+
+.compile-progress.is-revising {
+  border-color: color-mix(in oklab, var(--color-fail) 55%, var(--color-line));
+  background: color-mix(in oklab, var(--color-fail) 7%, var(--color-panel));
+}
+
+.compile-progress-head {
+  align-items: center;
+  display: flex;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+}
+
+.compile-progress-time {
+  color: var(--color-muted);
+  font-family: var(--font-data);
+  font-size: var(--text-xs);
+  margin-left: auto;
+}
+
+.compile-progress-pulse {
+  background: var(--color-accent);
+  border-radius: 50%;
+  flex: none;
+  height: 8px;
+  width: 8px;
+}
+
+.is-revising .compile-progress-pulse {
+  background: var(--color-fail);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .compile-progress-pulse {
+    animation: progress-pulse 1.1s ease-in-out infinite;
+  }
+
+  .compile-progress-ops li:last-child,
+  .compile-progress-headlines li.is-current {
+    animation: progress-enter 220ms ease-out;
+  }
+}
+
+@keyframes progress-pulse {
+  0%, 100% { opacity: 0.35; transform: scale(0.8); }
+  50% { opacity: 1; transform: scale(1.15); }
+}
+
+@keyframes progress-enter {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.compile-progress-finding {
+  color: var(--color-text);
+  font-size: var(--text-xs);
+  line-height: 1.45;
+  margin: 0;
+}
+
+.compile-progress-finding span {
+  color: var(--color-fail-bright);
+  font-weight: 600;
+}
+
+.compile-progress-headlines {
+  display: grid;
+  gap: var(--space-05);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.compile-progress-headlines li {
+  color: var(--color-muted);
+  font-size: var(--text-xs);
+}
+
+.compile-progress-headlines li::before {
+  content: '✓ ';
+  color: var(--color-pass);
+}
+
+.compile-progress-headlines li.is-current {
+  color: var(--color-text);
+}
+
+.compile-progress-headlines li.is-current::before {
+  content: '› ';
+  color: var(--color-accent-strong);
+}
+
+.compile-progress-ops {
+  border-top: 1px solid var(--color-rule-soft);
+  display: grid;
+  font-family: var(--font-data);
+  font-size: var(--text-xs);
+  gap: 2px;
+  list-style: none;
+  margin: 0;
+  padding: var(--space-2) 0 0;
+}
+
+.compile-progress-ops li {
+  color: var(--color-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compile-progress-ops li:last-child {
+  color: var(--color-text);
+}
+
+.compile-progress-foot {
+  align-items: center;
+  display: flex;
+  gap: var(--space-2);
+  justify-content: space-between;
+}
+
+/* ---- Preview card: summary, engine pre-check, revision note ---- */
+.card-summary {
+  font-size: var(--text-md);
+  font-weight: 600;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.precheck {
+  border: 1px solid var(--color-rule-soft);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+}
+
+.precheck-title {
+  color: var(--color-muted);
+  font-size: var(--text-xs);
+  letter-spacing: 0.06em;
+  margin: 0 0 var(--space-1);
+  text-transform: uppercase;
+}
+
+.precheck ul {
+  display: grid;
+  gap: 2px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.precheck-row {
+  display: flex;
+  font-size: var(--text-sm);
+  justify-content: space-between;
+}
+
+.precheck-row strong {
+  font-family: var(--font-data);
+  font-size: var(--text-xs);
+}
+
+.precheck-row--pass strong { color: var(--color-pass); }
+.precheck-row--fail strong { color: var(--color-fail); }
+.precheck-row--unknown strong { color: var(--color-unknown); }
+.precheck-row--not_applicable strong { color: var(--color-na); }
+
+.revision-note {
+  border-left: 3px solid var(--color-accent);
+  display: grid;
+  gap: var(--space-1);
+  font-size: var(--text-sm);
+  padding-left: var(--space-2);
+}
+
+.revision-note p {
+  margin: 0;
+  line-height: 1.45;
+}
+
+.revision-note--fixed { border-left-color: var(--color-pass); }
+.revision-note--unresolved { border-left-color: var(--color-fail); }
+
+.revision-note ul,
+.preview-details ul {
+  color: var(--color-muted);
+  font-size: var(--text-xs);
+  line-height: 1.45;
+  margin: var(--space-1) 0 0;
+  padding-left: var(--space-4);
+}
+
+.revision-note summary,
+.preview-details summary {
+  color: var(--color-muted);
+  cursor: pointer;
+  font-size: var(--text-xs);
+}
+
+.viewport-preview-badge {
+  background: color-mix(in oklab, var(--color-pass) 22%, var(--color-panel));
+  border: 1px solid var(--color-pass);
+  border-radius: 999px;
+  color: var(--color-text);
+  font-size: var(--text-xs);
+  left: 50%;
+  margin: 0;
+  padding: var(--space-1) var(--space-3);
+  position: absolute;
+  top: var(--space-4);
+  transform: translateX(-50%);
+  z-index: 1;
+}
+
+.repair-options {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.repair-option {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.repair-option button {
+  justify-self: start;
+}
+
+.button--accent {
+  border-color: var(--color-accent);
+  color: var(--color-accent-strong);
+}
+
+.button--accent:not(:disabled):hover {
+  background: color-mix(in oklab, var(--color-accent) 14%, var(--color-panel));
+}
+
+.acceptance-note {
+  color: var(--color-muted);
+  font-family: var(--font-data);
+  font-size: var(--text-xs);
+  font-weight: 400;
+  margin-left: var(--space-2);
+}
+
+.revision-note summary,
+.preview-details summary {
+  list-style: none;
+}
+
+.revision-note summary::-webkit-details-marker,
+.preview-details summary::-webkit-details-marker {
+  display: none;
+}
+
+.revision-note summary .disclosure-glyph,
+.preview-details summary .disclosure-glyph {
+  display: inline-block;
+  margin-right: var(--space-1);
+}
+
+.revision-note details[open] > summary .disclosure-glyph,
+.preview-details[open] > summary .disclosure-glyph {
+  transform: rotate(90deg);
+}
+
+.compile-progress-time {
+  white-space: nowrap;
 }

@@ -181,7 +181,7 @@ export async function explain(
     models,
     promptVersion: EXPLAIN_PROMPT_VERSION,
   });
-  const hit = explainCache.get(key);
+  const hit = await explainCache.get(key);
   if (hit !== null) {
     return { explanation: hit.value, cached: true, attempts: hit.attempts, totalCostUsd: 0, generationCostUsd: hit.generationCostUsd };
   }
@@ -238,8 +238,8 @@ export async function explain(
     return { text };
   };
 
-  const finish = (text: string): ExplainOutcome => {
-    explainCache.set(key, {
+  const finish = async (text: string): Promise<ExplainOutcome> => {
+    await explainCache.set(key, {
       value: text,
       attempts,
       generationCostUsd: totalCostUsd,

@@ -56,6 +56,8 @@ test('selects a visible floor and keeps selection/protection across theme remoun
 });
 
 test('shows an added object in the preview, applies the same candidate, then saves and shares it', async ({ page, context, browser }, testInfo) => {
+  // Seven animated moves under software WebGL need more than the default budget.
+  test.setTimeout(240_000);
   await fixtureCompile(page, addBalconyKey);
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
   await page.goto('/');
@@ -92,7 +94,9 @@ test('shows an added object in the preview, applies the same candidate, then sav
   ];
   for (const [direction, destination] of journey) {
     await playPanel.getByRole('button', { name: `Move ${direction}` }).click();
-    await expect(playPanel.getByText(destination, { exact: true })).toBeVisible();
+    // Each move animates to completion; software WebGL in CI renders the
+    // dressed scene at a few frames per second, so allow for slow frames.
+    await expect(playPanel.getByText(destination, { exact: true })).toBeVisible({ timeout: 20_000 });
   }
   await expect(playPanel.getByRole('status').filter({ hasText: 'Goal reached' })).toHaveText('Goal reached');
   await page.getByRole('button', { name: 'Back to editing (Esc)' }).click();
@@ -176,8 +180,8 @@ test('applies a rule-linked trap as a draft and replays its verified stranded wi
   await expect(page.getByRole('region', { name: 'Rule proposal' })).toBeVisible();
   await page.getByRole('button', { name: 'Approve' }).click();
   await expect(page.getByRole('heading', { name: 'Rule applied — draft' })).toBeVisible();
-  await expect(page.getByRole('region', { name: 'Verification checks' })).toContainText('Recovery');
-  await expect(page.getByRole('region', { name: 'Verification checks' })).toContainText('fail');
+  await expect(page.getByRole('region', { name: 'Verification checks' })).toContainText('Can a player get stuck?');
+  await expect(page.getByRole('region', { name: 'Verification checks' })).toContainText('Not accepted');
 
   await page.getByRole('button', { name: 'Show the problem' }).click();
   const evidence = page.getByLabel('Verified failure evidence');
@@ -190,8 +194,9 @@ test('applies a rule-linked trap as a draft and replays its verified stranded wi
   await expect(page.getByRole('status').filter({ hasText: 'Stranded at' })).toBeVisible({ timeout: 45_000 });
   await page.getByRole('button', { name: 'Back to repair' }).click();
   const repairs = page.getByRole('region', { name: 'Repairs' });
-  await expect(repairs.getByRole('button', { name: 'Find repairs' })).toBeVisible();
-  await repairs.getByRole('button', { name: 'Find repairs' }).click();
+  await expect(repairs.getByRole('button', { name: 'Ask the AI to fix it' })).toBeVisible();
+  await expect(repairs.getByRole('button', { name: 'Find checked repairs' })).toBeVisible();
+  await repairs.getByRole('button', { name: 'Find checked repairs' }).click();
   await expect(repairs.getByRole('button', { name: 'Preview' }).first()).toBeVisible();
   await repairs.getByRole('button', { name: 'Preview' }).first().click();
   await repairs.getByRole('button', { name: 'Apply', exact: true }).click();

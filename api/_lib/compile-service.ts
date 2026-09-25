@@ -1,7 +1,10 @@
 import { compileResultSchema, normalizeWirePayload, type CompileResult } from '../../shared/compile-result.js';
 import { applyOperations, applyRuleProposal } from '../../src/core/level.js';
-import type { ThemeKey } from '../../shared/api.js';
-import type { Level } from '../../shared/schema.js';
+import { engineFindings } from '../../src/core/engine-findings.js';
+import { verify } from '../../src/core/verifier.js';
+import type { CompileProgress, ThemeKey } from '../../shared/api.js';
+import type { Level, Operation } from '../../shared/schema.js';
+import { OperationStream, operationLabel, reasoningHeadlines } from '../../shared/stream-progress.js';
 import { revisionId } from '../../src/core/serialize.js';
 import { compileCache, compileCacheKey } from './cache.js';
 import { buildSystemPrompt, PROMPT_VERSION } from './prompt.js';
@@ -12,6 +15,7 @@ import {
   type ChatMessage,
   type ProviderConfig,
   type ProviderResult,
+  type StreamDelta,
   type StructuredOptions,
 } from './provider.js';
 
@@ -28,6 +32,7 @@ export type CallModel = (
   messages: ChatMessage[],
   options: StructuredOptions,
   signal?: AbortSignal,
+  onDelta?: (delta: StreamDelta) => void,
 ) => Promise<ProviderResult>;
 
 export interface CompileInput {
@@ -38,6 +43,12 @@ export interface CompileInput {
   protectedIds?: string[];
   history?: string[];
   theme?: ThemeKey;
+  /**
+   * AI↔engine revision: the operations of an earlier attempt (empty when the
+   * current scene itself is being repaired). The engine re-checks them here;
+   * its findings — never client text — go back to the model.
+   */
+  revision?: { operations: Operation[] };
 }
 
 export interface AttemptRecord {
@@ -58,7 +69,7 @@ export interface CompileOutcome {
   attempts: AttemptRecord[];
   totalCostUsd: number | null;
   generationCostUsd: number | null;
-  error?: 'missing_provider_config' | 'invalid_output' | 'cancelled';
+  error?: 'missing_provider_config' | 'invalid_output' | 'cancelled' | 'nothing_to_revise';
   /** The provider's failure class when the final attempt errored. */
   providerError?: 'rate_limited' | 'timeout' | 'budget' | 'outage' | 'unknown';
 }
@@ -82,7 +93,7 @@ function tryParse(raw: string): CompileResult | null {
 export async function compile(
   env: NodeJS.ProcessEnv,
   input: CompileInput,
-  deps: { callModel?: CallModel; signal?: AbortSignal } = {},
+  deps: { callModel?: CallModel; signal?: AbortSignal; onProgress?: (progress: CompileProgress) => void } = {},
 ): Promise<CompileOutcome> {
   const callModel = deps.callModel ?? chatCompletion;
   const signal = deps.signal;
@@ -101,6 +112,7 @@ export async function compile(
     selection: input.selection,
     protectedIds: input.protectedIds,
     history: input.history,
+    revision: input.revision === undefined ? undefined : JSON.stringify(input.revision.operations),
     models: JSON.stringify({
       baseUrl: primary.baseUrl,
       chain: (hasFallback ? [primary.model, fallbackModel] : [primary.model]).map((model) => ({
@@ -110,7 +122,21 @@ export async function compile(
     }),
     promptVersion: PROMPT_VERSION,
   });
-  const hit = compileCache.get(key);
+  // The engine's own findings about the attempt being revised.
+  let revisionNote: string | null = null;
+  if (input.revision !== undefined) {
+    const applied = applyOperations(input.level, input.revision.operations);
+    const checked = applied.ok ? applied.level : input.level;
+    const findings = applied.ok ? engineFindings(checked, verify(checked)) : applied.errors.map((error) => `The engine rejected it: ${error}`);
+    if (findings.length === 0) {
+      return { result: null, baseRevision, theme: input.theme, cached: false, attempts: [], totalCostUsd: 0, generationCostUsd: null, error: 'nothing_to_revise' };
+    }
+    revisionNote = input.revision.operations.length > 0
+      ? `(ENGINE CHECK OF YOUR PREVIOUS ATTEMPT. The scene above is unchanged; your earlier patch was applied to a copy and verified by the puzzle engine.\nPrevious operations: ${JSON.stringify(input.revision.operations)}\nEngine findings:\n${findings.map((finding) => `- ${finding}`).join('\n')}\nRespond with a complete, corrected patch against the scene above. Deliver everything the author asked for — every requested room, item, trap, and scenery element — and fix these findings by moving, reconnecting, or re-gating things, never by deleting the author's mechanics.)`
+      : `(ENGINE CHECK OF THE CURRENT SCENE — it fails these verified findings:\n${findings.map((finding) => `- ${finding}`).join('\n')}\nPropose the smallest patch that fixes every finding while keeping the author's idea: keep each trap, key, switch, and door the author built and prefer relocating or re-gating over removal. Never add or weaken design requirements.)`;
+  }
+
+  const hit = await compileCache.get(key);
   if (hit !== null) {
     return {
       result: hit.value,
@@ -129,7 +155,7 @@ export async function compile(
       content:
         buildSystemPrompt(input.level, revisionId(input.level)) +
         (input.theme !== undefined
-          ? `\n(Presentation theme is handled outside this contract; never encode visual style in operations.)\n`
+          ? `\n(The author pinned the architecture palette to "${input.theme}" in the editor; leave setScenery's architecture unset.)\n`
           : ''),
     },
     {
@@ -146,6 +172,7 @@ export async function compile(
           ? `(The creator marked these scene entities Keep these: ${input.protectedIds.join(', ')}. Do not add, remove, move, rename, or change the connections or conditions of any listed entity. If the request conflicts with this protection, ask the creator to unkeep the entity before proposing a change.)`
           : null,
         input.clarificationContext ? `(Clarification context: ${input.clarificationContext})` : null,
+        revisionNote,
       ]
         .filter((part): part is string => part !== null)
         .join('\n\n'),
@@ -157,10 +184,35 @@ export async function compile(
   let totalCostUsd: number | null = 0;
   let lastProviderError: 'rate_limited' | 'timeout' | 'budget' | 'outage' | 'unknown' | undefined;
 
+  const progress = deps.onProgress;
   const attempt = async (
     model: string,
     messages: ChatMessage[],
   ): Promise<{ parsed: CompileResult | null; rejection?: string[]; cancelled?: boolean }> => {
+    const attemptNumber = attempts.length + 1;
+    let onDelta: ((delta: StreamDelta) => void) | undefined;
+    if (progress !== undefined) {
+      let reasoning = '';
+      let sentHeadlines = 0;
+      let operations = 0;
+      const stream = new OperationStream();
+      progress({ stage: 'thinking', attempt: attemptNumber });
+      onDelta = (delta) => {
+        if (delta.reasoning !== undefined) {
+          reasoning += delta.reasoning;
+          const headlines = reasoningHeadlines(reasoning);
+          for (; sentHeadlines < headlines.length; sentHeadlines++) {
+            progress({ stage: 'thinking', attempt: attemptNumber, headline: headlines[sentHeadlines]!.slice(0, 120) });
+          }
+        }
+        if (delta.content !== undefined) {
+          for (const operation of stream.push(delta.content)) {
+            operations += 1;
+            progress({ stage: 'writing', attempt: attemptNumber, operations, latest: operationLabel(operation).slice(0, 160) });
+          }
+        }
+      };
+    }
     if (signal?.aborted) return { parsed: null, cancelled: true };
     const elapsed = performance.now() - started;
     const remaining = SERVICE_DEADLINE_MS - elapsed;
@@ -176,7 +228,7 @@ export async function compile(
       response = await callModel(config, messages, {
         ...callOptionsFor(model),
         schemaName: 'levelproof_result',
-      }, signal);
+      }, signal, onDelta);
     } catch (error) {
       if (signal?.aborted) return { parsed: null, cancelled: true };
       response = { ok: false, kind: 'unknown', error: error instanceof Error ? error.message : String(error) };
@@ -193,6 +245,7 @@ export async function compile(
       outcome = 'error';
       lastProviderError = response.kind;
     } else {
+      progress?.({ stage: 'checking', attempt: attemptNumber });
       parsed = tryParse(response.content);
       if (parsed === null) {
         outcome = 'schema_invalid';
@@ -226,8 +279,8 @@ export async function compile(
     return { parsed, rejection };
   };
 
-  const finish = (result: CompileResult): CompileOutcome => {
-    compileCache.set(key, {
+  const finish = async (result: CompileResult): Promise<CompileOutcome> => {
+    await compileCache.set(key, {
       value: result,
       attempts,
       generationCostUsd: totalCostUsd,
@@ -251,6 +304,13 @@ export async function compile(
     (first === 'schema_invalid' || first === 'rejected') &&
     performance.now() - started < SERVICE_DEADLINE_MS
   ) {
+    progress?.({
+      stage: 'retrying',
+      attempt: 2,
+      reason: first === 'rejected'
+        ? `The engine rejected attempt 1: ${outcome1.rejection?.[0] ?? 'invalid edit'}`.slice(0, 300)
+        : 'Attempt 1 did not match the response contract; asking for a corrected answer.',
+    });
     const correction: ChatMessage[] = [
       ...baseMessages,
       {
@@ -270,6 +330,7 @@ export async function compile(
 
   // Attempt 3: the evaluated fallback model, fresh messages.
   if (hasFallback && performance.now() - started < SERVICE_DEADLINE_MS) {
+    progress?.({ stage: 'retrying', attempt: attempts.length + 1, reason: `Trying the fallback model ${fallbackModel}.`.slice(0, 300) });
     const outcome3 = await attempt(fallbackModel!, baseMessages);
     if (outcome3.cancelled || signal?.aborted) {
       return { result: null, baseRevision, theme: input.theme, cached: false, attempts, totalCostUsd, generationCostUsd: null, error: 'cancelled' };

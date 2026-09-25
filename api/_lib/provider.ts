@@ -47,11 +47,77 @@ export function providerConfigFromEnv(env: NodeJS.ProcessEnv, model?: string): P
   return { baseUrl, apiKey, model: chosen, timeoutMs: Number.isFinite(timeoutMs) ? timeoutMs : 30000 };
 }
 
+/** Incremental output while a streamed completion is generated. */
+export interface StreamDelta {
+  reasoning?: string;
+  content?: string;
+}
+
+interface CompletionChunk {
+  choices?: Array<{ delta?: { content?: string; reasoning?: string } }>;
+  usage?: { prompt_tokens?: number; completion_tokens?: number; cost?: number };
+  error?: { message?: string; code?: number | string };
+}
+
+/** Read an OpenAI-style SSE stream, forwarding deltas and returning the whole. */
+async function readStream(
+  response: Response,
+  onDelta: (delta: StreamDelta) => void,
+): Promise<ProviderResult> {
+  if (response.body === null) return { ok: false, kind: 'unknown', error: 'Empty stream.' };
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let content = '';
+  let usage: CompletionChunk['usage'];
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let newline: number;
+    while ((newline = buffer.indexOf('\n')) >= 0) {
+      const line = buffer.slice(0, newline).trim();
+      buffer = buffer.slice(newline + 1);
+      if (!line.startsWith('data:')) continue; // keep-alive comments
+      const payload = line.slice(5).trim();
+      if (payload === '[DONE]') continue;
+      let chunk: CompletionChunk;
+      try {
+        chunk = JSON.parse(payload) as CompletionChunk;
+      } catch {
+        continue;
+      }
+      if (chunk.error !== undefined) {
+        const message = chunk.error.message ?? 'stream error';
+        return { ok: false, kind: String(chunk.error.code) === '429' ? 'rate_limited' : 'outage', error: message.slice(0, 300) };
+      }
+      const delta = chunk.choices?.[0]?.delta;
+      if (delta?.reasoning) onDelta({ reasoning: delta.reasoning });
+      if (delta?.content) {
+        content += delta.content;
+        onDelta({ content: delta.content });
+      }
+      if (chunk.usage !== undefined) usage = chunk.usage;
+    }
+  }
+  if (content.length === 0) return { ok: false, kind: 'unknown', error: 'Empty completion content.' };
+  return {
+    ok: true,
+    content,
+    usage: {
+      promptTokens: usage?.prompt_tokens ?? 0,
+      completionTokens: usage?.completion_tokens ?? 0,
+      costUsd: typeof usage?.cost === 'number' ? usage.cost : null,
+    },
+  };
+}
+
 export async function chatCompletion(
   config: ProviderConfig,
   messages: ChatMessage[],
   options: StructuredOptions = {},
   requestSignal?: AbortSignal,
+  onDelta?: (delta: StreamDelta) => void,
 ): Promise<ProviderResult> {
   const timeoutController = new AbortController();
   const timer = setTimeout(() => timeoutController.abort(), config.timeoutMs);
@@ -78,6 +144,12 @@ export async function chatCompletion(
     if (options.reasoningEffort !== undefined) {
       body.reasoning = { effort: options.reasoningEffort };
     }
+    if (onDelta !== undefined) {
+      // Streaming lets the editor show the model's plan and each operation as
+      // it is written; usage accounting arrives in the final chunk.
+      body.stream = true;
+      body.usage = { include: true };
+    }
     const response = await fetch(`${config.baseUrl}/chat/completions`, {
       method: 'POST',
       headers: {
@@ -96,6 +168,7 @@ export async function chatCompletion(
       if (response.status >= 500) return { ok: false, kind: 'outage', error: `${response.status}: ${brief}` };
       return { ok: false, kind: 'unknown', error: `${response.status}: ${brief}` };
     }
+    if (onDelta !== undefined) return await readStream(response, onDelta);
     const data = (await response.json()) as {
       choices?: Array<{ message?: { content?: string } }>;
       usage?: { prompt_tokens?: number; completion_tokens?: number; cost?: number };

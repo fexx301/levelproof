@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { baselineLevel } from '../src/core/fixtures/baseline';
 import { blankCanvasLevel } from '../src/core/fixtures/blank-canvas';
 import { revisionId } from '../src/core/serialize';
-import { useApp } from '../src/state/store';
+import { shouldAutoRevise, useApp } from '../src/state/store';
 
 const base = structuredClone(baselineLevel);
 
@@ -291,5 +291,60 @@ describe('staged AI changes', () => {
     expect(useApp.getState().acceptedLevel.modules.find((module) => module.id === 'gallery')?.label).toBe('renamed foyer');
     expect(useApp.getState().promptHistory).toEqual(['Rename the foyer.']);
     expect(useApp.getState().history).toHaveLength(1);
+  });
+});
+
+describe('automatic AI↔engine revision', () => {
+  const unwinnable = {
+    type: 'patch',
+    rationale: 'Key in a side room; the vault needs it.',
+    assumptions: [],
+    operations: [
+      { kind: 'addModule', module: { id: 'side-room', template: 'flat', x: 6, z: 7, h: 0, ports: ['E'] } },
+      { kind: 'setModulePorts', id: 'start-walk', ports: ['N', 'S', 'W'] },
+      { kind: 'addItem', itemType: 'key', id: 'vault-key', moduleId: 'side-room' },
+      { kind: 'addDoor', door: { id: 'side-door', a: 'start-walk', b: 'side-room', conditions: { requiresKey: 'vault-key' } } },
+      { kind: 'addDoor', door: { id: 'vault-door', a: 'start-walk', b: 'goal-pad', conditions: { requiresKey: 'vault-key' } } },
+    ],
+  };
+  const fixed = {
+    ...unwinnable,
+    rationale: 'The side room stays open so the key can be collected.',
+    operations: unwinnable.operations.filter((operation) => !(operation.kind === 'addDoor' && operation.door?.id === 'side-door')),
+  };
+
+  function respond(result: unknown) {
+    return {
+      ok: true,
+      json: async () => ({ result, baseRevision: revisionId(blankCanvasLevel), cached: false, attempts: [{ model: 'm', outcome: 'schema_valid', latencyMs: 1, costUsd: 0.001 }], totalCostUsd: 0.001, generationCostUsd: 0.001 }),
+    };
+  }
+
+  it('sends an unwinnable additive build back once and stages the verified revision', async () => {
+    useApp.setState({ acceptedLevel: blankCanvasLevel, sceneId: 'blank-canvas', acceptedSceneId: 'blank-canvas' });
+    const bodies: Array<Record<string, unknown>> = [];
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, init: { body: string }) => {
+      const body = JSON.parse(init.body) as Record<string, unknown>;
+      bodies.push(body);
+      return respond(body.revision === undefined ? unwinnable : fixed);
+    }));
+    await useApp.getState().submitPrompt('Put the vault key in a side room and lock the goal with it.');
+    expect(bodies).toHaveLength(2);
+    expect(bodies[1]!.revision).toEqual({ operations: unwinnable.operations });
+    const pending = useApp.getState().pendingRule;
+    expect(pending?.kind).toBe('patch');
+    if (pending?.kind !== 'patch') return;
+    expect(pending.revision?.outcome).toBe('fixed');
+    expect(pending.revision?.findings[0]).toMatch(/^The level cannot be won/);
+    expect(pending.operations).toEqual(fixed.operations);
+    expect(useApp.getState().lastCompileMeta?.attempts).toBe(2);
+    expect(useApp.getState().acceptedLevel).toBe(blankCanvasLevel);
+  });
+
+  it('never auto-revises an edit that removes things', () => {
+    const removal = [{ kind: 'removeModule' as const, id: 'gallery-ramp' }];
+    const broken = structuredClone(base);
+    broken.modules = broken.modules.filter((module) => module.id !== 'gallery-ramp');
+    expect(shouldAutoRevise(base, broken, removal)).toBe(false);
   });
 });
