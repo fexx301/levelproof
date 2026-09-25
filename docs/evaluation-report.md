@@ -3,6 +3,19 @@
 Updated 2026-09-25. This report separates controlled fixture evidence from
 live-model evidence.
 
+## 2026-09-25 — production after deploy (prompt-12, gemini-3.8-flash)
+
+Deployed 2026-09-25 with `LLM_MODEL=google/gemini-3.8-flash` and
+`LLM_FALLBACK_MODEL=google/gemini-2.5-flash-lite` (rollback target:
+`dpl_6m7ijeWYDt1mqEzEbdu7Q42CSsiF`).
+
+| Check | Result |
+| --- | --- |
+| Fixed 30 cases + 12 repeats against `https://levelproof.vercel.app/api/compile` | **42/42** semantic passes · median 4.5 s · range 1.5–18.4 s · $0.199 |
+| Streaming on Vercel | incremental: first event at 1.0 s, operations streamed from 3.8 s; an engine-rejected attempt 1 (key on a bridge) was visibly retried and fixed; result at 13.4 s |
+| Prewarm (`scripts/prewarm.ts`, 18 chips + the chained trap step) | 19/19 warmed · $0.118 |
+| Browser chip clicks after prewarm | *Key + locked door*, *The switch trap* (chained), *Pirate cove*: **Cached result** in 0.8–0.9 s |
+
 ## 2026-09-25 — gemini-3.8-flash, prompt-10/11, scenery and revision loop
 
 These runs used the local dev server (`npm run dev`, which now serves the real

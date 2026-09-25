@@ -119,7 +119,8 @@ reasoning effort (fallback `google/gemini-2.5-flash-lite`). Measured on
 - Direct evaluation battery (27 calls): 27/27 schema-valid, 26/27 semantically
   correct on the first try, 4/4 ambiguity and 2/2 rule-protection cases,
   median 4.7 s.
-- The fixed 30-case suite plus 12 repeats through the real endpoint: 41/42.
+- The fixed 30-case suite plus 12 repeats against production after deploy:
+  42/42, median 4.5 s (41/42 on the local API the same day).
 - Every example chip, twice each: 24/24 (prompt-11; the four blank-canvas
   builds re-checked on the final prompt-12: 4/4).
 - Eight one-sentence worlds on the blank canvas: 8/8 valid on the first try,
