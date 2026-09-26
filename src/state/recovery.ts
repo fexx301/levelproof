@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { compileResultSchema } from '../../shared/compile-result.js';
 import { themeKeySchema } from '../../shared/api.js';
-import { levelSchema } from '../../shared/schema.js';
+import { levelSchema, MAX_ENTITY_IDS } from '../../shared/schema.js';
 import { applyOperations, applyRuleProposal } from '../core/level.js';
 import { revisionId } from '../core/serialize.js';
 import { verify } from '../core/verifier.js';
@@ -56,7 +56,7 @@ const recoverySchema = z.strictObject({
     baseRevision: z.string().max(80),
   }).nullable(),
   selection: z.array(z.string().max(160)).max(8),
-  protectedIds: z.array(z.string().max(160)).max(256),
+  protectedIds: z.array(z.string().max(160)).max(MAX_ENTITY_IDS),
   history: z.array(historyEntrySchema).max(12),
   previousAccepted: checkpointSchema.nullable(),
   lastPrompt: z.string().max(2000).nullable(),

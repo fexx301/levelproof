@@ -57,6 +57,8 @@ let activeCompileController: AbortController | null = null;
  * build can make two (the engine-guided revision), so a request still open
  * after this is a stalled connection, not a slow model. */
 export const COMPILE_WATCHDOG_MS = 130_000;
+/** Client ceiling for one explanation (the server stops it at 60 s). */
+export const EXPLAIN_WATCHDOG_MS = 70_000;
 let activeExplainController: AbortController | null = null;
 
 /** Invalidate any compile that was started against an older scene context. */
@@ -282,7 +284,7 @@ interface GhostSlice {
 
 /** A play-mode hint as the panel shows it (computed by core/hint). */
 export type PlayHint =
-  | { kind: 'move'; direction: Cardinal; destination: string; movesToGoal: number }
+  | { kind: 'move' | 'rule_blocked'; direction: Cardinal; destination: string; movesToGoal: number }
   | { kind: 'at_goal' | 'rule_broken' | 'stranded' | 'unknown' };
 
 interface PlaySlice {
@@ -379,6 +381,7 @@ interface AppState {
   /** Ask the model to repair the failing draft; the engine judges the result. */
   requestAiFix: () => Promise<void>;
   cancelCompile: () => void;
+  cancelExplain: () => void;
   approveRule: () => void;
   declineRule: () => void;
   applyPatch: () => void;
@@ -741,6 +744,13 @@ export const useApp = create<AppState>()((set, get) => ({
     const level = state.draft?.level ?? state.acceptedLevel;
     const boundRevision = revisionId(level);
     set({ explain: { ...state.explain, busy: true, error: null } });
+    // One explain call is capped at 60 s on the server; past this the
+    // connection has stalled, so stop and say so.
+    let timedOut = false;
+    const watchdog = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, EXPLAIN_WATCHDOG_MS);
     try {
       const response = await fetch('/api/explain', {
         method: 'POST',
@@ -751,7 +761,11 @@ export const useApp = create<AppState>()((set, get) => ({
       const body: unknown = await response.json();
       // Stale results are ignored: the level moved on while we asked.
       const stillCurrent = revisionId(get().draft?.level ?? get().acceptedLevel) === boundRevision;
-      if (generation !== contextGeneration || !stillCurrent) return;
+      if (generation !== contextGeneration) return;
+      if (!stillCurrent) {
+        set({ explain: { ...get().explain, busy: false } });
+        return;
+      }
       if (!response.ok) {
         set({ explain: { ...get().explain, busy: false, error: explainErrorText(body) } });
         return;
@@ -772,9 +786,15 @@ export const useApp = create<AppState>()((set, get) => ({
       });
     } catch {
       if (generation === contextGeneration) {
-        set({ explain: { ...get().explain, busy: false, error: 'Explanation unavailable — the engine verdict above stands.' } });
+        const error = timedOut
+          ? 'The explanation took too long and was stopped — the engine verdict above stands. Try again.'
+          : controller.signal.aborted
+            ? null
+            : 'Explanation unavailable — the engine verdict above stands.';
+        set({ explain: { ...get().explain, busy: false, error } });
       }
     } finally {
+      clearTimeout(watchdog);
       if (activeExplainController === controller) {
         activeExplainController = null;
         if (generation !== contextGeneration && get().explain.busy) {
@@ -791,6 +811,10 @@ export const useApp = create<AppState>()((set, get) => ({
     const evidence = buildFailureEvidence(level, report, kind);
     if (evidence === null) {
       set({ error: 'This check has no replayable witness yet.' });
+      return;
+    }
+    if ((report.checks[kind].witness?.route.length ?? 0) === 0) {
+      set({ error: 'There is no route to replay: the goal cannot be reached from the start at all.' });
       return;
     }
     set({
@@ -867,7 +891,7 @@ export const useApp = create<AppState>()((set, get) => ({
       }
       const proposedOperations = result.type === 'patch' || result.type === 'rule_proposal' ? result.operations : [];
       const keptAtResponse = get().protectedIds;
-      if (keptAtResponse.length > 0 && touchesProtected(proposedOperations, new Set(keptAtResponse))) {
+      if (keptAtResponse.length > 0 && touchesProtected(proposedOperations, new Set(keptAtResponse), base)) {
         fail('The proposal changes an object marked Keep these. Nothing changed. Remove that object from Keep these or revise the request.', { lastPrompt: prompt });
         return;
       }
@@ -904,7 +928,7 @@ export const useApp = create<AppState>()((set, get) => ({
               latestOperations = revisedResult.operations;
               const revisedApplied = applyOperations(base, revisedResult.operations);
               const kept = get().protectedIds;
-              if (revisedApplied.ok && !(kept.length > 0 && touchesProtected(revisedResult.operations, new Set(kept)))) {
+              if (revisedApplied.ok && !(kept.length > 0 && touchesProtected(revisedResult.operations, new Set(kept), base))) {
                 const revisedReport = verify(revisedApplied.level);
                 if (reportScore(revisedReport) < bestScore) {
                   bestScore = reportScore(revisedReport);
@@ -1037,7 +1061,7 @@ export const useApp = create<AppState>()((set, get) => ({
         return;
       }
       const kept = get().protectedIds;
-      if (kept.length > 0 && touchesProtected(result.operations, new Set(kept))) {
+      if (kept.length > 0 && touchesProtected(result.operations, new Set(kept), base)) {
         fail('The AI fix would change an object marked Keep these, so it was not offered.');
         return;
       }
@@ -1077,6 +1101,13 @@ export const useApp = create<AppState>()((set, get) => ({
     }
   },
 
+  cancelExplain: () => {
+    if (!get().explain.busy) return;
+    activeExplainController?.abort();
+    activeExplainController = null;
+    set({ explain: { ...get().explain, busy: false, error: null } });
+  },
+
   cancelCompile: () => {
     if (!get().busy) return;
     contextGeneration += 1;
@@ -1089,7 +1120,7 @@ export const useApp = create<AppState>()((set, get) => ({
     const { pendingRule } = get();
     if (!pendingRule || pendingRule.kind !== 'rule') return;
     const kept = get().protectedIds;
-    if (kept.length > 0 && touchesProtected(pendingRule.proposal.operations, new Set(kept))) {
+    if (kept.length > 0 && touchesProtected(pendingRule.proposal.operations, new Set(kept), pendingRule.base)) {
       set({ error: 'This preview changes an object marked Keep these. Remove it from Keep these or revise the proposal before approving.' });
       return;
     }
@@ -1130,7 +1161,7 @@ export const useApp = create<AppState>()((set, get) => ({
     const { pendingRule } = get();
     if (!pendingRule || pendingRule.kind !== 'patch') return;
     const kept = get().protectedIds;
-    if (kept.length > 0 && touchesProtected(pendingRule.operations, new Set(kept))) {
+    if (kept.length > 0 && touchesProtected(pendingRule.operations, new Set(kept), pendingRule.base)) {
       set({ error: 'This preview changes an object marked Keep these. Remove it from Keep these or revise the proposal before applying.' });
       return;
     }
@@ -1375,7 +1406,21 @@ export const useApp = create<AppState>()((set, get) => ({
     set({ mode: 'playing', followCamera: true, ghost: GHOST_INITIAL, play: PLAY_INITIAL, pendingRule: null, preview: null, lastResult: null, lastPrompt: null, lastCompileMeta: null, busy: false, compileProgress: null, evidence: null });
   },
 
-  exitToAuthoring: () => set({ mode: 'authoring', ghost: GHOST_INITIAL, play: PLAY_INITIAL, evidence: null }),
+  exitToAuthoring: () => {
+    // Remixing a shared puzzle makes it the author's own work: drop the share
+    // parameters so a reload restores their session instead of the original.
+    if (get().viaShare && typeof window !== 'undefined') {
+      try {
+        const url = new URL(window.location.href);
+        url.searchParams.delete('p');
+        url.searchParams.delete('theme');
+        window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
+      } catch {
+        // A URL that cannot be rewritten only costs the reload convenience.
+      }
+    }
+    set({ mode: 'authoring', viaShare: false, ghost: GHOST_INITIAL, play: PLAY_INITIAL, evidence: null });
+  },
 
 
   runRepairs: (report) => {
@@ -1402,7 +1447,7 @@ export const useApp = create<AppState>()((set, get) => ({
     if (!draft || repair.candidates.length === 0) return;
     const candidate = repair.candidates[index];
     if (!candidate) return;
-    if (protectedIds.length > 0 && touchesProtected(candidate.operations, new Set(protectedIds))) {
+    if (protectedIds.length > 0 && touchesProtected(candidate.operations, new Set(protectedIds), draft.level)) {
       set({
         repair: {
           ...repair,
@@ -1432,7 +1477,7 @@ export const useApp = create<AppState>()((set, get) => ({
     const replayCheck = failing.length > 0 ? validateRoute(applied.level, failing) : null;
     set({
       preview: null,
-      repairReplay: replayCheck?.ok === true ? failing : null,
+      repairReplay: replayCheck?.ok === true ? replayCheck.route : null,
       evidence: null,
       ...(replayCheck !== null && !replayCheck.ok
         ? { changeSummary: `Repair applied. The old witness could not be replayed: ${replayCheck.reason}` }
@@ -1475,6 +1520,8 @@ export const useApp = create<AppState>()((set, get) => ({
       return;
     }
     set({
+      // Replay what this level does with those actions, not the stored records.
+      repairReplay: replayCheck.route,
       mode: 'watching',
       followCamera: true,
       ghost: { ...GHOST_INITIAL, witnessKind: 'replay' },

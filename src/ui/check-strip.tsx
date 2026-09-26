@@ -81,7 +81,7 @@ export function CheckStrip({ report, ms }: { report: Report; ms: number }) {
           {result.status !== 'pass' && result.status !== 'not_applicable' && (
             <p className="check-explanation">{result.explanation}</p>
           )}
-          <ExplainCheck kind={kind} failing={result.status === 'fail'} replayable={result.witness !== undefined} />
+          <ExplainCheck kind={kind} failing={result.status === 'fail'} replayable={(result.witness?.route.length ?? 0) > 0} />
         </div>
       ))}
       {report.internalError && (
@@ -134,6 +134,7 @@ function ExplainCheck({ kind, failing, replayable }: { kind: CheckKind; failing:
   const explain = useApp((s) => s.explain);
   const explainCheck = useApp((s) => s.explainCheck);
   const showProblem = useApp((s) => s.showProblem);
+  const cancelExplain = useApp((s) => s.cancelExplain);
   if (!failing) return null;
   const entry = explain.byCheck[kind];
   return (
@@ -158,9 +159,16 @@ function ExplainCheck({ kind, failing, replayable }: { kind: CheckKind; failing:
           </p>
         </>
       ) : (
-        <button type="button" className="explain-button" disabled={explain.busy} onClick={() => void explainCheck(kind)}>
-          {explain.busy ? 'Explaining…' : 'Why did this fail?'}
-        </button>
+        <span className="explain-actions">
+          <button type="button" className="explain-button" disabled={explain.busy} onClick={() => void explainCheck(kind)}>
+            {explain.busy ? 'Explaining…' : 'Why did this fail?'}
+          </button>
+          {explain.busy && (
+            <button type="button" className="explain-button" onClick={cancelExplain}>
+              Cancel
+            </button>
+          )}
+        </span>
       )}
       {explain.error && <p className="explain-error">{explain.error}</p>}
     </div>

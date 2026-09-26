@@ -1,4 +1,4 @@
-import { explain, peekExplain } from './_lib/explain-service.js';
+import { explain, explainNeedsModel, peekExplain } from './_lib/explain-service.js';
 import { explainRequestSchema } from '../shared/api.js';
 import { enforceDailyBudget, enforceRequestWindow, readLimitedJson } from './_lib/request-guard.js';
 
@@ -34,7 +34,7 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   const cached = await peekExplain(process.env, parsed.data);
-  const budget = cached === null ? await enforceDailyBudget(request) : null;
+  const budget = cached === null && explainNeedsModel(parsed.data) ? await enforceDailyBudget(request) : null;
   if (budget !== null) return budget;
   const outcome = cached ?? await explain(process.env, parsed.data, { signal: request.signal });
 

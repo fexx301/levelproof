@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { Operation } from '../shared/schema';
 import { baselineLevel } from '../src/core/fixtures/baseline';
 import { bypassLevel } from '../src/core/fixtures/bypass';
 import { trapLevel } from '../src/core/fixtures/trap';
@@ -93,6 +94,20 @@ describe('creator preservation constraints (§9 "keep this")', () => {
     ], protectedGallery)).toBe(true);
   });
 
+  it('catches indirect changes: moving the module under a kept key moves the key', () => {
+    const keptKey = new Set(['brass-key']);
+    const lowerBalcony: Operation[] = [{ kind: 'moveModule', id: 'key-balcony', x: 3, z: 2, h: 0 }];
+    expect(applyOperations(baselineLevel, lowerBalcony).ok).toBe(true);
+    expect(touchesProtected(lowerBalcony, keptKey)).toBe(false); // the id-only check misses it
+    expect(touchesProtected(lowerBalcony, keptKey, baselineLevel)).toBe(true);
+    // Moving the endpoint of a kept door changes the door too.
+    const keptDoor = new Set(['gallery-door']);
+    const moveLanding: Operation[] = [{ kind: 'setModuleLabel', id: 'bridge-landing', label: 'renamed' }];
+    expect(touchesProtected(moveLanding, keptDoor, trapLevel)).toBe(false);
+    // Unrelated edits stay allowed.
+    expect(touchesProtected([{ kind: 'setModuleLabel', id: 'lower-hall', label: 'antechamber' }], keptKey, baselineLevel)).toBe(false);
+  });
+
   it('keeping the seal switch excludes relocation and removal — only the door removal remains', () => {
     const report = verify(trapLevel);
     const result = findRepairs(baselineLevel, trapLevel, report, ['seal-switch']);
@@ -121,5 +136,17 @@ describe('creator preservation constraints (§9 "keep this")', () => {
     const report = verify(bypassLevel);
     const result = findRepairs(trapRepairedLevel, bypassLevel, report, ['brass-key']);
     expect(result.candidates.some((c) => c.description.startsWith('Move key'))).toBe(false);
+  });
+});
+
+describe('generated repair ids', () => {
+  it('stays within the id limit and avoids every existing id', async () => {
+    const { freshId } = await import('../src/core/search');
+    const long = `gate-${'a'.repeat(31)}`;
+    const id = freshId(baselineLevel, long);
+    expect(id.length).toBeLessThanOrEqual(32);
+    expect(id).toMatch(/^[a-z][a-z0-9-]{1,31}$/);
+    const taken = { ...structuredClone(baselineLevel), doors: [{ id: 'gate-gallery', a: 'gallery', b: 'bridge-landing', conditions: {} }] };
+    expect(freshId(taken, 'gate-gallery')).toBe('gate-gallery-2');
   });
 });

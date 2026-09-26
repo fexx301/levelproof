@@ -101,4 +101,21 @@ describe('daily model budget', () => {
     expect((await POST(compileRequest('Rename the foyer to grand foyer.', '192.0.2.30'))).status).toBe(200);
     expect((await POST(compileRequest('Rename the foyer to grand foyer.', '192.0.2.30'))).status).toBe(429);
   });
+
+  it('does not charge the budget for a revision the engine has nothing to say about', async () => {
+    const provider = vi.fn(async () => providerReply(patch('grand foyer')));
+    vi.stubGlobal('fetch', provider);
+    // A harmless relabel: the engine finds nothing wrong, so no model call.
+    for (let i = 0; i < 3; i++) {
+      const response = await POST(new Request('https://levelproof.test/api/compile', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-forwarded-for': '192.0.2.40' },
+        body: JSON.stringify({ level: vaultEmptyLevel, prompt: 'Rename the foyer.', revision: { operations: [{ kind: 'setModuleLabel', id: 'gallery', label: 'foyer' }] } }),
+      }));
+      expect(response.status).not.toBe(429);
+    }
+    expect(provider).not.toHaveBeenCalled();
+    // The single daily slot is still available for real model work.
+    expect((await POST(compileRequest('Rename the foyer to grand foyer.'))).status).toBe(200);
+  });
 });

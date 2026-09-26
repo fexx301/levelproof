@@ -46,14 +46,24 @@ export function validateLevel(level: Level): string[] {
     if (switchIds.has(s.id)) errors.push(`Duplicate switch id "${s.id}".`);
     switchIds.add(s.id);
   }
-  for (const id of keyIds) {
-    if (switchIds.has(id)) errors.push(`Key and switch share the id "${id}".`);
-  }
   const doorIds = new Set<string>();
   for (const d of lvl.doors) {
     if (doorIds.has(d.id)) errors.push(`Duplicate door id "${d.id}".`);
     doorIds.add(d.id);
   }
+  // Ids are also unique across kinds: selection, "Keep these", and the
+  // model's "this"/"that" all address entities by id alone.
+  const kindById = new Map<string, string>();
+  const claim = (id: string, kind: string): void => {
+    const other = kindById.get(id);
+    if (other !== undefined && other !== kind) errors.push(`The id "${id}" is used by both a ${other} and a ${kind}; ids must be unique across the scene.`);
+    else kindById.set(id, kind);
+  };
+  for (const id of moduleIds) claim(id, 'module');
+  for (const id of keyIds) claim(id, 'key');
+  for (const id of switchIds) claim(id, 'switch');
+  for (const id of doorIds) claim(id, 'door');
+  for (const prop of lvl.props ?? []) claim(prop.id, 'prop');
   const requiredKeyIds = new Set<string>();
   for (const r of lvl.requirements) {
     if (r.type === 'collectBeforeGoal') {

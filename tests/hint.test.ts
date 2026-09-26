@@ -79,4 +79,20 @@ describe('play hints', () => {
     // …and from spawn the same level still has a winning line.
     expect(nextStep(compiled, initialState(compiled), new Set([compiled.spawn])).kind).toBe('move');
   });
+
+  it('separates "reachable only by breaking a rule" from "stranded"', () => {
+    const level: Level = {
+      ...structuredClone(baselineLevel),
+      modules: [...structuredClone(baselineLevel).modules, { id: 'chapel', template: 'flat', x: 12, z: 12, h: 0, ports: ['N'] }],
+      requirements: [{ type: 'passThrough', moduleId: 'chapel' }],
+    };
+    const report = verify(level);
+    expect(report.valid).toBe(true);
+    // The verifier's solution check counts reaching the goal at all…
+    expect(report.checks.solution.status).toBe('pass');
+    const compiled = compileLevel(level);
+    const hint = nextStep(compiled, initialState(compiled), new Set([compiled.spawn]));
+    // …so the hint must not claim the player is stranded.
+    expect(hint.kind).toBe('rule_blocked');
+  });
 });

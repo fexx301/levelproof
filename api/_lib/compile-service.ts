@@ -133,6 +133,18 @@ export async function peekCompile(env: NodeJS.ProcessEnv, input: CompileInput): 
   };
 }
 
+/**
+ * False when the answer is deterministic and no model is called: a revision
+ * request whose operations the engine finds nothing wrong with. The handler
+ * uses this to charge the daily model budget only for real model work.
+ */
+export function compileNeedsModel(input: CompileInput): boolean {
+  if (input.revision === undefined) return true;
+  const applied = applyOperations(input.level, input.revision.operations);
+  if (!applied.ok) return true;
+  return engineFindings(applied.level, verify(applied.level)).length > 0;
+}
+
 export async function compile(
   env: NodeJS.ProcessEnv,
   input: CompileInput,

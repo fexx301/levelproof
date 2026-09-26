@@ -39,3 +39,13 @@ describe('API response metadata compatibility', () => {
     expect(response.success).toBe(false);
   });
 });
+
+describe('provider URL safety', () => {
+  it('only sends the API key over HTTPS (or to this machine)', async () => {
+    const { secureProviderUrl } = await import('../api/_lib/provider');
+    expect(secureProviderUrl('https://openrouter.ai/api/v1')).toBe(true);
+    expect(secureProviderUrl('http://localhost:8080/v1')).toBe(true);
+    expect(secureProviderUrl('http://openrouter.ai/api/v1')).toBe(false);
+    expect(secureProviderUrl('not a url')).toBe(false);
+  });
+});

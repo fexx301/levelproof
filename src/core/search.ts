@@ -176,6 +176,24 @@ function keyRelocationCandidates(draft: Level, report: Report): DraftCandidate[]
 }
 
 /** Template 1 (§9): gate the new route with a door requiring the missing key. */
+/**
+ * A valid id (≤ 32 chars) derived from `base` that no entity in the level
+ * uses yet: long module ids are shortened, collisions get a numeric suffix.
+ */
+export function freshId(level: Level, base: string): string {
+  const used = new Set<string>([
+    ...level.modules.map((m) => m.id),
+    ...level.keys.map((k) => k.id),
+    ...level.switches.map((s) => s.id),
+    ...level.doors.map((d) => d.id),
+    ...(level.props ?? []).map((p) => p.id),
+  ]);
+  const trim = (id: string): string => id.slice(0, 32).replace(/-+$/, '');
+  let candidate = trim(base);
+  for (let n = 2; used.has(candidate); n++) candidate = `${trim(base.slice(0, 32 - String(n).length - 1))}-${n}`;
+  return candidate;
+}
+
 function routeGatingCandidates(accepted: Level, draft: Level, report: Report): DraftCandidate[] {
   const requirements = report.checks.requirements;
   const witness = requirements.witness;
@@ -208,7 +226,7 @@ function routeGatingCandidates(accepted: Level, draft: Level, report: Report): D
       const operations: Operation[] = [
         {
           kind: 'addDoor',
-          door: { id: `gate-${a}`, a, b, conditions: { requiresKey: keyId } },
+          door: { id: freshId(draft, `gate-${a}`), a, b, conditions: { requiresKey: keyId } },
         },
       ];
       candidates.push({
@@ -223,9 +241,41 @@ function routeGatingCandidates(accepted: Level, draft: Level, report: Report): D
   return candidates;
 }
 
-/** An operation touches a protected entity when it changes that entity's
- * location, existence, label, exits, or door conditions. */
-export function touchesProtected(operations: Operation[], protectedIds: Set<string>): boolean {
+/**
+ * Everything about a protected entity the author can see: its own fields
+ * plus the placement of any module it sits in or connects. Moving the
+ * module under a kept key moves the key, so it changes this footprint.
+ */
+function protectedFootprint(level: Level, id: string): string | null {
+  const moduleById = (moduleId: string) => level.modules.find((m) => m.id === moduleId);
+  const place = (moduleId: string) => {
+    const m = moduleById(moduleId);
+    return m === undefined ? null : [m.x, m.z, m.h, m.template, m.orientation ?? null];
+  };
+  const module = moduleById(id);
+  if (module !== undefined) {
+    return JSON.stringify(['module', place(id), [...module.ports].sort(), module.label ?? null]);
+  }
+  const key = level.keys.find((k) => k.id === id);
+  if (key !== undefined) return JSON.stringify(['key', key.moduleId, place(key.moduleId), key.look ?? null]);
+  const pad = level.switches.find((s) => s.id === id);
+  if (pad !== undefined) return JSON.stringify(['switch', pad.moduleId, place(pad.moduleId)]);
+  const door = level.doors.find((d) => d.id === id);
+  if (door !== undefined) return JSON.stringify(['door', door.a, door.b, door.conditions ?? {}, place(door.a), place(door.b)]);
+  const prop = level.props?.find((p) => p.id === id);
+  if (prop !== undefined) return JSON.stringify(['prop', prop.prop, prop.x, prop.z]);
+  return null;
+}
+
+/**
+ * An operation list touches a protected entity when it changes that
+ * entity's existence, location, label, exits, conditions, or look —
+ * directly (the operation names it) or indirectly (it moves or removes the
+ * module the entity sits in or connects). With `base`, the operations are
+ * applied and every protected footprint compared; without it, only direct
+ * references are caught.
+ */
+export function touchesProtected(operations: Operation[], protectedIds: Set<string>, base?: Level): boolean {
   for (const op of operations) {
     if (
       op.kind === 'moveItem' || op.kind === 'removeItem' ||
@@ -240,6 +290,12 @@ export function touchesProtected(operations: Operation[], protectedIds: Set<stri
     if (op.kind === 'moveProp' || op.kind === 'removeProp' || op.kind === 'setKeyLook') {
       if (protectedIds.has(op.id)) return true;
     }
+  }
+  if (base === undefined || protectedIds.size === 0) return false;
+  const applied = applyOperations(base, operations);
+  if (!applied.ok) return false; // rejected elsewhere; nothing would change
+  for (const id of protectedIds) {
+    if (protectedFootprint(base, id) !== protectedFootprint(applied.level, id)) return true;
   }
   return false;
 }
@@ -265,7 +321,7 @@ export function findRepairs(
   for (const candidate of pool) {
     if (seen.has(candidate.key)) continue;
     seen.add(candidate.key);
-    if (protectedSet.size > 0 && touchesProtected(candidate.operations, protectedSet)) {
+    if (protectedSet.size > 0 && touchesProtected(candidate.operations, protectedSet, draft)) {
       skippedProtected += 1;
       continue;
     }

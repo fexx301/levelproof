@@ -1,6 +1,8 @@
 import { createHmac } from 'node:crypto';
 
 const DEFAULT_WINDOW_SECONDS = 60;
+/** Upper bound on one shared-counter round trip (request + JSON read). */
+const COUNTER_TIMEOUT_MS = 3000;
 const DEFAULT_WINDOW_REQUESTS = 8;
 // The daily cap guards provider spend: only requests that reach the model
 // count toward it (cached answers are free and exempt).
@@ -26,6 +28,8 @@ const localDailyCounts = new Map<string, number>();
 export interface RequestGuardOptions {
   fetcher?: typeof fetch;
   now?: () => number;
+  /** Shared-counter timeout (tests shorten it). */
+  counterTimeoutMs?: number;
 }
 
 function positiveInteger(value: string | undefined, fallback: number, max: number): number {
@@ -108,6 +112,10 @@ async function sharedCounter(
   limit: number,
   options: RequestGuardOptions,
 ): Promise<Response | null> {
+  // A stalled counter store must not stall admission: give up after a few
+  // seconds and fail closed below. Deliberately not tied to the browser
+  // request's signal — admission is counted even for a cancelled request.
+  const signal = AbortSignal.timeout(options.counterTimeoutMs ?? COUNTER_TIMEOUT_MS);
   try {
     const response = await (options.fetcher ?? fetch)(store.url.toString(), {
       method: 'POST',
@@ -116,6 +124,7 @@ async function sharedCounter(
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(['EVAL', COUNTER_SCRIPT, '1', key, String(ttlSeconds), String(limit)]),
+      signal,
     });
     if (!response.ok) {
       reportProtectionFailure(`upstash_http_${response.status}`);

@@ -66,6 +66,11 @@ try {
     const ms = Math.round(performance.now() - started);
     if (!response.ok || !parsed.success) {
       console.log(`FAIL ${label} · HTTP ${response.status} · ${JSON.stringify(json).slice(0, 160)}`);
+      // Failed compiles can still have paid for model attempts; the error body
+      // reports that cost. Unknown cost (or none reported) stops the run.
+      const reported = json !== null && typeof json === 'object' && 'totalCostUsd' in json ? (json as { totalCostUsd: unknown }).totalCostUsd : undefined;
+      const attempted = json !== null && typeof json === 'object' && Array.isArray((json as { attempts?: unknown }).attempts) && (json as { attempts: unknown[] }).attempts.length > 0;
+      budget.record(typeof reported === 'number' ? reported : attempted ? null : 0, label);
       return null;
     }
     budget.record(parsed.data.cached ? 0 : parsed.data.totalCostUsd, label);

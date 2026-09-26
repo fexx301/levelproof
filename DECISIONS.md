@@ -2,6 +2,40 @@
 
 Build-window decisions and measured evidence, newest first. Dates are 2026.
 
+## Sep 26 (external code review — fixes)
+
+An external model reviewed the code (17 findings, 3 operational notes).
+Each was checked against the code before fixing; all 17 were confirmed.
+
+- **Keep these** now compares each kept entity's full footprint before and
+  after (its fields plus the placement of the module it sits in or
+  connects), so moving the module under a kept key is caught.
+- **Repaired replays** re-step the stored actions on the repaired level and
+  replay those records (fresh states and key/switch events).
+- **Remixing a shared puzzle** drops `?p=` from the URL, so a reload restores
+  the remix instead of the original.
+- **Daily budget** is charged only when a model will run (not for
+  nothing-to-revise or a check that is not failing).
+- **Rate-counter calls** time out after 3 s and fail closed.
+- **Prewarm** counts the cost of failed-but-paid compiles.
+- **Ids are unique across entity kinds**; generated repair door ids are
+  shortened and de-duplicated.
+- **An unreachable goal** no longer offers an empty replay.
+- **Bypass labels** name the broken rule (key, switch, or pass-through).
+- **Hints vs. checks**: a goal reachable only by breaking a rule is now
+  "rule-blocked" (with a direction), not "stranded", matching the
+  verifier's solution/recovery semantics.
+- **Why did this fail?** has a 70 s watchdog and a Cancel button; a level
+  change mid-request no longer leaves it busy.
+- Selection is inactive in play and replays; the leave warning reads the
+  editor's history, not `window.history`; a cancelled touch no longer
+  swallows the next key; the protected-id ceiling (request and recovery)
+  includes props.
+- **Provider URL** must be HTTPS (or localhost) before the key is sent.
+- Not changed: explanation grounding checks ids, not causal truth — a
+  stated model limitation; `refine.md` stays a local exclusion by owner
+  choice (it is untracked, so no checkout contains it).
+
 ## Sep 26 (judge prompts and live verification)
 
 - **Judge battery** (`scripts/judge-battery.ts`, 40 unseen prompts, $0.26):

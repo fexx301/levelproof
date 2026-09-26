@@ -15,6 +15,10 @@ import { STATE_BOUND } from './verifier.js';
 
 export type Hint =
   | { kind: 'move'; move: MoveRecord; movesToGoal: number }
+  /** The goal is still reachable, but only by breaking a design rule; the
+   * move leads toward it. (The verifier's solution and recovery checks count
+   * such routes; hints and the win card do not.) */
+  | { kind: 'rule_blocked'; move: MoveRecord; movesToGoal: number }
   | { kind: 'at_goal' }
   | { kind: 'rule_broken' }
   | { kind: 'stranded' }
@@ -59,6 +63,7 @@ export function nextStep(
   const start: Node = { state, passMask: markVisit(seeded, state.moduleId), first: null, depth: 0 };
   const seen = new Set([key(start)]);
   const queue: Node[] = [start];
+  let ruleBreaking: Node | null = null;
   for (let head = 0; head < queue.length; head++) {
     const node = queue[head]!;
     if (node.state.moduleId === compiled.goal) continue;
@@ -70,6 +75,7 @@ export function nextStep(
         depth: node.depth + 1,
       };
       if (winning(next)) return { kind: 'move', move: next.first!, movesToGoal: next.depth };
+      if (ruleBreaking === null && next.state.moduleId === compiled.goal) ruleBreaking = next;
       const nextKey = key(next);
       if (seen.has(nextKey)) continue;
       if (seen.size >= cap) return { kind: 'unknown' };
@@ -77,5 +83,6 @@ export function nextStep(
       queue.push(next);
     }
   }
+  if (ruleBreaking !== null) return { kind: 'rule_blocked', move: ruleBreaking.first!, movesToGoal: ruleBreaking.depth };
   return { kind: 'stranded' };
 }

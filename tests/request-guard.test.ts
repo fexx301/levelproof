@@ -49,6 +49,23 @@ describe('paid API request boundary', () => {
     warning.mockRestore();
   });
 
+  it('fails closed instead of hanging when the shared store stalls', async () => {
+    const env = {
+      NODE_ENV: 'production',
+      UPSTASH_REDIS_REST_URL: 'https://redis.example.test',
+      UPSTASH_REDIS_REST_TOKEN: 'test-secret',
+    } as NodeJS.ProcessEnv;
+    // Never answers; only the abort signal ends it.
+    const fetcher = vi.fn((_input: RequestInfo | URL, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(init.signal?.reason));
+    }));
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const started = Date.now();
+    expect((await enforceRequestBudget(request(), env, { fetcher, counterTimeoutMs: 50 }))?.status).toBe(503);
+    expect(Date.now() - started).toBeLessThan(2000);
+    warning.mockRestore();
+  });
+
   it('accepts credentials pasted with surrounding terminal whitespace', async () => {
     const env = {
       NODE_ENV: 'production',
@@ -94,7 +111,8 @@ describe('paid API request boundary', () => {
     });
     controller.abort();
     const fetcher = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
-      expect(init?.signal).toBeUndefined();
+      // Only the counter's own timeout, never the cancelled browser request.
+      expect(init?.signal?.aborted).toBe(false);
       return Response.json({ result: [1, 1, 1] });
     });
 

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { compileResultSchema } from './compile-result.js';
-import { BOUNDS, idSchema, levelSchema, operationSchema, themeKeySchema } from './schema.js';
+import { BOUNDS, idSchema, levelSchema, MAX_ENTITY_IDS, operationSchema, themeKeySchema } from './schema.js';
 
 /** Wire contract for POST /api/compile (§10). */
 
@@ -16,7 +16,7 @@ export const compileRequestSchema = z.strictObject({
    * to these. Participates in the cache key via the service. */
   selection: z.array(idSchema).max(8).optional(),
   /** Objects the creator marked "Keep these"; the model must preserve them. */
-  protectedIds: z.array(idSchema).max(BOUNDS.maxModules + BOUNDS.maxKeys + BOUNDS.maxSwitches + BOUNDS.maxDoors).optional(),
+  protectedIds: z.array(idSchema).max(MAX_ENTITY_IDS).optional(),
   /** Recent conversation turns (oldest first), for follow-ups like "raise
    * the bridge" — the scene already reflects earlier applied edits. */
   history: z.array(z.strictObject({ prompt: z.string().min(1).max(2000) })).max(6).optional(),

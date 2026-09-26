@@ -16,11 +16,11 @@ export function requestHint(): void {
   const result = actorBridge.player()?.hint();
   if (result === undefined) return;
   const hint: PlayHint =
-    result.kind === 'move'
-      ? { kind: 'move', direction: result.move.action, destination: result.move.destination, movesToGoal: result.movesToGoal }
+    result.kind === 'move' || result.kind === 'rule_blocked'
+      ? { kind: result.kind, direction: result.move.action, destination: result.move.destination, movesToGoal: result.movesToGoal }
       : { kind: result.kind };
   useApp.setState({ playHint: hint });
-  if (result.kind === 'move') playSound('hint');
+  if (result.kind === 'move' || result.kind === 'rule_blocked') playSound('hint');
 }
 
 const ARROWS: Record<MoveIntent, string> = { forward: '↑', back: '↓', left: '←', right: '→' };
@@ -60,7 +60,7 @@ export function PlayPanel({ level, report }: { level: Level; report: Report }) {
   }, [play.moves, play.at]);
   useEffect(() => () => useApp.setState({ playHint: null }), []);
   const hintIntent =
-    playHint?.kind === 'move' ? INTENTS.find((intent) => relativeCardinal(facing, intent) === playHint.direction) : undefined;
+    playHint?.kind === 'move' || playHint?.kind === 'rule_blocked' ? INTENTS.find((intent) => relativeCardinal(facing, intent) === playHint.direction) : undefined;
 
   const moveButton = (intent: MoveIntent) => {
     const direction: Cardinal = relativeCardinal(facing, intent);
@@ -78,7 +78,12 @@ export function PlayPanel({ level, report }: { level: Level; report: Report }) {
           actorBridge.player()?.move(direction);
         }}
         onPointerUp={release}
-        onPointerCancel={release}
+        // A cancelled touch produces no click, so nothing will consume the
+        // flag; clear it or the next keyboard activation would be swallowed.
+        onPointerCancel={() => {
+          release();
+          pointerPressed.current = false;
+        }}
         onLostPointerCapture={release}
         onContextMenu={(event) => event.preventDefault()}
         // Keyboard activation (Enter / Space) arrives as a click with no pointer press.
@@ -201,6 +206,10 @@ function hintText(hint: PlayHint, placeName: (id: string) => string, intent: Mov
       const key = intent === undefined ? '' : ` (${ARROWS[intent]})`;
       const rest = hint.movesToGoal === 1 ? 'That reaches the goal.' : `${hint.movesToGoal} moves from the goal on the shortest winning route.`;
       return `Next: go ${CARDINAL_NAMES[hint.direction]}${key} to ${placeName(hint.destination)}. ${rest}`;
+    }
+    case 'rule_blocked': {
+      const key = intent === undefined ? '' : ` (${ARROWS[intent]})`;
+      return `The goal is still reachable, but every remaining route breaks a design rule. Toward the goal: go ${CARDINAL_NAMES[hint.direction]}${key} to ${placeName(hint.destination)}. R restarts for a clean win.`;
     }
     case 'stranded':
       return 'No winning route remains from here — every continuation was checked. R restarts.';

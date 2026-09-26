@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { baselineLevel } from '../src/core/fixtures/baseline';
 import { trapLevel } from '../src/core/fixtures/trap';
-import { applyOperations } from '../src/core/level';
+import { applyOperations, validateLevel } from '../src/core/level';
 import { revisionId } from '../src/core/serialize';
 import { verify } from '../src/core/verifier';
 import type { Operation } from '../shared/schema';
@@ -102,5 +102,23 @@ describe('atomic edit application (§5, §13.1/§13.4)', () => {
       moduleId: 'lower-hall',
     }));
     expect(applyOperations(baselineLevel, tooMany).ok).toBe(false);
+  });
+});
+
+describe('ids are unique across entity kinds', () => {
+  it('rejects a door that reuses a module id', () => {
+    const errors = validateLevel({
+      ...structuredClone(baselineLevel),
+      doors: [{ id: 'gallery', a: 'gallery', b: 'bridge-landing', conditions: {} }],
+    });
+    expect(errors.some((error) => error.includes('"gallery" is used by both a module and a door'))).toBe(true);
+  });
+
+  it('rejects a prop that reuses a key id', () => {
+    const errors = validateLevel({
+      ...structuredClone(baselineLevel),
+      props: [{ id: 'brass-key', prop: 'chest', x: 9, z: 9 }],
+    });
+    expect(errors.some((error) => error.includes('used by both a key and a prop'))).toBe(true);
   });
 });

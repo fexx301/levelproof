@@ -1,4 +1,4 @@
-import { compile, peekCompile, type CompileOutcome } from './_lib/compile-service.js';
+import { compile, compileNeedsModel, peekCompile, type CompileOutcome } from './_lib/compile-service.js';
 import { compileRequestSchema, type CompileProgress } from '../shared/api.js';
 import { enforceDailyBudget, enforceRequestWindow, readLimitedJson } from './_lib/request-guard.js';
 
@@ -97,7 +97,9 @@ export async function POST(request: Request): Promise<Response> {
     });
   }
 
-  const budget = await enforceDailyBudget(request);
+  // Deterministic answers (nothing to revise) never call the model, so they
+  // are not charged to the daily model budget.
+  const budget = compileNeedsModel(input) ? await enforceDailyBudget(request) : null;
   if (budget !== null) return budget;
 
   if (streamed) {

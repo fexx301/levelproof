@@ -19,7 +19,8 @@ export interface WitnessOption {
 export function witnessOptions(report: Report): WitnessOption[] {
   const options: WitnessOption[] = [];
   const recovery = report.checks.recovery;
-  if (recovery.status === 'fail' && recovery.witness) {
+  // An unreachable goal fails recovery with an empty witness: nothing to replay.
+  if (recovery.status === 'fail' && recovery.witness && recovery.witness.route.length > 0) {
     options.push({
       kind: 'dead_end',
       label: 'The failure — a player gets stranded',
@@ -31,7 +32,7 @@ export function witnessOptions(report: Report): WitnessOption[] {
   if (requirements.status === 'fail' && requirements.witness) {
     options.push({
       kind: 'bypass',
-      label: 'The bypass — the goal is reached keyless',
+      label: `The bypass — the goal is reached ${requirements.witness.violationText ?? 'while breaking a rule'}`,
       route: requirements.witness.route,
       missingKeys: requirements.witness.missingKeys ?? [],
     });

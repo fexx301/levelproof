@@ -91,9 +91,12 @@ export function App() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [mode]);
+  // The editor's revision history — not window.history, which counts the
+  // browser tab's navigation and would warn with no edits made.
+  const revisionCount = useApp((s) => s.history.length);
   useEffect(() => {
     if (recoveryStatus === 'ready') return;
-    const hasWork = busy || draft !== null || pendingRule !== null || history.length > 0 || changeSummary !== null ||
+    const hasWork = busy || draft !== null || pendingRule !== null || revisionCount > 0 || changeSummary !== null ||
       promptDraft.length > 0 || selection.length > 0 || protectedIds.length > 0 || theme !== null;
     if (!hasWork) return;
     const warnBeforeLeave = (event: BeforeUnloadEvent): void => {
@@ -102,7 +105,7 @@ export function App() {
     };
     window.addEventListener('beforeunload', warnBeforeLeave);
     return () => window.removeEventListener('beforeunload', warnBeforeLeave);
-  }, [recoveryStatus, busy, draft, pendingRule, history.length, changeSummary, promptDraft, selection.length, protectedIds.length, theme]);
+  }, [recoveryStatus, busy, draft, pendingRule, revisionCount, changeSummary, promptDraft, selection.length, protectedIds.length, theme]);
 
   // Moving keyboard focus to the panel on mode change confirms the switch.
   const panelRef = useRef<HTMLElement | null>(null);
@@ -360,12 +363,18 @@ function Viewport({ level, mode, report, theme, previewing }: { level: Level; mo
   const clearSelection = useApp((st) => st.clearSelection);
   useEffect(() => {
     const scene = sceneRef.current;
+    // Selecting is an editing act: in play and replays a click is just a
+    // click (orbiting), never a hidden change to the editor's selection.
+    if (mode !== 'authoring') {
+      scene?.onPick(null);
+      return;
+    }
     scene?.onPick((id) => {
       if (id === null) clearSelection();
       else toggleSelect(id);
     });
     return () => scene?.onPick(null);
-  }, [level, theme, toggleSelect, clearSelection]);
+  }, [level, theme, mode, toggleSelect, clearSelection]);
   useEffect(() => {
     sceneRef.current?.setSelection(selection);
   }, [selection, level, theme]);
@@ -402,7 +411,7 @@ function Viewport({ level, mode, report, theme, previewing }: { level: Level; mo
           info.kind === 'dead_end'
             ? `Stranded at “${info.endState.moduleId}” — no winning route remains.`
             : info.kind === 'bypass'
-              ? `Reached the goal without the ${info.missingKeys.join(' and the ')}.`
+              ? `Reached the goal ${report.checks.requirements.witness?.violationText ?? (info.missingKeys.length > 0 ? `without the ${info.missingKeys.join(' and the ')}` : 'while breaking a design rule')}.`
               : info.kind === 'replay'
                 ? 'Route complete — the same moves no longer strand the player.'
                 : 'Goal reached.';

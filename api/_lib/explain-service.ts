@@ -181,6 +181,12 @@ export async function peekExplain(env: NodeJS.ProcessEnv, input: ExplainInput): 
   return { explanation: hit.value, cached: true, attempts: hit.attempts, totalCostUsd: 0, generationCostUsd: hit.generationCostUsd };
 }
 
+/** False when the engine says the check is not failing: the service then
+ * answers without a model call, so no daily budget is charged. */
+export function explainNeedsModel(input: ExplainInput): boolean {
+  return verify(input.level).checks[input.check].status === 'fail';
+}
+
 export async function explain(
   env: NodeJS.ProcessEnv,
   input: ExplainInput,

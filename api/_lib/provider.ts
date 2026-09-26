@@ -38,11 +38,27 @@ export interface StructuredOptions {
   reasoningEffort?: 'low' | 'medium' | 'high';
 }
 
+export function secureProviderUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    if (url.protocol === 'https:') return true;
+    return url.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
+  } catch {
+    return false;
+  }
+}
+
 export function providerConfigFromEnv(env: NodeJS.ProcessEnv, model?: string): ProviderConfig | null {
   const baseUrl = env.LLM_BASE_URL;
   const apiKey = env.LLM_API_KEY;
   const chosen = model ?? env.LLM_MODEL;
   if (!baseUrl || !apiKey || !chosen) return null;
+  // The API key travels with every request: only send it over HTTPS (plain
+  // http is allowed for a provider on this machine, e.g. a local proxy).
+  if (!secureProviderUrl(baseUrl)) {
+    console.warn('[levelproof] LLM_BASE_URL must be https:// (or http://localhost); the provider is disabled.');
+    return null;
+  }
   const timeoutMs = Number(env.LLM_TIMEOUT_MS ?? 30000);
   return { baseUrl, apiKey, model: chosen, timeoutMs: Number.isFinite(timeoutMs) ? timeoutMs : 30000 };
 }

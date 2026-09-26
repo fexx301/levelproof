@@ -684,7 +684,7 @@ export class PlayerActor {
   hint(): Hint {
     const result = nextStep(this.ctx.compiled, this.animation?.move.after ?? this.state, this.visitedModules);
     this.clearHint();
-    if (result.kind === 'move') {
+    if (result.kind === 'move' || result.kind === 'rule_blocked') {
       // Asking again from the same spot is the same hint.
       const at = `${this.moves}|${this.state.moduleId}`;
       if (at !== this.hintedAt) this.hints += 1;

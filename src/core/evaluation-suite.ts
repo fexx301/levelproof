@@ -589,7 +589,7 @@ export function evaluateFixedCase(testCase: FixedEvaluationCase): FixedEvaluatio
     let protectionPreserved = true;
     if (result.type === 'patch' || result.type === 'rule_proposal') {
       const operations = result.operations;
-      const protectedRequest = testCase.protectedIds !== undefined && touchesProtected(operations, new Set(testCase.protectedIds));
+      const protectedRequest = testCase.protectedIds !== undefined && touchesProtected(operations, new Set(testCase.protectedIds), testCase.base);
       const attempted = result.type === 'rule_proposal'
         ? applyRuleProposal(testCase.base, result)
         : applyOperations(testCase.base, operations);
@@ -632,7 +632,7 @@ export function evaluateFixedCase(testCase: FixedEvaluationCase): FixedEvaluatio
 
   let protectionPreserved = true;
   if (candidate !== null && testCase.protectedIds !== undefined && (result.type === 'patch' || result.type === 'rule_proposal')) {
-    protectionPreserved = !touchesProtected(result.operations, new Set(testCase.protectedIds));
+    protectionPreserved = !touchesProtected(result.operations, new Set(testCase.protectedIds), testCase.base);
     if (!protectionPreserved) errors.push('candidate touches a protected entity');
   }
 

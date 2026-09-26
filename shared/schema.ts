@@ -23,6 +23,10 @@ export const BOUNDS = {
   maxStringLength: 64,
 } as const;
 
+/** The most entities one level can hold — the ceiling for "Keep these"
+ * everywhere it is stored or sent (request schema, session recovery). */
+export const MAX_ENTITY_IDS = BOUNDS.maxModules + BOUNDS.maxKeys + BOUNDS.maxSwitches + BOUNDS.maxDoors + BOUNDS.maxProps;
+
 export const CARDINALS = ['N', 'E', 'S', 'W'] as const;
 export type Cardinal = (typeof CARDINALS)[number];
 
