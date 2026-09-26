@@ -156,3 +156,21 @@ user's language. Median 7.5 s, max 16.8 s (with a revision).
 the primary: it asked a clarifying question for 7 of the first 8 build
 prompts instead of building. It is only the fallback in production, but if
 the primary provider fails during judging, builds degrade to questions.
+
+## Sep 26 — fallback candidates (kept `gemini-2.5-flash-lite`)
+
+The fallback gets one attempt, no correction retry, inside whatever remains
+of the 52 s service deadline. Single-shot on the 8-prompt build battery:
+
+| Candidate | Valid | Winnable | Latency | Note |
+|---|---|---|---|---|
+| openai/gpt-5.4-mini (plain JSON) | 5/8 | 3/8 | median 14 s | overlaps, misplaced doors |
+| anthropic/claude-haiku-4.5 (plain JSON) | 3/8 | 1/8 | median 8 s | 3 malformed |
+| deepseek/deepseek-v4.1-flash | — | — | timed out at 90 s | |
+| anthropic/claude-sonnet-5 (plain JSON) | 1/4 | 1/4 | 72–89 s | stopped at budget |
+| openai/gpt-5.4 | not run | | | budget reached |
+
+OpenAI and Anthropic reject the strict per-type anyOf envelope (top-level
+anyOf; null in enums), so they need the plain-JSON path. None beats the
+current fallback, whose clarifying question is a graceful outcome where a
+failed patch would be an error. Spend on this comparison ≈ $0.6.

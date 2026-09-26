@@ -63,7 +63,8 @@ try {
       budget.record(result.usage.costUsd, variant.name);
       console.log(`[${variant.name}] OK (${result.usage.promptTokens}+${result.usage.completionTokens} tokens, $${result.usage.costUsd!.toFixed(5)} provider-reported) content starts: ${result.content.slice(0, 120)}`);
     } else {
-      budget.record(null, variant.name);
+      console.log(`[${variant.name}] FAILED (${result.kind}): ${result.error}`);
+      budget.record(result.usage?.costUsd ?? null, variant.name);
     }
   }
   console.log(`Known provider-reported spend: $${budget.spentUsd.toFixed(5)} / $${limit.toFixed(5)}.`);

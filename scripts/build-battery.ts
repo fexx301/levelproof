@@ -67,7 +67,8 @@ try {
       ], callOptionsFor(model));
       const ms = Math.round(performance.now() - started);
       latencies.push(ms);
-      budget.record(response.ok ? response.usage.costUsd : null, prompt.slice(0, 24));
+      if (!response.ok) console.log(`  provider error (${response.kind}): ${response.error.slice(0, 300)}`);
+      budget.record(response.ok ? response.usage.costUsd : (response.usage?.costUsd ?? null), prompt.slice(0, 24));
       let grade: string;
       if (!response.ok) {
         grade = `provider error: ${response.kind}`;
