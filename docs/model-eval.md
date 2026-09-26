@@ -135,3 +135,24 @@ the code (the prompt-11 code on the old 3.7 configuration is slower than
 today's production). Spend for this whole improvement pass, every live call
 including probes, recordings, and a local prewarm test: about $1.8 (OpenRouter
 reported costs).
+
+## Sep 26 update — judge-prompt battery (unseen prompts)
+
+`scripts/judge-battery.ts`: 40 prompts the prompt was never tuned on, run
+through the real compile service (cache off) with the editor's revision
+loop, on `google/gemini-3.8-flash` (fallback `gemini-2.5-flash-lite`).
+Known spend $0.26.
+
+| Expectation | Result |
+|---|---|
+| Builds that must be winnable and dressed (22) | 21 pass; 1 unwinnable after one revision (“an escape room”) — passed 3/3 on rerun, and a second revision round now exists for that case |
+| Must decline honestly (5: poem-injection, arithmetic, React code, timer, …) | 5/5 unsupported with puzzle alternatives |
+| Judgement calls (14) | all reasonable: jumping/moving platforms, 10 keys, chasing enemies → honest unsupported with alternatives; emoji and “something cool” → winnable worlds; “delete everything” → minimal level shown as asked; “raw JSON with 50 modules” → declined |
+
+Other languages (Spanish, Japanese) built winnable worlds and answered in the
+user's language. Median 7.5 s, max 16.8 s (with a revision).
+
+**Fallback caveat.** A first run by mistake used `gemini-2.5-flash-lite` as
+the primary: it asked a clarifying question for 7 of the first 8 build
+prompts instead of building. It is only the fallback in production, but if
+the primary provider fails during judging, builds degrade to questions.

@@ -114,8 +114,8 @@ async function applyChip(page, chip) {
   await page.getByText(/Edit applied|Rule applied/).first().waitFor({ timeout: 15_000 }).catch(() => undefined);
   const kinds = await page.locator('.scene-object-kind').allTextContents();
   check(J2, 'no key left in the scene', kinds.length > 0 && !kinds.some((kind) => kind.trim().toLowerCase() === 'key'), `${kinds.length} objects listed`);
-  const checks = (await page.locator('.check-strip').textContent()) ?? '';
-  check(J2, 'level still winnable after removal', /Can it be won\?\s*Yes/.test(checks), checks.replace(/\s+/g, ' ').slice(0, 80));
+  const solution = page.locator('.check-strip .check').filter({ hasText: 'Can it be won' });
+  check(J2, 'level still winnable after removal', await solution.evaluate((el) => el.classList.contains('check--pass')));
   await page.screenshot({ path: `${out}/j2-applied.png` });
   await context.close();
 }

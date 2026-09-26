@@ -2,6 +2,25 @@
 
 Build-window decisions and measured evidence, newest first. Dates are 2026.
 
+## Sep 26 (judge prompts and live verification)
+
+- **Judge battery** (`scripts/judge-battery.ts`, 40 unseen prompts, $0.26):
+  25/26 graded pass, 14 judgement calls all reasonable; details in
+  `docs/model-eval.md`. The one miss (an escape room still unwinnable after
+  its revision) passed 3/3 on rerun.
+- **Second revision round**: `MAX_AUTO_REVISIONS = 2`, used only while the
+  best build is still unwinnable; the editor, prewarm, and both batteries
+  share the loop (`scripts/auto-revise.ts`) and the score
+  (`src/core/report-score.ts`), so evaluations grade what authors see.
+- **Client watchdog**: a submit open after 130 s is stopped with an
+  explanation and the prompt kept (the server stops each call at 60 s).
+- **Scene switch mid-request** now says the request was cancelled; it was
+  already discarded safely but silently.
+- **Live journeys** (`scripts/live-journeys.mjs`): 24/24 on production —
+  the checklist's live items are now checked.
+- **Deploy note**: the Vercel CLI intermittently answers “Not authorized”;
+  a retry with the pinned `vercel@60.0.1` succeeded both times.
+
 ## Sep 25 (play-mode strengthening — hints, sound, phones)
 
 - **Hints from the checker**: **Hint** (H) runs a breadth-first search with

@@ -38,19 +38,29 @@ This is the delta checklist for the implementation in `refine.md`.
 See `docs/browser-verification.md`. These checks prove the real UI and wire
 contract, not live model behavior.
 
-## Still to verify against the live backend
+## Verified against the live backend (2026-09-26)
 
-- [ ] Full live backend prompt → preview → approve → play → save → reload →
-  share → clean-context reopen.
-- [ ] Live key-and-requirement removal preview and approval.
-- [ ] “Show the problem” evidence highlights and replay in every theme.
-- [ ] Backend outage, timeout, malformed response, and slow-response browser
-  journeys.
-- [ ] Production request limiter and provider spending cap verified in the
-  hosting environment.
+Run with `node scripts/live-journeys.mjs https://levelproof.vercel.app <out>
+--confirm-live-ai` (Chromium with GPU, macOS). Result: **24/24 checks passed**.
 
-These are deliberately left unchecked until the browser run is performed with
-the backend available.
+- [x] Full live backend prompt → preview → approve → play (won by following
+  hints) → save → reload → share → clean-context reopen, and the shared
+  puzzle won again in the clean context. No page errors.
+- [x] Live key-and-requirement removal: a fresh model call previewed the
+  removal, approval removed the key and its door, and the level stayed
+  winnable.
+- [x] “Show the problem” evidence and replay in every theme (from the scene,
+  limestone, ivory, patina, basalt, futuristic): each pauses on the decisive
+  move with the evidence card.
+- [x] Failure journeys on the production UI (API intercepted): network
+  outage, server error, malformed response, switching scenes mid-request
+  (cancelled with a notice), and a stalled connection (stopped by the
+  130 s client watchdog). Each explains itself, keeps the prompt, and never
+  leaves a spinner.
+- [x] Production request limiter: a burst of ten requests from one address
+  gets 400 for the first eight malformed bodies and 429 after that, before
+  any model call. The provider spending cap is set on the OpenRouter key by
+  the owner (not visible to this script).
 
 ## Existing local browser evidence
 
@@ -61,10 +71,11 @@ above.
 
 ## Blocked or unavailable evidence
 
-- Real iPhone/Android hardware: unavailable in the current workspace.
-- Production GPU/CDN startup and backend: not rechecked; deployment and live
-  configuration changes were not authorized.
+- Real iPhone/Android hardware: unavailable in the current workspace (Pixel 7
+  emulation only: hold-to-run and taps verified).
+- Production GPU/CDN startup and backend: rechecked 2026-09-26 (above).
 - Safari: unavailable in the current browser surface.
 - Outside tester: not available for this run.
-- Live model calls: not run without an explicit cost/backend test window.
-- Production deployment/configuration changes: intentionally not performed.
+- Live model calls: run 2026-09-26 with owner authorization (judge battery,
+  $0.26; one live removal).
+- Production deployments: performed with owner authorization.
