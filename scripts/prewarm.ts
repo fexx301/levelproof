@@ -16,7 +16,9 @@ import { blankCanvasLevel } from '../src/core/fixtures/blank-canvas';
 import { gauntletLevel, overpassLevel, twinKeysLevel } from '../src/core/fixtures/gallery';
 import { vaultEmptyLevel } from '../src/core/fixtures/vault-empty';
 import { applyOperations, applyRuleProposal } from '../src/core/level';
-import { shouldAutoRevise } from '../src/core/revision-policy';
+import { MAX_AUTO_REVISIONS, shouldAutoRevise } from '../src/core/revision-policy';
+import { reportScore } from '../src/core/report-score';
+import { verify } from '../src/core/verifier';
 import { BUILD_PROMPTS, EXAMPLE_PROMPTS, MAKEOVER_PROMPT, TWIST_PROMPT, WINTER_PROMPT } from '../src/ui/example-prompts';
 import { LiveBudget, LiveEvaluationStop, requireLiveBudget } from './live-budget';
 
@@ -80,12 +82,22 @@ try {
     if (result.type !== 'patch' && result.type !== 'rule_proposal') return null;
     const applied = result.type === 'patch' ? applyOperations(level, result.operations) : applyRuleProposal(level, result);
     if (!applied.ok) return null;
+    // Repeat the editor's revision loop so every request it will send is warm.
     if (result.type === 'patch' && shouldAutoRevise(level, applied.level, result.operations as Operation[])) {
-      const revised = await post(`${label} (revision)`, { ...body, revision: { operations: result.operations } });
-      if (revised?.result.type === 'patch') {
+      let best = applied.level;
+      let bestScore = reportScore(verify(best));
+      let latest = result.operations;
+      for (let round = 1; round <= MAX_AUTO_REVISIONS && verify(best).checks.solution.status === 'fail'; round++) {
+        const revised = await post(`${label} (revision ${round})`, { ...body, revision: { operations: latest } });
+        if (revised?.result.type !== 'patch') break;
+        latest = revised.result.operations;
         const revisedLevel = applyOperations(level, revised.result.operations);
-        if (revisedLevel.ok) return revisedLevel.level;
+        if (revisedLevel.ok && reportScore(verify(revisedLevel.level)) < bestScore) {
+          best = revisedLevel.level;
+          bestScore = reportScore(verify(best));
+        }
       }
+      return best;
     }
     return applied.level;
   };

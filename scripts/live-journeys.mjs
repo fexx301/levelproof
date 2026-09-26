@@ -111,10 +111,11 @@ async function applyChip(page, chip) {
   await page.screenshot({ path: `${out}/j2-preview.png` });
   await previewOrRule.click();
   await page.waitForTimeout(1200);
-  const objects = await page.evaluate(() => [...document.querySelectorAll('.scene-object-list button, .scene-object-list li')].map((n) => n.textContent ?? ''));
-  check(J2, 'no key left in the scene', !objects.some((label) => /key/i.test(label)), `${objects.length} objects listed`);
-  const checks = (await page.getByRole('region', { name: 'Verification checks' }).textContent()) ?? '';
-  check(J2, 'level still winnable after removal', /Can it be won\?\s*Yes/.test(checks));
+  await page.getByText(/Edit applied|Rule applied/).first().waitFor({ timeout: 15_000 }).catch(() => undefined);
+  const kinds = await page.locator('.scene-object-kind').allTextContents();
+  check(J2, 'no key left in the scene', kinds.length > 0 && !kinds.some((kind) => kind.trim().toLowerCase() === 'key'), `${kinds.length} objects listed`);
+  const checks = (await page.locator('.check-strip').textContent()) ?? '';
+  check(J2, 'level still winnable after removal', /Can it be won\?\s*Yes/.test(checks), checks.replace(/\s+/g, ' ').slice(0, 80));
   await page.screenshot({ path: `${out}/j2-applied.png` });
   await context.close();
 }
@@ -170,7 +171,7 @@ async function applyChip(page, chip) {
       await new Promise((resolve) => setTimeout(resolve, 6000));
       await route.continue();
     },
-    /scene changed/i,
+    /switched scenes|scene changed/i,
     { during: async (page) => { await page.waitForTimeout(1000); await page.locator('select.scene-select').selectOption({ label: 'The Overpass' }); } },
   );
   await scenario('stalled connection (watchdog)', () => new Promise(() => {}), /did not answer in time/i, {

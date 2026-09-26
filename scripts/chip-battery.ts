@@ -9,16 +9,15 @@
  */
 import { readFileSync } from 'node:fs';
 import { resetCache } from '../api/_lib/cache';
-import { compile } from '../api/_lib/compile-service';
 import { blankCanvasLevel } from '../src/core/fixtures/blank-canvas';
 import { gauntletLevel, overpassLevel, twinKeysLevel } from '../src/core/fixtures/gallery';
 import { vaultEmptyLevel } from '../src/core/fixtures/vault-empty';
 import { applyOperations, applyRuleProposal } from '../src/core/level';
 import { verify } from '../src/core/verifier';
-import { shouldAutoRevise } from '../src/core/revision-policy';
 import { BUILD_PROMPTS, EXAMPLE_PROMPTS, MAKEOVER_PROMPT, TWIST_PROMPT, WINTER_PROMPT } from '../src/ui/example-prompts';
 import type { CompileResult } from '../shared/compile-result';
 import type { Level } from '../shared/schema';
+import { compileWithRevision } from './auto-revise';
 import { LiveBudget, LiveEvaluationStop, requireLiveBudget } from './live-budget';
 
 type Grade = { pass: boolean; note: string };
@@ -142,27 +141,13 @@ try {
   const selected = CHIPS.filter((chip) => only === '' || chip.name.includes(only));
   for (const chip of selected) {
     for (let run = 1; run <= runs; run++) {
-      budget.ensureCanCall(chip.name);
       resetCache();
       const started = performance.now();
-      let outcome = await compile(process.env, { level: chip.base, prompt: chip.prompt });
-      let cost = outcome.totalCostUsd;
-      let note = '';
-      let after = outcome.result === null ? `failed: ${outcome.error} ${outcome.providerError ?? ''}` : applyResult(chip.base, outcome.result);
-      // Mirror the editor: an additive build that cannot be won gets one engine-guided revision.
-      if (typeof after !== 'string' && outcome.result?.type === 'patch' && shouldAutoRevise(chip.base, after, outcome.result.operations)) {
-        budget.record(cost, chip.name);
-        const revised = await compile(process.env, { level: chip.base, prompt: chip.prompt, revision: { operations: outcome.result.operations } });
-        cost = revised.totalCostUsd;
-        note = ' (revised)';
-        if (revised.result !== null) {
-          const revisedLevel = applyResult(chip.base, revised.result);
-          if (typeof revisedLevel !== 'string') {
-            outcome = revised;
-            after = revisedLevel;
-          }
-        }
-      }
+      const { outcome, costs, rounds } = await compileWithRevision(process.env, { level: chip.base, prompt: chip.prompt }, () => budget.ensureCanCall(chip.name));
+      const cost = costs.at(-1) ?? null;
+      const note = rounds > 0 ? ` (revised ×${rounds})` : '';
+      const after = outcome.result === null ? `failed: ${outcome.error} ${outcome.providerError ?? ''}` : applyResult(chip.base, outcome.result);
+      for (const spent of costs.slice(0, -1)) budget.record(spent, chip.name);
       if (cost === null) console.log(`  attempts: ${JSON.stringify(outcome.attempts)}`);
       budget.record(cost, chip.name);
       const ms = Math.round(performance.now() - started);

@@ -19,7 +19,8 @@ import { verify, type Report } from '../core/verifier.js';
 import { buildFailureEvidence, type FailureEvidence } from '../core/failure-evidence.js';
 import { engineFindings } from '../core/engine-findings.js';
 import { summarizeChange } from '../core/operation-description.js';
-import { shouldAutoRevise } from '../core/revision-policy.js';
+import { MAX_AUTO_REVISIONS, shouldAutoRevise } from '../core/revision-policy.js';
+import { reportScore } from '../core/report-score.js';
 import type { MoveRecord } from '../core/movement.js';
 import { validateRoute } from '../core/replay.js';
 import { decodeLevelShare, encodeLevelShare, revisionId } from '../core/serialize.js';
@@ -264,14 +265,6 @@ export async function postCompile(
 
 export { shouldAutoRevise };
 
-/** Fewer failing checks is better; an unwinnable level is worst. */
-function reportScore(report: Report): number {
-  if (!report.valid) return 100;
-  return (report.checks.solution.status === 'fail' ? 10 : 0) +
-    (report.checks.requirements.status === 'fail' ? 3 : 0) +
-    (report.checks.recovery.status === 'fail' ? 2 : 0) +
-    (report.complete ? 0 : 1);
-}
 
 export const AI_FIX_PROMPT = 'Fix the failing checks in this puzzle without losing its idea.';
 
@@ -893,22 +886,28 @@ export const useApp = create<AppState>()((set, get) => ({
         let revision: { findings: string[]; outcome: 'fixed' | 'improved' | 'unresolved' } | undefined;
         if (shouldAutoRevise(base, applied.level, result.operations)) {
           // The AI↔engine loop: the engine found the build unwinnable, so the
-          // model gets its verified findings and one chance to revise.
+          // model gets its verified findings and up to MAX_AUTO_REVISIONS
+          // chances to revise; a round only runs while the best is unwinnable.
           const firstReport = verify(applied.level);
           const findings = engineFindings(applied.level, firstReport);
           set({ compileProgress: { ...progressStart(findings[0] ?? null, 'revising'), startedAt: get().compileProgress?.startedAt ?? Date.now(), revising: true } });
           revision = { findings, outcome: 'unresolved' };
+          let bestScore = reportScore(firstReport);
+          let latestOperations = result.operations;
           try {
-            const second = await postCompile({ ...requestBody, revision: { operations: result.operations } }, controller.signal, onProgress);
-            if (generation !== contextGeneration) return;
-            const revised = second.ok ? compileOkResponseSchema.safeParse(second.body) : null;
-            if (revised?.success && revised.data.result.type === 'patch' && revised.data.baseRevision === boundRevision && stillCurrent()) {
+            for (let round = 0; round < MAX_AUTO_REVISIONS && verify(chosen.candidate).checks.solution.status === 'fail'; round++) {
+              const second = await postCompile({ ...requestBody, revision: { operations: latestOperations } }, controller.signal, onProgress);
+              if (generation !== contextGeneration) return;
+              const revised = second.ok ? compileOkResponseSchema.safeParse(second.body) : null;
+              if (!(revised?.success && revised.data.result.type === 'patch' && revised.data.baseRevision === boundRevision && stillCurrent())) break;
               const revisedResult = revised.data.result;
+              latestOperations = revisedResult.operations;
               const revisedApplied = applyOperations(base, revisedResult.operations);
               const kept = get().protectedIds;
               if (revisedApplied.ok && !(kept.length > 0 && touchesProtected(revisedResult.operations, new Set(kept)))) {
                 const revisedReport = verify(revisedApplied.level);
-                if (reportScore(revisedReport) < reportScore(firstReport)) {
+                if (reportScore(revisedReport) < bestScore) {
+                  bestScore = reportScore(revisedReport);
                   chosen = { result: revisedResult, candidate: revisedApplied.level };
                   revision = { findings, outcome: revisedReport.checks.solution.status === 'fail' ? 'improved' : 'fixed' };
                 }
@@ -1277,6 +1276,9 @@ export const useApp = create<AppState>()((set, get) => ({
       set({ sceneId: id, error: 'That saved scene is structurally invalid and cannot be rendered. Remove it from My puzzles.' });
       return;
     }
+    // A request still in flight belonged to the scene being left: it is
+    // cancelled, and the author is told why it vanished.
+    const interrupted = get().busy;
     invalidateContext();
     const savedTheme = saved?.theme ?? null;
     const parsedTheme = themeKeySchema.safeParse(savedTheme);
@@ -1304,7 +1306,7 @@ export const useApp = create<AppState>()((set, get) => ({
         lastResult: null,
         lastPrompt: null,
         lastCompileMeta: null,
-        error: null,
+        error: interrupted ? 'You switched scenes, so the request in progress was cancelled. Your prompt is still here.' : null,
         busy: false,
         compileProgress: null,
         mode: 'authoring',
@@ -1339,7 +1341,7 @@ export const useApp = create<AppState>()((set, get) => ({
       lastResult: null,
       lastPrompt: null,
       lastCompileMeta: null,
-      error: null,
+      error: interrupted ? 'You switched scenes, so the request in progress was cancelled. Your prompt is still here.' : null,
       busy: false,
       compileProgress: null,
       mode: 'authoring',

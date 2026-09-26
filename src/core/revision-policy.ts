@@ -1,6 +1,14 @@
 import type { Level, Operation } from '../../shared/schema.js';
 import { verify } from './verifier.js';
 
+/**
+ * Engine-guided revision rounds per build. A second round runs only when the
+ * first revision is still unwinnable (measured: 1 of 27 unseen build prompts,
+ * docs/model-eval.md); each round re-sends the latest operations so the
+ * server recomputes fresh findings.
+ */
+export const MAX_AUTO_REVISIONS = 2;
+
 const REMOVAL_KINDS = new Set<Operation['kind']>(['removeModule', 'removeItem', 'removeDoor', 'removeProp']);
 
 /**
