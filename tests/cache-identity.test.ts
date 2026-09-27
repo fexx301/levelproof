@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { BoundedCache, cacheKey } from '../api/_lib/cache';
+import { BoundedCache, cacheKey, compileCacheKey } from '../api/_lib/cache';
 import { vaultEmptyLevel } from '../src/core/fixtures/vault-empty';
 import { revisionId } from '../src/core/serialize';
 
@@ -23,5 +23,13 @@ describe('cache identity and freshness', () => {
 
   it('uses a 64-bit scene revision for stale-response binding', () => {
     expect(revisionId(vaultEmptyLevel)).toMatch(/^rev-[0-9a-f]{16}$/);
+  });
+
+  it('keys a pinned building style, and leaves unstyled keys unchanged', () => {
+    const base = { level: vaultEmptyLevel, prompt: 'make it grand', models: 'm', promptVersion: 'v1' };
+    const plain = compileCacheKey(base);
+    expect(compileCacheKey({ ...base, theme: undefined })).toBe(plain);
+    expect(compileCacheKey({ ...base, theme: 'basalt' })).not.toBe(plain);
+    expect(compileCacheKey({ ...base, theme: 'basalt' })).not.toBe(compileCacheKey({ ...base, theme: 'ivory' }));
   });
 });

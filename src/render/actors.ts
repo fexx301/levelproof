@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 import type { Cardinal } from '../../shared/schema.js';
 import { centerPoint } from '../core/catalog.js';
-import { goalRequirementViolated, initialState, step, transitions, type GameState, type MoveRecord } from '../core/movement.js';
-import { nextStep, type Hint } from '../core/hint.js';
+import { goalRequirementViolated, initialState, stateKey, step, transitions, type GameState, type MoveRecord } from '../core/movement.js';
+import { goalReachableStates, nextStep, type Hint } from '../core/hint.js';
 import { playSound } from './sound.js';
 import type { CompiledLevel } from '../core/topology.js';
 import type { GhostMotion } from './ghost-visual.js';
@@ -592,6 +592,8 @@ export class PlayerActor {
   private hints = 0;
   private hintedAt: string | null = null;
   private failCued = false;
+  /** States that can still reach the goal; computed once, on first need. */
+  private canWin: Set<string> | null = null;
   private hintTrail: THREE.Group | null = null;
   private celebrated = false;
 
@@ -954,7 +956,8 @@ export class PlayerActor {
     const atGoal = this.state.moduleId === this.ctx.compiled.goal;
     const trapped = !atGoal && transitions(this.ctx.compiled, this.state).length === 0;
     const goalViolated = goalRequirementViolated(this.ctx.compiled, this.state, this.visitedModules);
-    const doomed = !atGoal && !trapped && nextStep(this.ctx.compiled, this.state, this.visitedModules).kind === 'stranded';
+    this.canWin ??= goalReachableStates(this.ctx.compiled, initialState(this.ctx.compiled));
+    const doomed = !atGoal && !trapped && !this.canWin.has(stateKey(this.state));
     if ((doomed || trapped || goalViolated) && !this.failCued) {
       this.failCued = true;
       playSound('fail');

@@ -717,7 +717,11 @@ export function buildScenery(level: Level, options: SceneryOptions): SceneryBuil
         if (object instanceof THREE.Mesh || object instanceof THREE.Points) {
           object.geometry.dispose();
           const material = object.material as THREE.Material | THREE.Material[];
-          for (const m of Array.isArray(material) ? material : [material]) m.dispose();
+          for (const m of Array.isArray(material) ? material : [material]) {
+            // Material.dispose() leaves its textures (the particle sprite) alive.
+            if ('map' in m && m.map instanceof THREE.Texture) m.map.dispose();
+            m.dispose();
+          }
         }
       });
       for (const light of lights) light.dispose();

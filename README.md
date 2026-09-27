@@ -119,9 +119,10 @@ would change it are refused.
 - **Can a player get stuck?** (recovery) — can every reachable non-goal state
   still win? Reverse search finds the dead ends and witnesses the earliest.
 
-Exploration is bounded and exhaustive (≤ 32,768 states: module × keys ×
-switches). If the bound is hit, the check says *check incomplete* instead of
-pretending. Player, ghost, verifier, and repair search all call the same core
+Exploration is exhaustive. The kit's limits (256 modules × 3 keys × 4
+switches) cap the state space at 32,768 states, and the verifier's bound is
+exactly that, so every check explores every state; the *check incomplete*
+outcome exists only as a safeguard if the limits ever grow. Player, ghost, verifier, and repair search all call the same core
 `step()` over the same catalog polylines; a witness only plays back if it
 replays through that engine from the real initial state.
 
@@ -159,7 +160,7 @@ The example chips are prewarmed after each deploy (`scripts/prewarm.ts`).
 npm install
 cp .env.example .env   # add your OpenRouter key (and optionally Upstash)
 npm run dev            # Vite dev server; also serves /api/compile and /api/explain
-npm run verify         # typecheck, lint, 274 unit tests, production build
+npm run verify         # typecheck, lint, 285 unit tests, production build
 npm run test:e2e       # Playwright browser journeys (fixture-backed, no model calls)
 ```
 

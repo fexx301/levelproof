@@ -2,6 +2,51 @@
 
 Build-window decisions and measured evidence, newest first. Dates are 2026.
 
+## Sep 27 (second external review — fixes)
+
+A second, deeper review (18 findings + gaps). Each claim was checked first;
+fixed:
+
+- **Truthful failure narration**: the dead-end witness is the BFS-earliest
+  dead state, so its last move is the point of no return; a sealing switch is
+  named as the cause only when that move pressed it (a decoy seal on move 1
+  used to be blamed, and the replay paused 4 moves early).
+- **Stale proposals**: a revision round interrupted by a scene change no
+  longer stages a proposal bound to the old level.
+- **Opening a share link never erases the author's session**: viewing a
+  share writes no recovery; leaving it files the earlier session's levels in
+  My puzzles ("Before the shared link").
+- **Keep these** also covers additive changes (a new door, item, or moved
+  spawn/goal at a kept module).
+- **Cache**: a pinned building style is part of the compile cache key.
+- **Abuse and money**: linear fence stripping with a 256 KB answer cap
+  (the regex was quadratic); a per-address daily share (100) before the
+  global budget (500); JSON-only request bodies (415 otherwise) so blind
+  cross-site posts cannot spend budget; `no-store`/`nosniff` on API
+  responses; `live-journeys.mjs` requires `--budget-usd` and stops on
+  unknown cost; the revision helper's budget guard is required.
+- **Tests that test**: `/api/explain` handler tests (validation, no charge
+  for non-failing checks, cache free, daily cap, burst window, hygiene);
+  performance e2e now asserts budgets (cold JS ≤ 400 KB, total ≤ 1.4 MB,
+  controls ≤ 1.5 s, longest task ≤ 250 ms, replay ≥ 2 fps; time budgets
+  scale in CI). CI: concurrency, `npm audit`, evidence upload on failure;
+  `engines: node >= 22`.
+- **Performance**: repair search has a 2 s budget and paints "Searching…"
+  first; play's dead-end flag uses a once-computed can-win set instead of a
+  search per move; the hint cap now covers its full node space; recovery
+  writes are batched (≤ 1 per 400 ms, flushed on hide/unload); disposed
+  scenes release their GL context (`forceContextLoss`) and sprite textures.
+- **Docs**: the README bound claim (the 32,768 cap equals the kit's maximum,
+  so exploration is always complete); model-eval table counts and the
+  superseded Sep 11 decision; a current performance section.
+
+Deferred, deliberately, this close to submission (larger render/engine
+refactors with regression risk): lazy move segments in the verifier
+(66 MB on a maximum-size level; typical builds are ~10 modules), keeping one
+WebGL renderer across preview toggles, merging world geometry, the quality
+ladder at DPR 1, type-aware ESLint rules, and render/sound/GLB test
+coverage.
+
 ## Sep 26 (external code review — fixes)
 
 An external model reviewed the code (17 findings, 3 operational notes).

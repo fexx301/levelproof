@@ -254,7 +254,15 @@ function protectedFootprint(level: Level, id: string): string | null {
   };
   const module = moduleById(id);
   if (module !== undefined) {
-    return JSON.stringify(['module', place(id), [...module.ports].sort(), module.label ?? null]);
+    // What the author sees at a kept module also includes the doors on its
+    // edges, the items in it, and whether it is the start or the goal — so an
+    // added door, item, or moved spawn/goal counts as changing it.
+    const doors = level.doors
+      .filter((door) => door.a === id || door.b === id)
+      .map((door) => [door.id, [door.a, door.b].sort(), door.conditions ?? {}])
+      .sort((x, y) => String(x[0]).localeCompare(String(y[0])));
+    const items = [...level.keys, ...level.switches].filter((item) => item.moduleId === id).map((item) => item.id).sort();
+    return JSON.stringify(['module', place(id), [...module.ports].sort(), module.label ?? null, doors, items, level.spawn === id, level.goal === id]);
   }
   const key = level.keys.find((k) => k.id === id);
   if (key !== undefined) return JSON.stringify(['key', key.moduleId, place(key.moduleId), key.look ?? null]);
@@ -305,8 +313,12 @@ export function findRepairs(
   draft: Level,
   report: Report,
   protectedIds: string[] = [],
+  /** Wall-clock budget for re-verifying candidates: on the largest levels
+   * each full verify is slow, and the author should not wait for all 24. */
+  timeBudgetMs = 2000,
 ): RepairSearchResult {
   const t0 = performance.now();
+  let outOfTime = false;
   const protectedSet = new Set(protectedIds);
   const pool = [
     ...routeGatingCandidates(accepted, draft, report),
@@ -334,6 +346,11 @@ export function findRepairs(
 
   const passing: RepairCandidate[] = [];
   for (const candidate of enumerated) {
+    if (performance.now() - t0 > timeBudgetMs) {
+      outOfTime = true;
+      truncated = true;
+      break;
+    }
     const applied = applyOperations(draft, candidate.operations);
     if (!applied.ok) continue;
     const repaired = verify(applied.level);
@@ -359,7 +376,9 @@ export function findRepairs(
 
   const durationMs = performance.now() - t0;
   const baseNote =
-    truncated
+    outOfTime
+      ? `Repair search stopped at its ${Math.round(timeBudgetMs / 1000)} s limit${passing.length > 0 ? ` with ${passing.length} checked fix${passing.length === 1 ? '' : 'es'}` : ''} — this level is large.`
+      : truncated
       ? 'Repair search incomplete.'
       : passing.length === 0
         ? protectedSet.size > 0

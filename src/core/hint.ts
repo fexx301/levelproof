@@ -35,7 +35,8 @@ export function nextStep(
   compiled: CompiledLevel,
   state: GameState,
   visitedModules: ReadonlySet<string>,
-  cap: number = STATE_BOUND * 4,
+  // Engine states × passThrough masks (at most three passThrough rules).
+  cap: number = STATE_BOUND * 8,
 ): Hint {
   if (state.moduleId === compiled.goal) {
     return goalRequirementViolated(compiled, state, visitedModules) ? { kind: 'rule_broken' } : { kind: 'at_goal' };
@@ -85,4 +86,46 @@ export function nextStep(
   }
   if (ruleBreaking !== null) return { kind: 'rule_blocked', move: ruleBreaking.first!, movesToGoal: ruleBreaking.depth };
   return { kind: 'stranded' };
+}
+
+/**
+ * Every state reachable from spawn that can still reach the goal (rules
+ * aside) — the verifier's recovery semantics. Computed once per level so
+ * play can flag a dead end on each move with a set lookup instead of a
+ * search. Goal states are not expanded, as in the verifier.
+ */
+export function goalReachableStates(compiled: CompiledLevel, start: GameState): Set<string> {
+  const reverse = new Map<string, string[]>();
+  const seen = new Set([stateKey(start)]);
+  const queue: GameState[] = [start];
+  const goals: string[] = [];
+  for (let head = 0; head < queue.length; head++) {
+    const state = queue[head]!;
+    const from = stateKey(state);
+    if (state.moduleId === compiled.goal) {
+      goals.push(from);
+      continue;
+    }
+    for (const move of transitions(compiled, state)) {
+      const to = stateKey(move.after);
+      const back = reverse.get(to);
+      if (back === undefined) reverse.set(to, [from]);
+      else back.push(from);
+      if (!seen.has(to)) {
+        seen.add(to);
+        queue.push(move.after);
+      }
+    }
+  }
+  const canWin = new Set(goals);
+  const stack = [...goals];
+  while (stack.length > 0) {
+    for (const from of reverse.get(stack.pop()!) ?? []) {
+      if (!canWin.has(from)) {
+        canWin.add(from);
+        stack.push(from);
+      }
+    }
+  }
+  return canWin;
 }

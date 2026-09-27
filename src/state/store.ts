@@ -579,6 +579,36 @@ const initialRecoveryRead = initialStorage === undefined
     ? { status: 'empty' as const }
     : readRecovery(initialStorage);
 const initialRecovery = initialRecoveryRead.status === 'ready' ? initialRecoveryRead.snapshot : null;
+/** The author's own session when a shared link opened this tab. Viewing a
+ * share never writes recovery; remixing it first files this work under My
+ * puzzles, so opening someone's link can never erase the author's session. */
+let sessionBeforeShare: RecoverySnapshot | null = (() => {
+  if (!initialWindow.viaShare || initialStorage === undefined) return null;
+  const prior = readRecovery(initialStorage);
+  return prior.status === 'ready' ? prior.snapshot : null;
+})();
+
+/** File the pre-share session's levels as saved puzzles; returns the note. */
+function archiveSessionBeforeShare(savedScenes: SavedScene[]): { next: SavedScene[]; note: string } | null {
+  const prior = sessionBeforeShare;
+  sessionBeforeShare = null;
+  if (prior === null) return null;
+  const builtIn = SCENES.find((scene) => scene.id === prior.acceptedSceneId);
+  const acceptedIsOwnWork = builtIn === undefined || revisionId(builtIn.level) !== revisionId(prior.acceptedLevel);
+  const hasWork = acceptedIsOwnWork || prior.draft !== null || prior.history.length > 0;
+  if (!hasWork) return null;
+  const savedAt = Date.now();
+  const entries: SavedScene[] = [];
+  const base = { savedAt, theme: prior.acceptedTheme, promptHistory: [...prior.acceptedPromptHistory] };
+  if (acceptedIsOwnWork && isAcceptedCheckpoint(prior.acceptedLevel) && !savedScenes.some((saved) => saved.status !== 'unavailable' && revisionId(saved.level) === revisionId(prior.acceptedLevel))) {
+    entries.push({ ...base, recordKey: `before-share-${savedAt}`, id: `before-share-${savedAt}`, name: 'Before the shared link', status: 'accepted', level: prior.acceptedLevel });
+  }
+  if (prior.draft !== null) {
+    entries.push({ ...base, theme: prior.theme, recordKey: `before-share-draft-${savedAt}`, id: `before-share-draft-${savedAt}`, name: 'Before the shared link (draft)', status: 'draft', level: prior.draft.level });
+  }
+  if (entries.length === 0) return null;
+  return { next: [...entries, ...savedScenes], note: 'Your previous session was kept in My puzzles.' };
+}
 
 function recoveredSceneId(id: string, fallback: string): string {
   if (id === '') return '';
@@ -946,6 +976,13 @@ export const useApp = create<AppState>()((set, get) => ({
             }
           } catch {
             if (generation !== contextGeneration || controller.signal.aborted) return;
+          }
+          // A revision round may have ended because the scene moved on; never
+          // stage a proposal bound to a superseded level.
+          if (generation !== contextGeneration) return;
+          if (!stillCurrent()) {
+            fail('The scene changed while compiling; the result was discarded.');
+            return;
           }
         }
         set({
@@ -1429,17 +1466,24 @@ export const useApp = create<AppState>()((set, get) => ({
     set({ repair: { ...REPAIR_INITIAL, status: 'running' } });
     const { protectedIds } = get();
     const repairBase = draft.lineageKnown === false ? draft.level : acceptedLevel;
-    const result = findRepairs(repairBase, draft.level, report, protectedIds);
-    set({
-      repair: {
-        status: 'done',
-        candidates: result.candidates,
-        explored: result.explored,
-        durationMs: result.durationMs,
-        note: result.note,
-        applyError: null,
-      },
-    });
+    const run = (): void => {
+      // The draft may have changed while waiting for the paint.
+      if (get().draft?.level !== draft.level || get().repair.status !== 'running') return;
+      const result = findRepairs(repairBase, draft.level, report, protectedIds);
+      set({
+        repair: {
+          status: 'done',
+          candidates: result.candidates,
+          explored: result.explored,
+          durationMs: result.durationMs,
+          note: result.note,
+          applyError: null,
+        },
+      });
+    };
+    // Let "Searching…" paint before the synchronous search starts.
+    if (typeof window === 'undefined' || typeof window.requestAnimationFrame !== 'function') run();
+    else window.requestAnimationFrame(() => window.setTimeout(run, 0));
   },
 
   applyRepair: (index) => {
@@ -1761,12 +1805,53 @@ const RECOVERY_FIELDS: Array<keyof AppState> = [
 ];
 
 useApp.subscribe((state, previous) => {
+  // Leaving a shared view by any path (remix, scene switch): file the
+  // author's earlier session before this tab's session overwrites it.
+  if (previous.viaShare && !state.viaShare && sessionBeforeShare !== null) {
+    const archived = archiveSessionBeforeShare(state.savedScenes);
+    if (archived !== null && persistSavedScenes(safeBrowserStorage(), archived.next).ok) {
+      useApp.setState({ savedScenes: archived.next, headerNote: archived.note });
+    }
+  }
   if (
+    // Viewing a shared link is not the author's session: never overwrite it.
+    state.viaShare ||
     state.recoveryStatus === 'malformed' ||
     !RECOVERY_FIELDS.some((field) => state[field] !== previous[field])
   ) return;
 
+  scheduleRecoveryWrite();
+});
+
+/**
+ * Recovery writes are batched: a keystroke in the prompt changes state, and
+ * serializing the whole session (levels, drafts, history) each time is
+ * wasteful. The latest state is written at most every 400 ms and flushed
+ * immediately when the page is hidden or unloaded, so nothing is lost.
+ */
+const RECOVERY_WRITE_DELAY_MS = 400;
+let recoveryTimer: ReturnType<typeof setTimeout> | null = null;
+function writeRecoveryNow(): void {
+  if (recoveryTimer !== null) {
+    clearTimeout(recoveryTimer);
+    recoveryTimer = null;
+  }
+  const state = useApp.getState();
+  if (state.viaShare || state.recoveryStatus === 'malformed') return;
   const result = persistRecovery(safeBrowserStorage(), makeRecoverySnapshot(state));
   const nextStatus = result.ok ? 'ready' : 'unavailable';
   if (state.recoveryStatus !== nextStatus) useApp.setState({ recoveryStatus: nextStatus });
-});
+}
+function scheduleRecoveryWrite(): void {
+  if (typeof window === 'undefined') {
+    writeRecoveryNow();
+    return;
+  }
+  if (recoveryTimer === null) recoveryTimer = setTimeout(writeRecoveryNow, RECOVERY_WRITE_DELAY_MS);
+}
+if (typeof window !== 'undefined') {
+  window.addEventListener('pagehide', writeRecoveryNow);
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) writeRecoveryNow();
+  });
+}

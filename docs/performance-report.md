@@ -27,7 +27,29 @@ fresh production measurement.
 - [ ] Repeated theme/replay cycles with memory/resource-growth inspection.
 - [ ] Production backend latency and error rate.
 
-## Initial 2026-09-23 local production-preview sample
+## 2026-09-26 sample and regression budgets (current build)
+
+Same harness and machine class as below (local Vite preview, Chromium 153,
+SwiftShader, 1280×720, DPR 1). The build now includes the animated
+character (a 666 KB GLB fetched after first paint), sound, and hints, so
+transfer is higher than the Sep 23 sample:
+
+| Metric | Cold median | Budget (fails the e2e run) |
+|---|---|---|
+| JavaScript transferred | 340.7 KB | ≤ 400 KB |
+| Total transferred | 1.07 MB | ≤ 1.4 MB |
+| Scene controls ready | 246 ms | ≤ 1.5 s |
+| Longest startup long task | 119 ms | ≤ 250 ms |
+| Replay frame rate (8 s sample) | 5.2 fps (median frame 183 ms) | ≥ 2 fps |
+
+Budgets are asserted in `e2e/performance.e2e.ts` since 2026-09-26 (before
+that the suite only recorded numbers). Time budgets scale with
+`PERF_BUDGET_SCALE` (CI uses 2 on shared runners). SwiftShader frame rates
+vary widely between machines — an external review measured 2.5 fps on its
+host — which is why the frame-rate budget is set against regressions, not
+as a claim about real GPUs.
+
+## Initial 2026-09-23 (older build) local production-preview sample
 
 Measured by `e2e/performance.e2e.ts` against the built app served by Vite
 preview. Chromium 153.0.8010.12 used Playwright SwiftShader, a 1280×720

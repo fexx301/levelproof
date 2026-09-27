@@ -1,6 +1,6 @@
 import { explain, explainNeedsModel, peekExplain } from './_lib/explain-service.js';
 import { explainRequestSchema } from '../shared/api.js';
-import { enforceDailyBudget, enforceRequestWindow, readLimitedJson } from './_lib/request-guard.js';
+import { enforceDailyBudget, enforceRequestWindow, readLimitedJson, requireJsonBody, withApiHeaders } from './_lib/request-guard.js';
 
 /**
  * POST /api/explain — grounded failure narration (§10). The server recomputes
@@ -12,9 +12,15 @@ import { enforceDailyBudget, enforceRequestWindow, readLimitedJson } from './_li
 export const maxDuration = 60;
 
 export async function POST(request: Request): Promise<Response> {
+  return withApiHeaders(await handle(request));
+}
+
+async function handle(request: Request): Promise<Response> {
   if (request.method !== 'POST') {
     return Response.json({ error: 'method_not_allowed' }, { status: 405 });
   }
+  const notJson = requireJsonBody(request);
+  if (notJson !== null) return notJson;
 
   const burst = await enforceRequestWindow(request);
   if (burst !== null) return burst;

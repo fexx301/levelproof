@@ -55,7 +55,12 @@ first-try semantic is 50%; best final is 67%. Per §10.1 this is recorded
 rather than a winner forced — invalid output is never accepted to hit a
 target.
 
-## Decision
+## Decision (Sep 11 — superseded)
+
+> **Superseded.** Production today runs `google/gemini-3.8-flash` (low
+> reasoning effort) as primary with `google/gemini-2.5-flash-lite` as the
+> fallback — see the Sep 25 and Sep 26 updates below. This section records
+> the original decision as it was made.
 
 **Primary: `google/gemini-2.5-flash-lite`. Fallback: `google/gemini-3.7-flash`**
 (the evaluated fallback inside §10's three-attempt bound).
@@ -145,8 +150,8 @@ Known spend $0.26.
 
 | Expectation | Result |
 |---|---|
-| Builds that must be winnable and dressed (22) | 21 pass; 1 unwinnable after one revision (“an escape room”) — passed 3/3 on rerun, and a second revision round now exists for that case |
-| Must decline honestly (5: poem-injection, arithmetic, React code, timer, …) | 5/5 unsupported with puzzle alternatives |
+| Builds and edits that must succeed (22: 18 builds winnable and dressed, 4 edits applied and winnable) | 21 pass; 1 unwinnable after one revision (“an escape room”) — passed 3/3 on rerun, and a second revision round now exists for that case |
+| Must decline honestly (4: poem-injection, arithmetic, React code, a 30-second timer) | 4/4 unsupported with puzzle alternatives |
 | Judgement calls (14) | all reasonable: jumping/moving platforms, 10 keys, chasing enemies → honest unsupported with alternatives; emoji and “something cool” → winnable worlds; “delete everything” → minimal level shown as asked; “raw JSON with 50 modules” → declined |
 
 Other languages (Spanish, Japanese) built winnable worlds and answered in the

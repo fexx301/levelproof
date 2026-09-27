@@ -53,10 +53,18 @@ export function normalizeWirePayload(raw: string): unknown {
   return normalizeSceneryVocabulary(stripNulls(JSON.parse(stripCodeFences(raw))));
 }
 
+/** Largest model answer we will parse; a real patch is a few kilobytes. */
+export const MAX_WIRE_PAYLOAD_CHARS = 256_000;
+
+/** Linear-time fence removal (a backtracking regex here was quadratic on
+ * adversarial model output). Accepts ```json … ``` or ``` … ```. */
 function stripCodeFences(raw: string): string {
+  if (raw.length > MAX_WIRE_PAYLOAD_CHARS) throw new Error('Model answer too large to parse.');
   const trimmed = raw.trim();
-  const fenced = /^```(?:json)?\s*([\s\S]*?)\s*```$/.exec(trimmed);
-  return fenced ? fenced[1]! : trimmed;
+  if (!trimmed.startsWith('```') || !trimmed.endsWith('```') || trimmed.length < 6) return trimmed;
+  let body = trimmed.slice(3, -3);
+  if (body.startsWith('json')) body = body.slice(4);
+  return body.trim();
 }
 
 function stripNulls(value: unknown): unknown {

@@ -41,7 +41,8 @@ contract, not live model behavior.
 ## Verified against the live backend (2026-09-26)
 
 Run with `node scripts/live-journeys.mjs https://levelproof.vercel.app <out>
---confirm-live-ai` (Chromium with GPU, macOS). Result: **24/24 checks passed**.
+--confirm-live-ai --budget-usd 0.05` (Chromium with GPU, macOS; spend read from
+every API response, stops on unknown cost). Result: **24/24 checks passed**.
 
 - [x] Full live backend prompt → preview → approve → play (won by following
   hints) → save → reload → share → clean-context reopen, and the shared

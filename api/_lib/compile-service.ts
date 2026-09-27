@@ -102,6 +102,7 @@ function compileIdentity(primary: ProviderConfig, env: NodeJS.ProcessEnv, input:
     protectedIds: input.protectedIds,
     history: input.history,
     revision: input.revision === undefined ? undefined : JSON.stringify(input.revision.operations),
+    theme: input.theme ?? undefined,
     models: JSON.stringify({
       baseUrl: primary.baseUrl,
       chain: (hasFallback ? [primary.model, fallbackModel] : [primary.model]).map((model) => ({

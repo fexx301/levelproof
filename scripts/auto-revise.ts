@@ -23,7 +23,12 @@ export interface RevisedCompile {
   rounds: number;
 }
 
-export async function compileWithRevision(env: NodeJS.ProcessEnv, request: CompileInput, beforeCall: () => void = () => {}): Promise<RevisedCompile> {
+export async function compileWithRevision(
+  env: NodeJS.ProcessEnv,
+  request: CompileInput,
+  /** Budget guard run before every model call (required: no fail-open default). */
+  beforeCall: () => void,
+): Promise<RevisedCompile> {
   beforeCall();
   const first = await compile(env, request);
   const costs = [first.totalCostUsd];

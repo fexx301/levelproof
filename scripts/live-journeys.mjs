@@ -6,7 +6,11 @@
  * makes a live model call (a few tenths of a cent); the example chips it
  * uses are prewarmed and served from the shared cache.
  *
- *   node scripts/live-journeys.mjs https://levelproof.vercel.app <out-dir> --confirm-live-ai
+ *   node scripts/live-journeys.mjs https://levelproof.vercel.app <out-dir> --confirm-live-ai --budget-usd 0.05
+ *
+ * Spend is read from every /api/compile and /api/explain response the pages
+ * receive (cached answers cost nothing). A fresh answer with unknown cost, or
+ * spend reaching the ceiling, stops the run before the next live step.
  *
  * Prints one line per check and a JSON summary; screenshots go to <out-dir>.
  * The limiter journey deliberately exhausts this address's per-minute
@@ -16,9 +20,41 @@ import { mkdirSync } from 'node:fs';
 import { chromium } from 'playwright';
 
 const [base, out = 'live-journeys'] = process.argv.slice(2);
-if (!base || !process.argv.includes('--confirm-live-ai')) {
-  console.error('Usage: node scripts/live-journeys.mjs <url> <out-dir> --confirm-live-ai');
+const budgetFlag = process.argv.indexOf('--budget-usd');
+const ceiling = budgetFlag >= 0 ? Number(process.argv[budgetFlag + 1]) : NaN;
+if (!base || !process.argv.includes('--confirm-live-ai') || !(ceiling > 0 && ceiling <= 1)) {
+  console.error('Usage: node scripts/live-journeys.mjs <url> <out-dir> --confirm-live-ai --budget-usd <0-1>');
   process.exit(2);
+}
+let spent = 0;
+let unknownCost = false;
+/** Read the provider-reported cost from an API response (JSON or NDJSON). */
+async function recordSpend(response) {
+  const url = response.url();
+  if (!url.includes('/api/compile') && !url.includes('/api/explain')) return;
+  let text;
+  try {
+    text = await response.text();
+  } catch {
+    return; // aborted by a journey on purpose
+  }
+  for (const line of text.trim().split('\n')) {
+    let body;
+    try {
+      const parsed = JSON.parse(line);
+      body = parsed.event === 'result' ? parsed.body : parsed.event === 'progress' ? null : parsed;
+    } catch {
+      continue;
+    }
+    if (body === null || typeof body !== 'object') continue;
+    if (body.cached === true) continue;
+    if (typeof body.totalCostUsd === 'number') spent += body.totalCostUsd;
+    else if (Array.isArray(body.attempts) && body.attempts.length > 0) unknownCost = true;
+  }
+}
+function ensureBudget(step) {
+  if (unknownCost) throw new Error(`Stopping before ${step}: a fresh answer had unknown cost.`);
+  if (spent >= ceiling) throw new Error(`Stopping before ${step}: spent $${spent.toFixed(5)} of $${ceiling}.`);
 }
 mkdirSync(out, { recursive: true });
 const results = [];
@@ -42,6 +78,7 @@ async function freshPage(options = {}) {
     }
   });
   const page = await context.newPage();
+  page.on('response', (response) => void recordSpend(response));
   page.errors = [];
   page.on('pageerror', (error) => page.errors.push(String(error)));
   return { context, page };
@@ -102,6 +139,7 @@ async function applyChip(page, chip) {
 
   // ---- J2: live key-and-requirement removal (a fresh model call)
   const J2 = 'J2 live removal';
+  ensureBudget(J2);
   await page.getByRole('textbox', { name: /Describe a (change|world)/ }).fill('Remove the key and the door it locks, and any rule that needs that key.');
   await page.locator('.prompt-submit').click();
   const previewOrRule = page.getByRole('button', { name: /Apply edit|Approve/ }).first();
@@ -193,5 +231,5 @@ async function applyChip(page, chip) {
 
 await browser.close();
 const failed = results.filter((r) => !r.ok);
-console.log(JSON.stringify({ base, when: new Date().toISOString(), passed: results.length - failed.length, failed: failed.length }));
+console.log(JSON.stringify({ base, when: new Date().toISOString(), passed: results.length - failed.length, failed: failed.length, spentUsd: Number(spent.toFixed(5)), unknownCost }));
 process.exitCode = failed.length > 0 ? 1 : 0;

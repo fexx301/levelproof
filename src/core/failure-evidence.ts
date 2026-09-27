@@ -92,20 +92,28 @@ export function buildFailureEvidence(level: Level, report: Report, check: Eviden
   const result = report.checks[check];
   if (result.status !== 'fail' || result.witness === undefined) return null;
   const witness = result.witness;
-  const causalSwitchStep = check === 'recovery'
-    ? witness.route.findIndex((move) =>
-        move.events.activatedSwitch !== undefined &&
-        level.doors.some((door) => door.conditions?.closesAfterSwitch === move.events.activatedSwitch),
-      )
-    : -1;
-  const decisiveMoveIndex = causalSwitchStep >= 0 ? causalSwitchStep + 1 : witness.route.length;
+  // The dead-end witness is the breadth-first earliest state that can no
+  // longer win, reached by a shortest route; its predecessor could still win
+  // (it was explored earlier and is not dead), so the witness's LAST move is
+  // the point of no return. A sealing switch is named as the cause only when
+  // that move pressed it — an earlier, unrelated seal is context, not cause.
+  const decisiveMoveIndex = witness.route.length;
   const decisiveMove = decisiveMoveIndex > 0 ? witness.route[decisiveMoveIndex - 1] : undefined;
   let fact = result.explanation;
-  if (causalSwitchStep >= 0 && decisiveMove !== undefined) {
-    const switchId = decisiveMove.events.activatedSwitch!;
-    const closingDoor = level.doors.find((door) => door.conditions?.closesAfterSwitch === switchId);
-    if (closingDoor !== undefined) {
-      fact = `At move ${decisiveMoveIndex}, activating “${switchId}” closes “${closingDoor.id}”. The verified route later ends stranded at “${witness.endState.moduleId}”, with no winning continuation.`;
+  if (check === 'recovery' && decisiveMove !== undefined) {
+    const pressed = decisiveMove.events.activatedSwitch;
+    const sealedNow = pressed === undefined ? undefined : level.doors.find((door) => door.conditions?.closesAfterSwitch === pressed);
+    if (pressed !== undefined && sealedNow !== undefined) {
+      fact = `At move ${decisiveMoveIndex}, activating “${pressed}” closes “${sealedNow.id}”. From that state no winning route remains (stranded at “${witness.endState.moduleId}”).`;
+    } else {
+      const earlierSeals = witness.route
+        .slice(0, -1)
+        .flatMap((move) => {
+          const id = move.events.activatedSwitch;
+          const door = id === undefined ? undefined : level.doors.find((d) => d.conditions?.closesAfterSwitch === id);
+          return id !== undefined && door !== undefined ? [`“${id}” (it closed “${door.id}”)`] : [];
+        });
+      fact = `At move ${decisiveMoveIndex}, the route enters “${decisiveMove.destination}”; from that state no winning route remains.${earlierSeals.length > 0 ? ` Already pressed before then: ${earlierSeals.join(', ')}.` : ''}`;
     }
   }
   const suggestedAction =

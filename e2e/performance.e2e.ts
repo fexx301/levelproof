@@ -1,5 +1,20 @@
 import { expect, test, type Browser, type Page } from '@playwright/test';
 
+/**
+ * Regression budgets, set with headroom over the measured baseline
+ * (2026-09-26, Apple silicon, SwiftShader): cold JS 341 KB, total 1.07 MB,
+ * controls ready ~0.26 s, longest startup task 119 ms, replay 5.2 fps.
+ * Time budgets scale with PERF_BUDGET_SCALE for slower CI runners.
+ */
+const TIME_SCALE = Number(process.env.PERF_BUDGET_SCALE ?? '1') || 1;
+const BUDGET = {
+  coldJsBytes: 400_000,
+  coldTotalBytes: 1_400_000,
+  controlsReadyMs: 1_500 * TIME_SCALE,
+  longestStartupTaskMs: 250 * TIME_SCALE,
+  replayMinFps: 2 / TIME_SCALE,
+};
+
 interface StartupSample {
   fcpMs: number | null;
   sceneCanvasMs: number | null;
@@ -124,6 +139,14 @@ test('records five cold and warm production-preview startup samples', async ({ b
     body: JSON.stringify(report, null, 2),
     contentType: 'application/json',
   });
+  expect(report.jsTransferBytesMedian.cold, 'cold JavaScript transfer').toBeLessThanOrEqual(BUDGET.coldJsBytes);
+  expect(report.totalTransferBytesMedian.cold, 'cold total transfer').toBeLessThanOrEqual(BUDGET.coldTotalBytes);
+  expect(report.sceneControlsReadyMedianMs.cold ?? Infinity, 'controls ready (cold median)').toBeLessThanOrEqual(BUDGET.controlsReadyMs);
+  expect(Math.max(0, ...report.longTasks), 'longest startup task').toBeLessThanOrEqual(BUDGET.longestStartupTaskMs);
+  await testInfo.attach('production-startup-performance-budgets.json', {
+    body: JSON.stringify(BUDGET, null, 2),
+    contentType: 'application/json',
+  });
   console.log(`PRODUCTION_STARTUP_PERFORMANCE ${JSON.stringify(report)}`);
 });
 
@@ -167,4 +190,5 @@ test('records an eight-second witness replay frame-pacing sample', async ({ page
   });
   console.log(`PRODUCTION_REPLAY_PERFORMANCE ${JSON.stringify(report)}`);
   expect(report.frameCount).toBeGreaterThan(0);
+  expect(report.observedFps ?? 0, 'replay frame rate under software WebGL').toBeGreaterThanOrEqual(BUDGET.replayMinFps);
 });

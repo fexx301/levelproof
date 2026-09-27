@@ -7,6 +7,9 @@ const DEFAULT_WINDOW_REQUESTS = 8;
 // The daily cap guards provider spend: only requests that reach the model
 // count toward it (cached answers are free and exempt).
 const DEFAULT_DAILY_REQUESTS = 500;
+/** One address's share of the daily model budget, so a single abuser cannot
+ * spend everyone's budget for the rest of the day. */
+const DEFAULT_DAILY_REQUESTS_PER_ADDRESS = 100;
 const MAX_BODY_BYTES = 512 * 1024;
 
 /** One atomic counter: increment, set expiry on first use, compare to a limit. */
@@ -62,6 +65,7 @@ interface GuardConfig {
   windowSeconds: number;
   windowLimit: number;
   dailyLimit: number;
+  dailyPerAddress: number;
   route: string;
   ip: string;
   /** Null when running without the shared store (local development only). */
@@ -74,6 +78,7 @@ function guardConfig(request: Request, env: NodeJS.ProcessEnv, options: RequestG
   const windowSeconds = positiveInteger(env.API_RATE_LIMIT_WINDOW_SECONDS, DEFAULT_WINDOW_SECONDS, 3600);
   const windowLimit = positiveInteger(env.API_RATE_LIMIT_REQUESTS, DEFAULT_WINDOW_REQUESTS, 10_000);
   const dailyLimit = positiveInteger(env.API_DAILY_REQUEST_LIMIT, DEFAULT_DAILY_REQUESTS, 1_000_000);
+  const dailyPerAddress = positiveInteger(env.API_DAILY_REQUESTS_PER_ADDRESS, DEFAULT_DAILY_REQUESTS_PER_ADDRESS, 1_000_000);
   // Deployment CLIs commonly receive secrets from stdin. Trim only surrounding
   // whitespace so a terminal newline cannot turn the Authorization header into
   // an invalid fetch request; the credential itself is otherwise untouched.
@@ -81,7 +86,7 @@ function guardConfig(request: Request, env: NodeJS.ProcessEnv, options: RequestG
   const token = env.UPSTASH_REDIS_REST_TOKEN?.replace(/[\r\n]/g, '').trim();
   const route = new URL(request.url).pathname;
   const ip = requestIp(request);
-  const base = { now, windowSeconds, windowLimit, dailyLimit, route, ip };
+  const base = { now, windowSeconds, windowLimit, dailyLimit, dailyPerAddress, route, ip };
 
   if (!url || !token) {
     if (env.NODE_ENV === 'production') {
@@ -204,13 +209,21 @@ export async function enforceDailyBudget(
   if (config instanceof Response) return config;
   const day = new Date(config.now).toISOString().slice(0, 10);
   if (config.store === null) {
-    const daily = (localDailyCounts.get(day) ?? 0) + 1;
-    localDailyCounts.set(day, daily);
-    if (localDailyCounts.size > 100) {
-      for (const key of localDailyCounts.keys()) if (key !== day) localDailyCounts.delete(key);
+    const bump = (key: string): number => {
+      const count = (localDailyCounts.get(key) ?? 0) + 1;
+      localDailyCounts.set(key, count);
+      return count;
+    };
+    if (localDailyCounts.size > 2000) {
+      for (const key of localDailyCounts.keys()) if (!key.startsWith(day)) localDailyCounts.delete(key);
     }
-    return daily > config.dailyLimit ? reject(429, 'request_limit_reached') : null;
+    // Per address first: an address over its share never touches the global budget.
+    if (bump(`${day}|${config.ip}`) > config.dailyPerAddress) return reject(429, 'request_limit_reached');
+    return bump(day) > config.dailyLimit ? reject(429, 'request_limit_reached') : null;
   }
+  const clientHash = createHmac('sha256', config.store.token).update(config.ip).digest('hex').slice(0, 32);
+  const perAddress = await sharedCounter(request, config.store, `levelproof:daily:${day}:${clientHash}`, 172800, config.dailyPerAddress, options);
+  if (perAddress !== null) return perAddress;
   return sharedCounter(request, config.store, `levelproof:daily:${day}`, 172800, config.dailyLimit, options);
 }
 
@@ -268,4 +281,25 @@ export async function readLimitedJson(request: Request, maxBytes = MAX_BODY_BYTE
 export function resetRequestBudget(): void {
   localBuckets.clear();
   localDailyCounts.clear();
+}
+
+/**
+ * Only JSON bodies are accepted. A cross-site form or `no-cors` fetch can
+ * only send text/plain, form, or multipart bodies, so this refuses blind
+ * cross-origin requests before any work or budget is spent.
+ */
+export function requireJsonBody(request: Request): Response | null {
+  const type = (request.headers.get('content-type') ?? '').split(';')[0]!.trim().toLowerCase();
+  return type === 'application/json' ? null : reject(415, 'unsupported_media_type');
+}
+
+/** Headers every API response carries: never cached, never content-sniffed. */
+export function withApiHeaders(response: Response): Response {
+  try {
+    if (!response.headers.has('Cache-Control')) response.headers.set('Cache-Control', 'no-store');
+    response.headers.set('X-Content-Type-Options', 'nosniff');
+    return response;
+  } catch {
+    return response; // immutable headers (never for our own responses)
+  }
 }

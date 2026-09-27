@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Level } from '../shared/schema';
-import { nextStep } from '../src/core/hint';
-import { goalRequirementViolated, initialState, step } from '../src/core/movement';
+import { goalReachableStates, nextStep } from '../src/core/hint';
+import { goalRequirementViolated, initialState, stateKey, step } from '../src/core/movement';
 import { compileLevel } from '../src/core/topology';
 import { verify } from '../src/core/verifier';
 import { baselineLevel } from '../src/core/fixtures/baseline';
@@ -94,5 +94,15 @@ describe('play hints', () => {
     const hint = nextStep(compiled, initialState(compiled), new Set([compiled.spawn]));
     // …so the hint must not claim the player is stranded.
     expect(hint.kind).toBe('rule_blocked');
+  });
+
+  it('agrees with the verifier on which states can still win', () => {
+    const report = verify(trapLevel);
+    const compiled = compileLevel(trapLevel);
+    const canWin = goalReachableStates(compiled, initialState(compiled));
+    expect(canWin.has(stateKey(initialState(compiled)))).toBe(true);
+    expect(canWin.has(stateKey(report.checks.recovery.witness!.endState))).toBe(false);
+    const clean = compileLevel(baselineLevel);
+    expect(goalReachableStates(clean, initialState(clean)).size).toBeGreaterThan(0);
   });
 });

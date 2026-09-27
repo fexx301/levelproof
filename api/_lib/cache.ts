@@ -173,6 +173,8 @@ export function compileCacheKey(input: {
   protectedIds?: string[];
   history?: string[];
   revision?: string;
+  /** The author's chosen building style; it is in the system prompt. */
+  theme?: string;
   models: string;
   promptVersion: string;
 }): string {
@@ -186,6 +188,9 @@ export function compileCacheKey(input: {
       input.history ?? [],
       // Absent for ordinary compiles, so their keys are unchanged.
       ...(input.revision !== undefined ? [input.revision] : []),
+      // Absent unless the author pinned a style, so existing keys (and the
+      // prewarmed examples) are unchanged.
+      ...(input.theme !== undefined ? [{ theme: input.theme }] : []),
     ]),
     models: input.models,
     promptVersion: input.promptVersion,

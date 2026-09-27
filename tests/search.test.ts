@@ -108,6 +108,14 @@ describe('creator preservation constraints (§9 "keep this")', () => {
     expect(touchesProtected([{ kind: 'setModuleLabel', id: 'lower-hall', label: 'antechamber' }], keptKey, baselineLevel)).toBe(false);
   });
 
+  it('catches additive changes at a kept module: a new door, item, or goal', () => {
+    const kept = new Set(['vault-entry']);
+    expect(touchesProtected([{ kind: 'addDoor', door: { id: 'new-gate', a: 'vault-entry', b: 'treasure-landing', conditions: { requiresKey: 'brass-key' } } }], kept, baselineLevel)).toBe(true);
+    expect(touchesProtected([{ kind: 'moveGoal', moduleId: 'vault-entry' }], kept, baselineLevel)).toBe(true);
+    expect(touchesProtected([{ kind: 'addItem', itemType: 'switch', id: 'new-plate', moduleId: 'vault-entry' }], kept, baselineLevel)).toBe(true);
+    expect(touchesProtected([{ kind: 'addItem', itemType: 'switch', id: 'new-plate', moduleId: 'lower-hall' }], kept, baselineLevel)).toBe(false);
+  });
+
   it('keeping the seal switch excludes relocation and removal — only the door removal remains', () => {
     const report = verify(trapLevel);
     const result = findRepairs(baselineLevel, trapLevel, report, ['seal-switch']);

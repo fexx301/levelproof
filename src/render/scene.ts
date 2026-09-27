@@ -1394,6 +1394,9 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel, theme?: T
       renderer.domElement.removeEventListener('webglcontextrestored', onContextRestored);
       for (const material of shared) material.dispose();
       renderer.dispose();
+      // Release the GL context now: a session remounts the scene on every
+      // preview and theme change, and browsers cap live contexts (~16).
+      renderer.forceContextLoss();
       renderer.domElement.remove();
     },
   };

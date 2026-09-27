@@ -49,3 +49,15 @@ describe('provider URL safety', () => {
     expect(secureProviderUrl('not a url')).toBe(false);
   });
 });
+
+describe('model answer parsing stays linear', () => {
+  it('strips fences and handles adversarial input quickly', async () => {
+    const { normalizeWirePayload } = await import('../shared/compile-result');
+    expect(normalizeWirePayload('```json\n{"type":"unsupported","reason":"r","alternatives":["a"]}\n```')).toEqual({ type: 'unsupported', reason: 'r', alternatives: ['a'] });
+    const hostile = '```' + ' \n'.repeat(20_000) + 'x';
+    const started = performance.now();
+    expect(() => normalizeWirePayload(hostile)).toThrow();
+    expect(performance.now() - started).toBeLessThan(200);
+    expect(() => normalizeWirePayload('{' + ' '.repeat(300_000) + '}')).toThrow(/too large/);
+  });
+});

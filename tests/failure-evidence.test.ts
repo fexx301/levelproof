@@ -39,3 +39,19 @@ describe('grounded failure evidence', () => {
     expect(buildFailureEvidence(baselineLevel, report, 'solution')).toBeNull();
   });
 });
+
+describe('the decisive move is the point of no return', () => {
+  it('does not blame an earlier, harmless sealing switch', () => {
+    const level = structuredClone(trapLevel);
+    level.switches.push({ id: 'decoy', moduleId: 'lower-hall' });
+    level.doors.push({ id: 'decoy-door', a: 'entrance', b: 'lower-hall', conditions: { closesAfterSwitch: 'decoy' } });
+    const report = verify(level);
+    expect(report.valid).toBe(true);
+    const evidence = buildFailureEvidence(level, report, 'recovery')!;
+    const route = report.checks.recovery.witness!.route;
+    expect(evidence.decisiveMoveIndex).toBe(route.length);
+    expect(evidence.fact).toContain('seal-switch');
+    expect(evidence.fact).not.toMatch(/activating “decoy”/);
+    expect(evidence.focusModuleId).toBe(route.at(-1)!.destination);
+  });
+});

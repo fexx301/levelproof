@@ -1,6 +1,6 @@
 import { compile, compileNeedsModel, peekCompile, type CompileOutcome } from './_lib/compile-service.js';
 import { compileRequestSchema, type CompileProgress } from '../shared/api.js';
-import { enforceDailyBudget, enforceRequestWindow, readLimitedJson } from './_lib/request-guard.js';
+import { enforceDailyBudget, enforceRequestWindow, readLimitedJson, requireJsonBody, withApiHeaders } from './_lib/request-guard.js';
 
 /**
  * POST /api/compile — validated model compilation request (§3, §10).
@@ -60,9 +60,15 @@ function outcomeResponse(outcome: CompileOutcome): { status: number; body: Recor
 }
 
 export async function POST(request: Request): Promise<Response> {
+  return withApiHeaders(await handle(request));
+}
+
+async function handle(request: Request): Promise<Response> {
   if (request.method !== 'POST') {
     return Response.json({ error: 'method_not_allowed' }, { status: 405 });
   }
+  const notJson = requireJsonBody(request);
+  if (notJson !== null) return notJson;
 
   const burst = await enforceRequestWindow(request);
   if (burst !== null) return burst;

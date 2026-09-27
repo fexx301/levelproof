@@ -1,6 +1,9 @@
 {
   "name": "levelproof",
   "private": true,
+  "engines": {
+    "node": ">=22"
+  },
   "version": "0.1.0",
   "type": "module",
   "description": "An AI puzzle creator with automatic playtesting. Build, break, repair, play.",

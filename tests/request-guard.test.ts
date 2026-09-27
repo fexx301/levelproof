@@ -136,8 +136,21 @@ describe('paid API request boundary', () => {
     expect(await enforceRequestWindow(request(), env, { fetcher, now })).toBeNull();
     expect(await enforceDailyBudget(request(), env, { fetcher, now })).toBeNull();
     expect(keys[0]).toMatch(/^levelproof:limit:\/api\/compile:[0-9a-f]{32}:\d+ limit=8$/);
-    expect(keys[1]).toBe('levelproof:daily:2026-09-25 limit=750');
+    // Per-address share first (hashed address, default 100), then the global budget.
+    expect(keys[1]).toMatch(/^levelproof:daily:2026-09-25:[0-9a-f]{32} limit=100$/);
+    expect(keys[2]).toBe('levelproof:daily:2026-09-25 limit=750');
     expect(keys.join(' ')).not.toContain('192.0.2.10');
+  });
+
+  it('stops one address at its daily share without spending the global budget', async () => {
+    const env = { NODE_ENV: 'test', API_DAILY_REQUEST_LIMIT: '10', API_DAILY_REQUESTS_PER_ADDRESS: '3' } as NodeJS.ProcessEnv;
+    const now = () => Date.UTC(2026, 8, 26, 9);
+    for (let i = 0; i < 3; i++) expect(await enforceDailyBudget(request('/api/compile', '198.51.100.1'), env, { now })).toBeNull();
+    expect((await enforceDailyBudget(request('/api/compile', '198.51.100.1'), env, { now }))?.status).toBe(429);
+    expect((await enforceDailyBudget(request('/api/compile', '198.51.100.1'), env, { now }))?.status).toBe(429);
+    // Everyone else still has the remaining global budget (10 - 3 = 7).
+    for (let i = 0; i < 7; i++) expect(await enforceDailyBudget(request('/api/compile', `198.51.100.${10 + i}`), env, { now })).toBeNull();
+    expect((await enforceDailyBudget(request('/api/compile', '198.51.100.99'), env, { now }))?.status).toBe(429);
   });
 
   it('caps the streamed body and distinguishes invalid JSON', async () => {
