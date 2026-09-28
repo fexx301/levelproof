@@ -124,6 +124,18 @@ const CHIPS: Chip[] = [
     },
   },
   {
+    name: 'play: add a trap here (entrance)',
+    base: vaultEmptyLevel,
+    prompt: PLAY_REACTIONS[1]!.prompt,
+    selection: ['entrance'],
+    grade: (after) => {
+      const report = verify(after);
+      const plate = after.switches.find((pad) => pad.moduleId === 'entrance');
+      const seals = plate !== undefined && after.doors.some((door) => door.conditions?.closesAfterSwitch === plate.id);
+      return { pass: seals && report.checks.solution.status === 'pass', note: `plate on entrance=${plate !== undefined} seals=${seals} win=${report.checks.solution.status} stuck=${report.checks.recovery.status}` };
+    },
+  },
+  {
     name: 'play: add a trap here (gallery)',
     base: vaultEmptyLevel,
     prompt: PLAY_REACTIONS[1]!.prompt,

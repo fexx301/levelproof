@@ -26,7 +26,7 @@ export const PLAY_REACTIONS: Reaction[] = [
   },
   {
     label: 'Add a trap here',
-    prompt: 'Add a trap at the selected spot where I am standing: a pressure plate there that seals a door somewhere behind me. Place it so the level can still be won.',
+    prompt: 'Add a trap at the selected spot where I am standing: put a pressure plate on that module that, once stepped on, seals one door elsewhere on the route. Choose that door yourself so the level can still be won. Do not ask a question; pick the placement.',
     here: true,
   },
   {
