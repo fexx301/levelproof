@@ -334,3 +334,44 @@ test('keyboard workflow and essential controls remain usable at a narrow viewpor
   }));
   expect(dimensions.documentWidth).toBeLessThanOrEqual(dimensions.viewportWidth);
 });
+
+test('changes the level from inside play, with the engine pre-check and the player respawned', async ({ page }) => {
+  const harder: CompileResult = {
+    type: 'patch',
+    rationale: 'Lock the vault behind a brass key on the balcony.',
+    assumptions: [],
+    operations: [
+      { kind: 'addItem', itemType: 'key', id: 'brass-key', moduleId: 'key-balcony' },
+      { kind: 'addDoor', door: { id: 'vault-door', a: 'vault-approach', b: 'vault-entry', conditions: { requiresKey: 'brass-key' } } },
+    ],
+  };
+  await fixtureCompile(page, harder);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Play it yourself' }).click();
+  const playPanel = page.getByRole('region', { name: 'Play' });
+  await expect(playPanel.getByRole('status').first()).toHaveAttribute('data-module', 'entrance');
+  // Movement keys typed into the request box must not move the character.
+  const box = playPanel.getByRole('textbox', { name: 'Tell the AI what to change' });
+  await box.fill('');
+  await box.press('ArrowUp');
+  await expect(playPanel.locator('.dpad-center')).toHaveAttribute('data-module', 'entrance');
+
+  await playPanel.getByRole('button', { name: 'Too easy — make it harder' }).click();
+  const proposal = playPanel.getByRole('group', { name: 'Proposed change' });
+  await expect(proposal).toContainText('Lock the vault behind a brass key');
+  await expect(proposal.getByRole('list', { name: 'Engine pre-check' })).toContainText('✓ Can be won');
+  await proposal.getByRole('button', { name: 'Play the new version' }).click();
+
+  await expect(page.getByRole('region', { name: 'Play' })).toBeVisible();
+  await expect(page.locator('.dpad-center')).toHaveAttribute('data-module', 'entrance');
+  // The changed world is the one being played: winning now needs the new key.
+  for (let i = 0; i < 20; i++) {
+    if (await page.getByText('Level complete').count()) break;
+    await page.getByRole('button', { name: 'Hint' }).click();
+    const before = await page.locator('.dpad-center').getAttribute('data-module');
+    await page.locator('button.dpad-hint').click();
+    await page.waitForFunction((b) => document.querySelector('.dpad-center')?.getAttribute('data-module') !== b, before, { timeout: 20_000 });
+  }
+  await expect(page.getByText('Level complete')).toBeVisible();
+  await expect(page.locator('.inventory')).toContainText('brass-key');
+});

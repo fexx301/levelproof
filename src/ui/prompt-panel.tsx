@@ -30,7 +30,7 @@ function stageText(progress: NonNullable<ReturnType<typeof useApp.getState>['com
  * operation as it streams in. Everything shown is provisional until the
  * finished result passes strict parsing and the engine.
  */
-function CompileProgressCard() {
+export function CompileProgressCard() {
   const progress = useApp((s) => s.compileProgress);
   const cancel = useApp((s) => s.cancelCompile);
   const active = progress !== null;

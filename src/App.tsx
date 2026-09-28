@@ -444,6 +444,9 @@ function Viewport({ level, mode, report, theme, previewing }: { level: Level; mo
     });
     actorBridge.setPlayer(actor);
     const onKey = (event: KeyboardEvent) => {
+      // Typing a request to the AI must never steer the character.
+      const target = event.target as HTMLElement | null;
+      if (target !== null && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
       if (event.key === 'r' || event.key === 'R') {
         actor.restart();
         return;

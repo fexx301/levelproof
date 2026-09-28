@@ -28,7 +28,9 @@ concrete findings go back to the model and it revises (disclosed in the
 preview). When a design fails, a ghost replays the exact verified route, the
 model narrates the engine’s facts (grounding-checked), and you choose between
 an AI fix judged by the engine and deterministic repairs that provably keep
-your rules. Ambiguous requests get one clarifying question; mechanics the kit
+your rules. The AI stays in the loop while you play: react in words (“too easy”, “add a
+trap here”) and it changes the level you are standing in — engine-checked,
+then you respawn in the new version. Ambiguous requests get one clarifying question; mechanics the kit
 cannot simulate get an honest “unsupported” with alternatives. Every compile
 discloses fresh vs cached, model, cost, and attempts.
 

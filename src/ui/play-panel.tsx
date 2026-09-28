@@ -6,6 +6,7 @@ import type { Report } from '../core/verifier.js';
 import type { Level } from '../../shared/schema.js';
 import { playSound } from '../render/sound.js';
 import { setPadHeld } from './held-input.js';
+import { PlayReact } from './play-react.js';
 import { useApp, type PlayHint } from '../state/store.js';
 import { CARDINAL_NAMES, relativeCardinal, type MoveIntent } from './relative-direction.js';
 
@@ -171,6 +172,7 @@ export function PlayPanel({ level, report }: { level: Level; report: Report }) {
           </div>
         </div>
       )}
+      <PlayReact />
       {play.atGoal && play.goalViolated && (
         <p className="banner banner--fail">Goal reached — but a design rule was broken on the way.</p>
       )}

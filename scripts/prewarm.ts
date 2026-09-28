@@ -20,6 +20,7 @@ import { MAX_AUTO_REVISIONS, shouldAutoRevise } from '../src/core/revision-polic
 import { reportScore } from '../src/core/report-score';
 import { verify } from '../src/core/verifier';
 import { BUILD_PROMPTS, EXAMPLE_PROMPTS, MAKEOVER_PROMPT, TWIST_PROMPT, WINTER_PROMPT } from '../src/ui/example-prompts';
+import { PLAY_REACTIONS } from '../src/ui/play-react';
 import { LiveBudget, LiveEvaluationStop, requireLiveBudget } from './live-budget';
 
 const SPACING_MS = 8_000; // stays under the default 8-requests-per-minute window
@@ -30,6 +31,8 @@ interface Job {
   prompt: string;
   /** Optional follow-up chip compiled on this job's accepted result. */
   then?: string;
+  /** Selection sent with the request (play's "here" = the spawn module). */
+  selection?: string[];
 }
 
 const JOBS: Job[] = [
@@ -41,6 +44,13 @@ const JOBS: Job[] = [
   ...[['twin keys', twinKeysLevel], ['overpass', overpassLevel], ['gauntlet', gauntletLevel]].flatMap(([scene, level]) =>
     [MAKEOVER_PROMPT, WINTER_PROMPT, TWIST_PROMPT].map((prompt) => ({ scene: scene as string, level: level as Level, prompt }))),
   ...BUILD_PROMPTS.map((build) => ({ scene: 'blank', level: blankCanvasLevel, prompt: build.prompt })),
+  // Play-mode reactions on the vault, as a player first meets them (at spawn).
+  ...PLAY_REACTIONS.map((reaction) => ({
+    scene: 'vault (play)',
+    level: vaultEmptyLevel,
+    prompt: reaction.prompt,
+    ...(reaction.here === true ? { selection: [vaultEmptyLevel.spawn] } : {}),
+  })),
 ];
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -79,8 +89,8 @@ try {
     return parsed.data;
   };
 
-  const warm = async (label: string, level: Level, prompt: string, history: string[] = []): Promise<Level | null> => {
-    const body = { level, prompt, history: history.map((entry) => ({ prompt: entry })) };
+  const warm = async (label: string, level: Level, prompt: string, history: string[] = [], selection: string[] = []): Promise<Level | null> => {
+    const body = { level, prompt, selection, history: history.map((entry) => ({ prompt: entry })) };
     const first = await post(label, body);
     if (first === null) return null;
     const result = first.result;
@@ -110,7 +120,7 @@ try {
   console.log(`Prewarming ${JOBS.length} chips on ${origin}`);
   for (const job of JOBS) {
     const label = `${job.scene}: ${job.prompt.slice(0, 48)}`;
-    const next = await warm(label, job.level, job.prompt);
+    const next = await warm(label, job.level, job.prompt, [], job.selection ?? []);
     if (job.then !== undefined && next !== null) await warm(`${job.scene} (step 2): ${job.then.slice(0, 40)}`, next, job.then, [job.prompt]);
   }
   console.log(`Known provider-reported spend: $${budget.spentUsd.toFixed(5)} / $${limit.toFixed(5)}.`);

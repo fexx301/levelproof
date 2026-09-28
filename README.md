@@ -51,7 +51,15 @@ and seal as the engine says, and reaching the goal without breaking a rule
 ends in a **Level complete** card. Stuck? **Hint** (H) asks the checker for
 the next move of a shortest winning route from exactly where you stand, and
 the moment you walk into a dead end the panel says so — even while moves
-remain — because every continuation has already been explored. It is the same movement engine the
+remain — because every continuation has already been explored.
+
+**Talk to the world while you play it.** Found it too easy? Press **Too easy
+— make it harder**, **Add a trap here** (where you are standing), **Add a
+secret room**, **Make it spookier**, or just type what you want. The AI
+changes the level you are standing in, the engine checks the change before
+you see it (*can be won · nobody gets stuck · rules hold*), and **Play the
+new version** drops you straight back in. Play → react in words → the world
+changes → play again. It is the same movement engine the
 checker explored — nothing the player can do was left unchecked. The
 verifier's replays use the same character as a translucent ghost: blue for a
 winning route, red for the route that fails.

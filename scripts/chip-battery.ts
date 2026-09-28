@@ -18,6 +18,7 @@ import { BUILD_PROMPTS, EXAMPLE_PROMPTS, MAKEOVER_PROMPT, TWIST_PROMPT, WINTER_P
 import type { CompileResult } from '../shared/compile-result';
 import type { Level } from '../shared/schema';
 import { compileWithRevision } from './auto-revise';
+import { PLAY_REACTIONS } from '../src/ui/play-react';
 import { LiveBudget, LiveEvaluationStop, requireLiveBudget } from './live-budget';
 
 type Grade = { pass: boolean; note: string };
@@ -50,6 +51,8 @@ interface Chip {
   name: string;
   base: Level;
   prompt: string;
+  /** Entity ids sent as the author's selection (play: "here"). */
+  selection?: string[];
   grade: (after: Level, base: Level) => Grade;
 }
 
@@ -109,6 +112,40 @@ const CHIPS: Chip[] = [
     }),
   },
   { name: 'overpass: suggest a twist', base: overpassLevel, prompt: TWIST_PROMPT, grade: (after, base) => ({ pass: gameplay(after) !== gameplay(base) && verify(after).valid, note: `changed=${gameplay(after) !== gameplay(base)}` }) },
+  // Play-mode reactions (src/ui/play-react.tsx), on the vault as a player meets it.
+  {
+    name: 'play: too easy — make it harder',
+    base: vaultEmptyLevel,
+    prompt: PLAY_REACTIONS[0]!.prompt,
+    grade: (after, base) => {
+      const report = verify(after);
+      const harder = after.doors.length > base.doors.length && after.keys.length > base.keys.length;
+      return { pass: harder && report.checks.solution.status === 'pass' && report.checks.recovery.status === 'pass', note: `keys=${after.keys.length} doors=${after.doors.length} win=${report.checks.solution.status} stuck=${report.checks.recovery.status}` };
+    },
+  },
+  {
+    name: 'play: add a trap here (gallery)',
+    base: vaultEmptyLevel,
+    prompt: PLAY_REACTIONS[1]!.prompt,
+    selection: ['gallery'],
+    grade: (after) => {
+      const report = verify(after);
+      const plate = after.switches.find((pad) => pad.moduleId === 'gallery');
+      const seals = plate !== undefined && after.doors.some((door) => door.conditions?.closesAfterSwitch === plate.id);
+      return { pass: seals && report.checks.solution.status === 'pass', note: `plate on gallery=${plate !== undefined} seals=${seals} win=${report.checks.solution.status} stuck=${report.checks.recovery.status}` };
+    },
+  },
+  {
+    name: 'play: add a secret room',
+    base: vaultEmptyLevel,
+    prompt: PLAY_REACTIONS[2]!.prompt,
+    grade: (after, base) => {
+      const report = verify(after);
+      const grown = after.modules.length > base.modules.length;
+      return { pass: grown && report.checks.solution.status === 'pass' && report.checks.recovery.status === 'pass', note: `modules=${after.modules.length} props=${after.props?.length ?? 0} win=${report.checks.solution.status}` };
+    },
+  },
+  { name: 'play: make it spookier', base: vaultEmptyLevel, prompt: PLAY_REACTIONS[3]!.prompt, grade: makeover },
   ...BUILD_PROMPTS.map((build) => ({ name: `blank: ${build.label}`, base: blankCanvasLevel, prompt: build.prompt, grade: winnableBuild })),
 ];
 
@@ -143,7 +180,7 @@ try {
     for (let run = 1; run <= runs; run++) {
       resetCache();
       const started = performance.now();
-      const { outcome, costs, rounds } = await compileWithRevision(process.env, { level: chip.base, prompt: chip.prompt }, () => budget.ensureCanCall(chip.name));
+      const { outcome, costs, rounds } = await compileWithRevision(process.env, { level: chip.base, prompt: chip.prompt, ...(chip.selection !== undefined ? { selection: chip.selection } : {}) }, () => budget.ensureCanCall(chip.name));
       const cost = costs.at(-1) ?? null;
       const note = rounds > 0 ? ` (revised ×${rounds})` : '';
       const after = outcome.result === null ? `failed: ${outcome.error} ${outcome.providerError ?? ''}` : applyResult(chip.base, outcome.result);

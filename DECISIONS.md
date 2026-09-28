@@ -2,6 +2,27 @@
 
 Build-window decisions and measured evidence, newest first. Dates are 2026.
 
+## Sep 28 (the AI in play — talk to the world while playing)
+
+- **Why**: the brief asks for AI in how the experience is created, changed,
+  *or interacted with*. Creation and editing were strong; during play the AI
+  was absent (hints come from the engine).
+- **What**: a "Change this level" section in play: four reactions (too easy →
+  harder; add a trap here; add a secret room; make it spookier) and free
+  text. "Here" sends the module the player stands in as the selection. It is
+  the editor's compile path unchanged — streamed plan, engine-guided
+  revisions, Keep these, stale guards, watchdog, cache — so nothing new can
+  bypass the engine. The proposal shows the engine pre-check; **Play the new
+  version** applies it and respawns the player; **Keep this one** declines.
+  Typing in the box never steers the character.
+- **Measured**: each reaction live twice on the vault with graded
+  expectations (a key-and-door challenge that stays winnable and stuck-free;
+  a plate on the player's own module that seals a door; a new room that stays
+  winnable; night scenery with gameplay unchanged): 8/8, $0.05. All four are
+  prewarmed (the trap at the spawn module, where players first see it).
+- **Evidence**: fixture e2e covers react → proposal with pre-check → respawn
+  → win the changed level by hints (collecting the new key).
+
 ## Sep 27 (second external review — fixes)
 
 A second, deeper review (18 findings + gaps). Each claim was checked first;
