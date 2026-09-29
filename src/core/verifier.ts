@@ -349,6 +349,8 @@ export function verify(level: Level, config: VerifierConfig = {}): Report {
 
   // Check 3 — Recovery (§7.2.3): reverse-search all stored edges from all
   // goal states; any reachable non-goal state outside that set is a dead end.
+  // Being caught by a guard restarts the level, and a restart is never a way
+  // out: capture edges are left out, so a guard cannot hide a trap (§6.4).
   let recoveryCheck: CheckedResult;
   const canWinSet = new Set<string>();
   if (goalVisits.length === 0) {
@@ -360,7 +362,8 @@ export function verify(level: Level, config: VerifierConfig = {}): Report {
   } else {
     const reverse = new Map<string, string[]>();
     for (const [fromKey, outgoing] of edges) {
-      for (const { toKey } of outgoing) {
+      for (const { toKey, move } of outgoing) {
+        if (move.events.caught !== undefined) continue;
         const list = reverse.get(toKey);
         if (list) list.push(fromKey);
         else reverse.set(toKey, [fromKey]);

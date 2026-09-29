@@ -128,9 +128,12 @@ export function goalReachableStates(compiled: CompiledLevel, start: GameState): 
     }
     for (const move of transitions(compiled, state)) {
       const to = stateKey(move.after);
-      const back = reverse.get(to);
-      if (back === undefined) reverse.set(to, [from]);
-      else back.push(from);
+      // As in the checker: being caught (a restart) never counts as a way out.
+      if (move.events.caught === undefined) {
+        const back = reverse.get(to);
+        if (back === undefined) reverse.set(to, [from]);
+        else back.push(from);
+      }
       if (!seen.has(to)) {
         seen.add(to);
         queue.push(move.after);

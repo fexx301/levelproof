@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { Level, LevelModule } from '../shared/schema';
 import { caughtBy, hasHazards, patrolPeriod, patrolPosition, worldCycle } from '../src/core/hazards';
-import { nextStep } from '../src/core/hint';
+import { goalReachableStates, nextStep } from '../src/core/hint';
 import { applyOperations, validateLevel } from '../src/core/level';
-import { initialState, step, transitions } from '../src/core/movement';
+import { initialState, stateKey, step, transitions } from '../src/core/movement';
 import { validateRoute } from '../src/core/replay';
 import { compileLevel } from '../src/core/topology';
 import { verify } from '../src/core/verifier';
@@ -185,5 +185,46 @@ describe('The Sentry (hazard showcase)', () => {
     const rushed = step(compiled, state, 'E')!;
     expect(rushed.events.caught).toBe('sentry');
     expect(rushed.after).toEqual(initialState(compiled));
+  });
+});
+
+describe('guards never hide a trap', () => {
+  // A cell north of the corridor: stepping in presses a plate that seals the
+  // door behind. The jailer then walks in. Being caught restarts the level —
+  // but a restart is not a way out, so the checker still calls it a trap.
+  const cellLevel = (patrols?: Level['patrols']): Level =>
+    corridor({
+      modules: [...corridor().modules.filter((m) => m.id !== 'alcove'), flat('cell', 3, 4, ['S', 'N']), flat('cell-back', 3, 3, ['S'])],
+      switches: [{ id: 'plate', moduleId: 'cell' }],
+      doors: [{ id: 'cell-door', a: 'hall-c', b: 'cell', conditions: { closesAfterSwitch: 'plate' } }],
+      ...(patrols !== undefined ? { patrols } : {}),
+    });
+
+  it('a sealed cell is a dead end, with or without a guard who would catch you there', () => {
+    expect(verify(cellLevel()).checks.recovery.status).toBe('fail');
+    const guarded = cellLevel([{ id: 'jailer', route: ['cell-back', 'cell'] }]);
+    expect(validateLevel(guarded)).toEqual([]);
+    const report = verify(guarded);
+    expect(report.checks.solution.status).toBe('pass');
+    expect(report.checks.recovery.status).toBe('fail');
+    expect(report.checks.recovery.explanation).toMatch(/cell/);
+    expect(report.accepted).toBe(false);
+  });
+
+  it('play agrees: the sealed cell is flagged as a dead end', () => {
+    const compiled = compileLevel(cellLevel([{ id: 'jailer', route: ['cell-back', 'cell'] }]));
+    const start = initialState(compiled);
+    const canWin = goalReachableStates(compiled, start);
+    let state = start;
+    // Wait once at the cell door so the step in lands while the jailer is at the back.
+    for (const action of ['E', 'E', 'wait'] as const) state = step(compiled, state, action)!.after;
+    const sealed = step(compiled, state, 'N')!;
+    expect(sealed.events.caught).toBeUndefined();
+    expect(sealed.after.switchMask).not.toBe(0);
+    expect(canWin.has(stateKey(sealed.after))).toBe(false);
+  });
+
+  it('the Sentry stays accepted: nobody there depends on being caught', () => {
+    expect(verify(sentryLevel).checks.recovery.status).toBe('pass');
   });
 });
