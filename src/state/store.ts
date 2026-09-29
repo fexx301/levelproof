@@ -53,13 +53,33 @@ export type SceneId = (typeof SCENES)[number]['id'];
 
 let contextGeneration = 0;
 let activeCompileController: AbortController | null = null;
-/** Client ceiling for one submit: the server stops each call at 60 s and a
- * build can make two (the engine-guided revision), so a request still open
- * after this is a stalled connection, not a slow model. */
-export const COMPILE_WATCHDOG_MS = 130_000;
+/** Silence on a compile stream for this long means the connection is dead
+ * (the server streams progress and a heartbeat every 10 s). */
+export const COMPILE_STALL_MS = 45_000;
+/** Last-resort ceiling for one whole submit: the first call plus up to
+ * MAX_AUTO_REVISIONS revision calls, each stopped by the server at 60 s. */
+export const COMPILE_WATCHDOG_MS = 250_000;
 /** Client ceiling for one explanation (the server stops it at 60 s). */
 export const EXPLAIN_WATCHDOG_MS = 70_000;
 let activeExplainController: AbortController | null = null;
+
+/**
+ * Claim the compile channel for a new request (adventure chapters use it):
+ * cancels any compile in flight, makes this request the one Cancel stops,
+ * and returns the generation it is bound to.
+ */
+export function claimCompileContext(): { generation: number; controller: AbortController } {
+  const generation = ++contextGeneration;
+  activeCompileController?.abort();
+  const controller = new AbortController();
+  activeCompileController = controller;
+  return { generation, controller };
+}
+
+/** True while no scene change, cancel, or newer request has superseded it. */
+export function compileContextIsCurrent(generation: number): boolean {
+  return generation === contextGeneration;
+}
 
 /** Invalidate any compile that was started against an older scene context. */
 function invalidateContext(): void {
@@ -120,14 +140,14 @@ interface DraftState {
   lineageKnown?: boolean;
 }
 
-interface RevisionEntry {
+export interface RevisionEntry {
   level: Level;
   label: string;
   theme: ThemeKey | null;
   promptHistory: string[];
 }
 
-interface Checkpoint {
+export interface Checkpoint {
   level: Level;
   theme: ThemeKey | null;
   promptHistory: string[];
@@ -169,6 +189,42 @@ interface CompileMeta {
   model: string;
 }
 
+/** One chapter of an endless verified adventure (§12). */
+export interface AdventureChapter {
+  number: number;
+  title: string;
+  narration: string;
+  /** Engine facts shown on the title card. */
+  shortest: number;
+  gates: number;
+  explored: number;
+  /** The band this chapter was asked to meet (absent for the opening world). */
+  band?: { minMoves: number; maxMoves: number };
+  /** True when the chapter met its band (false: fair, but off-band). */
+  inBand: boolean;
+  /** Revision id of the chapter's level: the adventure continues only from it. */
+  revision: string;
+}
+
+export interface AdventureSlice {
+  /** This adventure's chapters, oldest first; the last is the one in play. */
+  chapters: AdventureChapter[];
+  writing: boolean;
+  error: string | null;
+  /** The chapter whose title card is showing. */
+  intro: AdventureChapter | null;
+  /** How the player is doing on the current chapter. */
+  run: { hints: number; deadEnds: number; restarts: number };
+}
+
+export const ADVENTURE_INITIAL: AdventureSlice = {
+  chapters: [],
+  writing: false,
+  error: null,
+  intro: null,
+  run: { hints: 0, deadEnds: 0, restarts: 0 },
+};
+
 export interface CompileProgressState {
   startedAt: number;
   stage: 'sending' | CompileProgress['stage'] | 'revising';
@@ -183,11 +239,11 @@ export interface CompileProgressState {
   revising?: boolean;
 }
 
-function progressStart(note: string | null = null, stage: CompileProgressState['stage'] = 'sending'): CompileProgressState {
+export function progressStart(note: string | null = null, stage: CompileProgressState['stage'] = 'sending'): CompileProgressState {
   return { startedAt: Date.now(), stage, headlines: [], operations: 0, recent: [], attempt: 1, note };
 }
 
-function applyProgress(state: CompileProgressState, event: CompileProgress): CompileProgressState {
+export function applyProgress(state: CompileProgressState, event: CompileProgress): CompileProgressState {
   switch (event.stage) {
     case 'thinking':
       return {
@@ -220,6 +276,48 @@ export async function postCompile(
   body: Record<string, unknown>,
   signal: AbortSignal,
   onProgress: (event: CompileProgress) => void,
+  stallMs: number = COMPILE_STALL_MS,
+): Promise<{ ok: boolean; status: number; body: unknown }> {
+  // Stall detection: the streamed server sends progress and a heartbeat every
+  // few seconds, so silence for stallMs means the connection is dead — not
+  // that the model is slow. Any bytes (or the caller's own abort) reset it.
+  const local = new AbortController();
+  const forward = (): void => local.abort();
+  if (signal.aborted) local.abort();
+  signal.addEventListener('abort', forward, { once: true });
+  let stalled = false;
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  const arm = (): void => {
+    if (timer !== null) clearTimeout(timer);
+    timer = setTimeout(() => {
+      stalled = true;
+      local.abort();
+    }, stallMs);
+  };
+  arm();
+  try {
+    return await readCompile(body, local.signal, onProgress, arm);
+  } catch (error) {
+    if (stalled) throw new CompileStalledError();
+    throw error;
+  } finally {
+    if (timer !== null) clearTimeout(timer);
+    signal.removeEventListener('abort', forward);
+  }
+}
+
+/** The connection went silent past the stall limit. */
+export class CompileStalledError extends Error {
+  constructor() {
+    super('The AI service stopped responding, so the request was stopped. Nothing changed.');
+  }
+}
+
+async function readCompile(
+  body: Record<string, unknown>,
+  signal: AbortSignal,
+  onProgress: (event: CompileProgress) => void,
+  onBytes: () => void,
 ): Promise<{ ok: boolean; status: number; body: unknown }> {
   const response = await fetch('/api/compile', {
     method: 'POST',
@@ -227,6 +325,7 @@ export async function postCompile(
     signal,
     body: JSON.stringify(body),
   });
+  onBytes();
   // Minimal fetch doubles may omit headers; treat them as plain JSON.
   const contentType = response.headers?.get?.('content-type') ?? '';
   if (!contentType.includes('application/x-ndjson') || response.body === null || response.body === undefined) {
@@ -252,6 +351,7 @@ export async function postCompile(
   for (;;) {
     const { done, value } = await reader.read();
     if (done) break;
+    onBytes();
     buffer += decoder.decode(value, { stream: true });
     let newline: number;
     while ((newline = buffer.indexOf('\n')) >= 0) {
@@ -367,6 +467,7 @@ interface AppState {
   play: PlaySlice;
   repair: RepairSlice;
   explain: ExplainSlice;
+  adventure: AdventureSlice;
   /** Temporary, verifier-owned evidence shown by the failure replay. */
   evidence: FailureEvidence | null;
   /** Manual play: the camera chases the player (true) or holds the overview. */
@@ -754,6 +855,7 @@ export const useApp = create<AppState>()((set, get) => ({
   play: PLAY_INITIAL,
   repair: REPAIR_INITIAL,
   explain: EXPLAIN_INITIAL,
+  adventure: ADVENTURE_INITIAL,
   evidence: null,
   followCamera: true,
   playHint: null,
@@ -1150,7 +1252,7 @@ export const useApp = create<AppState>()((set, get) => ({
     contextGeneration += 1;
     activeCompileController?.abort();
     activeCompileController = null;
-    set({ busy: false, compileProgress: null, error: 'Compile cancelled. Your prompt is still here.' });
+    set({ busy: false, compileProgress: null, error: 'Compile cancelled. Your prompt is still here.', adventure: { ...get().adventure, writing: false } });
   },
 
   approveRule: () => {

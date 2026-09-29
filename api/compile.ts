@@ -20,6 +20,9 @@ import { enforceDailyBudget, enforceRequestWindow, readLimitedJson, requireJsonB
  */
 export const maxDuration = 60;
 
+/** Streamed compiles send a heartbeat this often (the client's stall limit is 45 s). */
+const HEARTBEAT_MS = 10_000;
+
 function outcomeResponse(outcome: CompileOutcome): { status: number; body: Record<string, unknown> } {
   if (outcome.result === null) {
     const status =
@@ -120,6 +123,9 @@ async function handle(request: Request): Promise<Response> {
           }
         };
         const onProgress = (progress: CompileProgress): void => send({ event: 'progress', progress });
+        // A heartbeat line while the model thinks silently, so the client can
+        // tell a slow model (bytes keep coming) from a stalled connection.
+        const heartbeat = setInterval(() => send({ event: 'heartbeat' }), HEARTBEAT_MS);
         try {
           const outcome = await compile(process.env, input, { signal: request.signal, onProgress });
           const { status, body } = outcomeResponse(outcome);
@@ -127,6 +133,7 @@ async function handle(request: Request): Promise<Response> {
         } catch {
           send({ event: 'result', status: 500, body: { error: 'compilation_failed' } });
         } finally {
+          clearInterval(heartbeat);
           try {
             controller.close();
           } catch {

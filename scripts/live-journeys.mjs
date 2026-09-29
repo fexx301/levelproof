@@ -212,9 +212,9 @@ async function applyChip(page, chip) {
     /switched scenes|scene changed/i,
     { during: async (page) => { await page.waitForTimeout(1000); await page.locator('select.scene-select').selectOption({ label: 'The Overpass' }); } },
   );
-  await scenario('stalled connection (watchdog)', () => new Promise(() => {}), /did not answer in time/i, {
+  await scenario('stalled connection (stall detection)', () => new Promise(() => {}), /stopped responding|did not answer in time/i, {
     clock: true,
-    during: async (page) => { await page.waitForTimeout(500); await page.clock.fastForward(131_000); },
+    during: async (page) => { await page.waitForTimeout(500); await page.clock.fastForward(46_000); },
   });
 }
 

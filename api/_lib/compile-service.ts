@@ -7,7 +7,9 @@ import type { Level, Operation } from '../../shared/schema.js';
 import { OperationStream, operationLabel, reasoningHeadlines } from '../../shared/stream-progress.js';
 import { revisionId } from '../../src/core/serialize.js';
 import { compileCache, compileCacheKey } from './cache.js';
-import { buildSystemPrompt, PROMPT_VERSION } from './prompt.js';
+import { ADVENTURE_PROMPT_VERSION, adventureAddendum, buildSystemPrompt, PROMPT_VERSION } from './prompt.js';
+import { chapterFindings } from '../../src/core/adventure.js';
+import type { AdventureContext } from '../../shared/api.js';
 import { callOptionsFor } from './model-options.js';
 import {
   chatCompletion,
@@ -49,6 +51,8 @@ export interface CompileInput {
    * its findings — never client text — go back to the model.
    */
   revision?: { operations: Operation[] };
+  /** Adventure chapters: the game-master brief, band, and story so far. */
+  adventure?: AdventureContext;
 }
 
 export interface AttemptRecord {
@@ -90,6 +94,15 @@ function tryParse(raw: string): CompileResult | null {
   }
 }
 
+/**
+ * What the engine says an attempt must fix. Adventure chapters are judged on
+ * fairness first and then on the engine-measured difficulty band, so an
+ * accepted-but-too-easy chapter still goes back to the model.
+ */
+function revisionFindings(level: Level, input: CompileInput): string[] {
+  return input.adventure !== undefined ? chapterFindings(level, input.adventure.band) : engineFindings(level, verify(level));
+}
+
 /** The exact cache identity of a compile request under this configuration. */
 function compileIdentity(primary: ProviderConfig, env: NodeJS.ProcessEnv, input: CompileInput): string {
   const fallbackModel = env.LLM_FALLBACK_MODEL;
@@ -103,6 +116,7 @@ function compileIdentity(primary: ProviderConfig, env: NodeJS.ProcessEnv, input:
     history: input.history,
     revision: input.revision === undefined ? undefined : JSON.stringify(input.revision.operations),
     theme: input.theme ?? undefined,
+    adventure: input.adventure === undefined ? undefined : JSON.stringify([ADVENTURE_PROMPT_VERSION, input.adventure]),
     models: JSON.stringify({
       baseUrl: primary.baseUrl,
       chain: (hasFallback ? [primary.model, fallbackModel] : [primary.model]).map((model) => ({
@@ -143,7 +157,7 @@ export function compileNeedsModel(input: CompileInput): boolean {
   if (input.revision === undefined) return true;
   const applied = applyOperations(input.level, input.revision.operations);
   if (!applied.ok) return true;
-  return engineFindings(applied.level, verify(applied.level)).length > 0;
+  return revisionFindings(applied.level, input).length > 0;
 }
 
 export async function compile(
@@ -166,7 +180,7 @@ export async function compile(
   if (input.revision !== undefined) {
     const applied = applyOperations(input.level, input.revision.operations);
     const checked = applied.ok ? applied.level : input.level;
-    const findings = applied.ok ? engineFindings(checked, verify(checked)) : applied.errors.map((error) => `The engine rejected it: ${error}`);
+    const findings = applied.ok ? revisionFindings(checked, input) : applied.errors.map((error) => `The engine rejected it: ${error}`);
     if (findings.length === 0) {
       return { result: null, baseRevision, theme: input.theme, cached: false, attempts: [], totalCostUsd: 0, generationCostUsd: null, error: 'nothing_to_revise' };
     }
@@ -193,6 +207,7 @@ export async function compile(
       role: 'system',
       content:
         buildSystemPrompt(input.level, revisionId(input.level)) +
+        (input.adventure !== undefined ? adventureAddendum(input.adventure) : '') +
         (input.theme !== undefined
           ? `\n(The author pinned the architecture palette to "${input.theme}" in the editor; leave setScenery's architecture unset.)\n`
           : ''),
@@ -291,6 +306,12 @@ export async function compile(
       parsed = tryParse(response.content);
       if (parsed === null) {
         outcome = 'schema_invalid';
+      } else if (input.adventure !== undefined && parsed.type !== 'patch') {
+        // A chapter is always a playable world: a question or a refusal is
+        // invalid output here, so it gets the correction turn (then fallback).
+        outcome = 'rejected';
+        rejection = ['An adventure chapter must be a "patch" that builds the next world, with a "story" field — never a question or a refusal.'];
+        parsed = null;
       } else if (parsed.type === 'patch' || parsed.type === 'rule_proposal') {
         // Pre-apply with the same core the client uses: a patch the engine
         // would reject never reaches the user — it gets one correction turn

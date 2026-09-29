@@ -9,6 +9,7 @@ import { CheckStrip, RuleChips } from './ui/check-strip';
 import { useLevelIsBlank } from './ui/prompt-panel';
 import { PlayPanel, requestHint } from './ui/play-panel';
 import { SoundToggle } from './ui/sound-toggle';
+import { ChapterCard } from './ui/adventure-panel';
 import { heldPadIntent } from './ui/held-input';
 import { PlaytesterPanel, witnessOptions } from './ui/playtester';
 import { PromptPanel } from './ui/prompt-panel';
@@ -518,6 +519,7 @@ function Viewport({ level, mode, report, theme, previewing }: { level: Level; mo
         </div>
       </div>
       {mode === 'authoring' && !previewing && <BlankCanvasWelcome />}
+      {mode === 'playing' && <ChapterCard />}
       {previewing && (
         <p className="viewport-preview-badge" role="status">
           Preview — not applied yet

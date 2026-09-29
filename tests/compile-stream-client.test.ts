@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { postCompile } from '../src/state/store';
+import { CompileStalledError, postCompile } from '../src/state/store';
 import type { CompileProgress } from '../shared/api';
 
 /** The browser side of the streamed compile: NDJSON progress, then one result. */
@@ -50,5 +50,30 @@ describe('streamed compile client', () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ error: 'request_limit_reached' }), { status: 429, headers: { 'Content-Type': 'application/json' } })));
     const outcome = await postCompile({ prompt: 'p' }, new AbortController().signal, () => undefined);
     expect(outcome).toEqual({ ok: false, status: 429, body: { error: 'request_limit_reached' } });
+  });
+
+  it('stops a silent stream as stalled, but not one that keeps sending heartbeats', async () => {
+    const encoder = new TextEncoder();
+    // Silent: headers arrive, then nothing, until the signal aborts the read.
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, init?: RequestInit) => new Response(new ReadableStream<Uint8Array>({
+      start(controller) {
+        init?.signal?.addEventListener('abort', () => controller.error(new DOMException('Aborted', 'AbortError')));
+      },
+    }), { status: 200, headers: { 'Content-Type': 'application/x-ndjson' } })));
+    await expect(postCompile({ prompt: 'p' }, new AbortController().signal, () => undefined, 60)).rejects.toBeInstanceOf(CompileStalledError);
+
+    // Heartbeats every 20 ms for 150 ms (well past the 60 ms stall limit), then a result.
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(new ReadableStream<Uint8Array>({
+      async start(controller) {
+        for (let i = 0; i < 7; i++) {
+          await new Promise((resolve) => setTimeout(resolve, 20));
+          controller.enqueue(encoder.encode(`${JSON.stringify({ event: 'heartbeat' })}\n`));
+        }
+        controller.enqueue(encoder.encode(`${JSON.stringify({ event: 'result', status: 200, body: { ok: true } })}\n`));
+        controller.close();
+      },
+    }), { status: 200, headers: { 'Content-Type': 'application/x-ndjson' } })));
+    const outcome = await postCompile({ prompt: 'p' }, new AbortController().signal, () => undefined, 60);
+    expect(outcome).toEqual({ ok: true, status: 200, body: { ok: true } });
   });
 });

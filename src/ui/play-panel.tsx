@@ -7,6 +7,7 @@ import type { Level } from '../../shared/schema.js';
 import { playSound } from '../render/sound.js';
 import { setPadHeld } from './held-input.js';
 import { PlayReact } from './play-react.js';
+import { AdventureContinue, AdventureStrip } from './adventure-panel.js';
 import { useApp, type PlayHint } from '../state/store.js';
 import { CARDINAL_NAMES, relativeCardinal, type MoveIntent } from './relative-direction.js';
 
@@ -105,6 +106,7 @@ export function PlayPanel({ level, report }: { level: Level; report: Report }) {
 
   return (
     <section className="panel panel--active" aria-label="Play">
+      <AdventureStrip />
       <div className="play-head">
         <h2 className="panel-title">{hasDraft ? 'Play the draft' : 'Play the level'}</h2>
         <button
@@ -170,9 +172,11 @@ export function PlayPanel({ level, report }: { level: Level; report: Report }) {
             <button type="button" onClick={() => actorBridge.player()?.restart()}>Play again</button>
             <button type="button" onClick={exitToAuthoring}>{viaShare ? 'Remix this puzzle' : 'Back to editing'}</button>
           </div>
+          <AdventureContinue />
         </div>
       )}
-      <PlayReact />
+      {/* After a win, the next step is the next chapter; before it, change this one. */}
+      {!won && <PlayReact />}
       {play.atGoal && play.goalViolated && (
         <p className="banner banner--fail">Goal reached — but a design rule was broken on the way.</p>
       )}

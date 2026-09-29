@@ -175,6 +175,8 @@ export function compileCacheKey(input: {
   revision?: string;
   /** The author's chosen building style; it is in the system prompt. */
   theme?: string;
+  /** Adventure context (with its add-on version); absent for ordinary compiles. */
+  adventure?: string;
   models: string;
   promptVersion: string;
 }): string {
@@ -191,6 +193,7 @@ export function compileCacheKey(input: {
       // Absent unless the author pinned a style, so existing keys (and the
       // prewarmed examples) are unchanged.
       ...(input.theme !== undefined ? [{ theme: input.theme }] : []),
+      ...(input.adventure !== undefined ? [{ adventure: input.adventure }] : []),
     ]),
     models: input.models,
     promptVersion: input.promptVersion,

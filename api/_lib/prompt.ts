@@ -1,3 +1,4 @@
+import type { AdventureContext } from '../../shared/api.js';
 import { BOUNDS, ENVIRONMENTS, KEY_LOOKS, LIGHTINGS, PROP_KINDS, THEME_KEYS, type Level } from '../../shared/schema.js';
 
 /**
@@ -119,4 +120,45 @@ WHEN TO USE EACH TYPE:
 4. "unsupported" — the request needs a mechanic this kit cannot simulate and scenery cannot honestly stand in for (door-traversal order, mandatory sequencing other than key-before-goal, timers, jumping, physics, enemies that move or attack, arbitrary geometry). Offer concrete supported alternatives. A request that is mostly buildable is a patch: build what the kit can do and name the approximation in "assumptions".
 
 Respond with a single JSON object and nothing else.`;
+}
+
+/** Bump when the adventure add-on changes; part of adventure cache keys only. */
+export const ADVENTURE_PROMPT_VERSION = 'adventure-1';
+
+/** Printable, single-line text from client-supplied story fields. */
+function oneLine(text: string, max: number): string {
+  return text.replace(/[\r\n\t]+/g, ' ').replace(/[“”"]/g, "'").slice(0, max).trim();
+}
+
+/**
+ * The game-master add-on for adventure chapters. Appended to the ordinary
+ * system prompt only when a request carries adventure context, so ordinary
+ * compiles (and their cache keys) are unchanged.
+ */
+export function adventureAddendum(adventure: AdventureContext): string {
+  const { minMoves, maxMoves } = adventure.band;
+  const story = adventure.story.length > 0
+    ? adventure.story.map((beat, index) => `  ${adventure.chapter - adventure.story.length + index}. "${oneLine(beat.title, 60)}" — ${oneLine(beat.narration, 400)}`).join('\n')
+    : '  (this is the first chapter)';
+  const stats = adventure.lastStats;
+  const how = stats === undefined
+    ? 'This is the opening chapter: keep it welcoming.'
+    : `The player finished the last chapter in ${stats.moves} moves (the engine's shortest route was ${stats.shortest}), used ${stats.hints} hint${stats.hints === 1 ? '' : 's'}, walked into ${stats.deadEnds} dead end${stats.deadEnds === 1 ? '' : 's'}, and restarted ${stats.restarts} time${stats.restarts === 1 ? '' : 's'}.`;
+  const direction = adventure.intent === 'harder'
+    ? 'The player asked for a harder chapter.'
+    : adventure.intent === 'easier'
+      ? 'The player asked for an easier chapter.'
+      : 'Match the difficulty band.';
+  return `
+
+ADVENTURE MODE — you are also the game master of an endless adventure. This request is CHAPTER ${adventure.chapter}. Build it as a brand-new world on this canvas: the scene holds only a small seed, which you may remove, move, or build on.
+Story so far (oldest first):
+${story}
+${how} ${direction}
+DIFFICULTY (measured by the puzzle engine, not by you): the engine's shortest winning route must be ${minMoves}-${maxMoves} moves, where a move is one step between two connected modules. Longer routes come from more rooms, a key or switch placed off the direct path, and locked doors the player must go around.
+FAIRNESS (checked by the engine): the chapter must be winnable, and NO reachable position may leave the player unable to win — so no switch traps or one-way paths that strand the player. The engine sends the chapter back if fairness or difficulty fails.
+CONTINUITY: continue the story — a new place reached from the last (descending, sailing on, climbing higher, crossing a border), usually a fresh environment, lighting, and architecture unless the player asks otherwise, and when difficulty rises add a new twist (a second key, a switch-opened gate, a keycard behind a bridge).
+The player's words for this chapter are in the user message; honor them within these limits.
+ALWAYS answer with type "patch" — never clarification, rule_proposal, or unsupported — and add a "story" field:
+{"type":"patch","rationale":"...","assumptions":[...],"operations":[...],"story":{"title":"<a 2-5 word chapter title>","narration":"<1-2 sentences, second person, present tense, carrying the player from the last chapter into this one; name places by their labels; never claim scenery blocks, moves, or attacks in play>"}}`;
 }

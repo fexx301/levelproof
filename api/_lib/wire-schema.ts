@@ -239,12 +239,24 @@ export const compileResultJsonSchema = {
     {
       type: 'object',
       additionalProperties: false,
-      required: ['type', 'rationale', 'assumptions', 'operations'],
+      required: ['type', 'rationale', 'assumptions', 'operations', 'story'],
       properties: {
         type: { type: 'string', enum: ['patch'] },
         rationale: { type: 'string' },
         assumptions: { type: 'array', items: { type: 'string' }, maxItems: 8 },
         operations: { type: 'array', items: operationJson, maxItems: BOUNDS.maxOpsPerPatch },
+        // Adventure chapters only; null otherwise (nulls are stripped before validation).
+        story: {
+          anyOf: [
+            { type: 'null' },
+            {
+              type: 'object',
+              additionalProperties: false,
+              required: ['title', 'narration'],
+              properties: { title: { type: 'string' }, narration: { type: 'string' } },
+            },
+          ],
+        },
       },
     },
     {

@@ -20,6 +20,8 @@ export const compileResultSchema = z.discriminatedUnion('type', [
     rationale: z.string().min(1).max(2000),
     assumptions: z.array(z.string().max(500)).max(8).default([]),
     operations: z.array(operationSchema).max(BOUNDS.maxOpsPerPatch),
+    /** Adventure chapters only: the chapter's title and narration beat. */
+    story: z.strictObject({ title: z.string().min(1).max(60), narration: z.string().min(1).max(400) }).optional(),
   }),
   z.strictObject({
     type: z.literal('clarification'),

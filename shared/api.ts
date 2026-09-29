@@ -8,6 +8,36 @@ import { BOUNDS, idSchema, levelSchema, MAX_ENTITY_IDS, operationSchema, themeKe
  * choice overrides the scene's own scenery.architecture. */
 export { THEME_KEYS, themeKeySchema, type ThemeKey } from './schema.js';
 
+/**
+ * Adventure mode (§12): context for writing the next chapter. Every field is
+ * bounded because it reaches the system prompt; the band is re-clamped on
+ * the server and the engine, not the model, judges it.
+ */
+export const adventureContextSchema = z
+  .strictObject({
+    chapter: z.number().int().min(1).max(99),
+    /** Earlier chapters, oldest first (the client keeps the last few). */
+    story: z
+      .array(z.strictObject({ title: z.string().min(1).max(60), narration: z.string().min(1).max(400) }))
+      .max(6),
+    band: z.strictObject({
+      minMoves: z.number().int().min(4).max(22),
+      maxMoves: z.number().int().min(6).max(24),
+    }),
+    intent: z.enum(['harder', 'easier', 'steady']),
+    lastStats: z
+      .strictObject({
+        moves: z.number().int().min(0).max(1000),
+        hints: z.number().int().min(0).max(500),
+        deadEnds: z.number().int().min(0).max(500),
+        restarts: z.number().int().min(0).max(500),
+        shortest: z.number().int().min(0).max(1000),
+      })
+      .optional(),
+  })
+  .refine((value) => value.band.minMoves < value.band.maxMoves, { message: 'band.minMoves must be below band.maxMoves' });
+export type AdventureContext = z.infer<typeof adventureContextSchema>;
+
 export const compileRequestSchema = z.strictObject({
   level: levelSchema,
   prompt: z.string().min(1).max(2000),
@@ -23,6 +53,8 @@ export const compileRequestSchema = z.strictObject({
   /** Presentation theme the author asked for ("make it a stone ruin").
    * Presentation only — never part of level semantics. */
   theme: themeKeySchema.optional(),
+  /** Present only when the request writes the next adventure chapter. */
+  adventure: adventureContextSchema.optional(),
   /** AI↔engine revision: an earlier attempt's operations (empty = repair the
    * current scene). The server recomputes the engine findings itself. */
   revision: z.strictObject({ operations: z.array(operationSchema).max(BOUNDS.maxOpsPerPatch) }).optional(),

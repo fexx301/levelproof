@@ -375,3 +375,52 @@ test('changes the level from inside play, with the engine pre-check and the play
   await expect(page.getByText('Level complete')).toBeVisible();
   await expect(page.locator('.inventory')).toContainText('brass-key');
 });
+
+test('continues into an AI-written chapter that the engine proves fair, with a title card', async ({ page }) => {
+  const chapter: CompileResult = {
+    type: 'patch',
+    rationale: 'A small moonlit crypt.',
+    assumptions: [],
+    operations: [
+      { kind: 'setModuleLabel', id: 'entry-pad', label: 'crypt stair' },
+      { kind: 'setModuleLabel', id: 'goal-pad', label: 'moon altar' },
+      { kind: 'setScenery', environment: 'cavern', lighting: 'night', architecture: 'basalt' },
+    ],
+    story: { title: 'The Moonlit Crypt', narration: 'You descend the crypt stair toward the moon altar.' },
+  };
+  let calls = 0;
+  await page.route('**/api/compile', async (route) => {
+    calls += 1;
+    const request = route.request().postDataJSON() as { level: Level; adventure?: unknown; history?: unknown[]; selection?: unknown[] };
+    expect(request.adventure).toBeDefined();
+    expect(request.history).toEqual([]);
+    expect(request.selection).toEqual([]);
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ result: chapter, baseRevision: revisionId(request.level), cached: false, attempts: [], totalCostUsd: null, generationCostUsd: null }),
+    });
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: /Play the level/ }).click();
+  const playPanel = page.getByRole('region', { name: 'Play' });
+  for (const [direction, destination] of [['north', 'lower-hall'], ['north', 'gallery-ramp'], ['north', 'gallery'], ['north', 'bridge-landing'], ['east', 'vault-approach'], ['east', 'vault-entry'], ['east', 'treasure-landing']]) {
+    await playPanel.getByRole('button', { name: `Move ${direction}` }).click();
+    await expect(playPanel.locator('.dpad-center')).toHaveAttribute('data-module', destination!, { timeout: 20_000 });
+  }
+  const next = playPanel.getByRole('region', { name: 'Continue the adventure' });
+  await expect(next).toContainText('Keep going');
+  await next.getByRole('button', { name: 'Surprise me' }).click();
+
+  const card = page.getByRole('button', { name: /Chapter 2: The Moonlit Crypt/ });
+  await expect(card).toBeVisible({ timeout: 20_000 });
+  await expect(card).toContainText('Verified solvable');
+  await expect(card).toContainText('nobody can get stuck');
+  // The chapter was fair but shorter than its band, so the engine sent it back
+  // for every revision round before it was accepted as the best fair chapter.
+  expect(calls).toBe(3);
+  await expect(page.locator('.adventure-strip')).toContainText('Chapter 2');
+  await expect(page.locator('.dpad-center')).toHaveAttribute('data-module', 'entry-pad');
+  await card.click();
+  await expect(card).toBeHidden();
+});
