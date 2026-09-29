@@ -26,7 +26,7 @@ import type { Level } from '../shared/schema';
 import { compileWithRevision } from './auto-revise';
 import { LiveBudget, LiveEvaluationStop, requireLiveBudget } from './live-budget';
 
-type Expect = 'build' | 'edit' | 'decline' | 'hazard' | 'any';
+type Expect = 'build' | 'edit' | 'decline' | 'hazard' | 'big' | 'any';
 interface Case {
   base: 'blank' | 'vault';
   expect: Expect;
@@ -86,6 +86,11 @@ export const JUDGE_BATTERY: Case[] = [
   { base: 'blank', expect: 'hazard', prompt: 'a drawbridge over a moat that only lowers every third turn' },
   { base: 'blank', expect: 'hazard', prompt: 'prison break: a guard walks the cell block, and the cell key is in the warden office' },
   { base: 'blank', expect: 'hazard', prompt: 'a museum heist with a night watchman and a laser gate that switches on and off' },
+  // Big worlds, asked for explicitly: 25+ rooms, accepted.
+  { base: 'blank', expect: 'big', prompt: 'make the biggest level you can' },
+  { base: 'blank', expect: 'big', prompt: 'a huge sprawling castle: a courtyard, a great hall, two towers, a dungeon, and a keep with the treasure' },
+  { base: 'blank', expect: 'big', prompt: 'an enormous jungle temple complex with many chambers, a sunken courtyard, and a key hidden deep inside' },
+  { base: 'blank', expect: 'big', prompt: 'a large city district at night: streets, an alley maze, rooftops joined by bridges, and a bank vault' },
 ];
 
 function loadDotEnv(): void {
@@ -144,6 +149,12 @@ function grade(testCase: Case, base: Level, result: CompileResult | null, after:
     }
     case 'decline':
       return { verdict: result.type === 'unsupported' || result.type === 'clarification' ? 'PASS' : 'REVIEW', note: facts };
+    case 'big': {
+      const rooms = level?.modules.length ?? 0;
+      const ops = result.type === 'patch' || result.type === 'rule_proposal' ? result.operations.length : 0;
+      const ok = report !== null && report.accepted && rooms >= 25;
+      return { verdict: ok ? 'PASS' : result.type === 'clarification' ? 'REVIEW' : 'FAIL', note: `${facts} ops=${ops} accepted=${report?.accepted ?? false}` };
+    }
     case 'hazard': {
       const guards = level?.patrols?.length ?? 0;
       const gates = level?.doors.filter((door) => door.conditions?.cycle !== undefined).length ?? 0;
@@ -180,6 +191,9 @@ try {
     const { outcome, costs, rounds } = await compileWithRevision(process.env, { level: base, prompt: testCase.prompt }, () =>
       budget.ensureCanCall(testCase.prompt.slice(0, 30)),
     );
+    // Say what happened before recording cost: an unknown cost stops the run.
+    const attempts = outcome.attempts.map((attempt) => `${attempt.model.split('/').at(-1)}:${attempt.outcome}`).join(', ');
+    if (costs.some((cost) => cost === null)) console.log(`        attempts: ${attempts} · ${Math.round(performance.now() - started)} ms · error ${outcome.error ?? '-'}`);
     for (const cost of costs) budget.record(cost, testCase.prompt.slice(0, 30));
     const revised = rounds > 0 ? ` (revised ×${rounds})` : '';
     const after = outcome.result === null ? `failed: ${outcome.error} ${outcome.providerError ?? ''}` : applyResult(base, outcome.result);

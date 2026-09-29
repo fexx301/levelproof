@@ -9,6 +9,8 @@ import { BOUNDS, DOOR_CYCLE_PERIODS, ENVIRONMENTS, KEY_LOOKS, LIGHTINGS, PROP_KI
 
 const idJson = { type: 'string', pattern: '^[a-z][a-z0-9-]{1,31}$' } as const;
 const cellJson = { type: 'integer', minimum: 0, maximum: 15 } as const;
+/** Room for the engine's cell suffix ("-4-4" or "-8"). */
+const macroIdJson = { type: 'string', pattern: '^[a-z][a-z0-9-]{1,27}$' } as const;
 const nullableEnum = (values: readonly string[]) => ({ type: ['string', 'null'], enum: [...values, null] }) as const;
 const cardinalJson = { type: 'string', enum: ['N', 'E', 'S', 'W'] } as const;
 const nullableCardinalJson = { type: ['string', 'null'], enum: ['N', 'E', 'S', 'W', null] } as const;
@@ -224,6 +226,49 @@ const operationJson = {
       additionalProperties: false,
       required: ['kind', 'id'],
       properties: { kind: { type: 'string', enum: ['removePatrol'] }, id: idJson },
+    },
+    {
+      type: 'object',
+      additionalProperties: false,
+      required: ['kind', 'area'],
+      properties: {
+        kind: { type: 'string', enum: ['addArea'] },
+        area: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['id', 'x', 'z', 'h', 'width', 'depth', 'label'],
+          properties: {
+            id: macroIdJson,
+            x: cellJson,
+            z: cellJson,
+            h: { type: 'integer', minimum: 0, maximum: 2 },
+            width: { type: 'integer', minimum: 1, maximum: BOUNDS.maxAreaSide },
+            depth: { type: 'integer', minimum: 1, maximum: BOUNDS.maxAreaSide },
+            label: { type: ['string', 'null'] },
+          },
+        },
+      },
+    },
+    {
+      type: 'object',
+      additionalProperties: false,
+      required: ['kind', 'corridor'],
+      properties: {
+        kind: { type: 'string', enum: ['addCorridor'] },
+        corridor: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['id', 'from', 'direction', 'length', 'label', 'template'],
+          properties: {
+            id: macroIdJson,
+            from: idJson,
+            direction: cardinalJson,
+            length: { type: 'integer', minimum: 1, maximum: BOUNDS.maxCorridorLength },
+            label: { type: ['string', 'null'] },
+            template: { type: ['string', 'null'], enum: ['flat', 'bridge', null] },
+          },
+        },
+      },
     },
     {
       type: 'object',

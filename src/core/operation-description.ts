@@ -145,6 +145,16 @@ export function describeOperation(operation: Operation, before: Level, after: Le
     }
     case 'removeDoor':
       return `Remove ${entityName(before, operation.id)}.`;
+    case 'addArea': {
+      const { id, x, z, h, width, depth, label } = operation.area;
+      return `Add ${label !== undefined ? `“${label}”` : `the area “${humanize(id)}”`}, ${width} × ${depth} connected rooms from ${gridPosition(x, z, h)}.`;
+    }
+    case 'addCorridor': {
+      const { id, from, direction, length, label, template } = operation.corridor;
+      const names: Record<string, string> = { N: 'north', E: 'east', S: 'south', W: 'west' };
+      const noun = template === 'bridge' ? 'bridge' : 'corridor';
+      return `Add ${label !== undefined ? `“${label}”` : `the ${noun} “${humanize(id)}”`}, ${length} room${length === 1 ? '' : 's'} running ${names[direction]} from ${moduleName(after, from)}.`;
+    }
     case 'addPatrol':
       return `Add a guard “${humanize(operation.patrol.id)}” who walks back and forth: ${operation.patrol.route.map((id) => moduleName(after, id)).join(' ↔ ')}.`;
     case 'removePatrol':

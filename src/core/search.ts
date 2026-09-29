@@ -299,6 +299,8 @@ export function touchesProtected(operations: Operation[], protectedIds: Set<stri
     if (op.kind === 'setDoorConditions' || op.kind === 'removeDoor' || op.kind === 'removePatrol') {
       if (protectedIds.has(op.id)) return true;
     }
+    // A corridor opens the room it leaves from.
+    if (op.kind === 'addCorridor' && protectedIds.has(op.corridor.from)) return true;
     if (op.kind === 'moveProp' || op.kind === 'removeProp' || op.kind === 'setKeyLook') {
       if (protectedIds.has(op.id)) return true;
     }

@@ -120,6 +120,16 @@ export function operationLabel(operation: unknown): string {
       return `− door: ${human(field(operation, 'id'))}`;
     case 'addPatrol':
       return `+ guard: ${human(field(patrol, 'id'))}`;
+    case 'addArea': {
+      const area = operation !== null && typeof operation === 'object' ? (operation as Record<string, unknown>).area : undefined;
+      const size = area !== null && typeof area === 'object' ? `${(area as Record<string, unknown>).width ?? '?'}×${(area as Record<string, unknown>).depth ?? '?'}` : '';
+      return `+ area: ${human(field(area, 'label') ?? field(area, 'id'))}${size ? ` (${size})` : ''}`;
+    }
+    case 'addCorridor': {
+      const corridor = operation !== null && typeof operation === 'object' ? (operation as Record<string, unknown>).corridor : undefined;
+      const length = corridor !== null && typeof corridor === 'object' ? (corridor as Record<string, unknown>).length : undefined;
+      return `+ corridor: ${human(field(corridor, 'label') ?? field(corridor, 'id'))}${typeof length === 'number' ? ` ×${length}` : ''}`;
+    }
     case 'removePatrol':
       return `− guard: ${human(field(operation, 'id'))}`;
     case 'setScenery':

@@ -1,17 +1,19 @@
 import { worldCycle } from './hazards.js';
 import {
   BOUNDS,
+  CARDINALS,
   EXPLORATION_BOUND,
   GROUND_TILE_PROPS,
   levelSchema,
   operationSchema,
+  type Cardinal,
   type Level,
   type LevelModule,
   type Operation,
   type Requirement,
   type RuleProposal,
 } from '../../shared/schema.js';
-import { opposite } from './catalog.js';
+import { dirDelta, opposite, portElevation } from './catalog.js';
 import { computeEdges, edgeKey, validateGeometry } from './topology.js';
 
 /**
@@ -248,6 +250,18 @@ export function applyOperations(base: Level, operations: Operation[]): ApplyResu
   const draft: Level = structuredClone(base);
   const fail = (error: string): ApplyResult => ({ ok: false, errors: [error] });
   const findModule = (id: string): LevelModule | undefined => draft.modules.find((m) => m.id === id);
+  const moduleAt = (x: number, z: number, h: number): LevelModule | undefined =>
+    draft.modules.find((m) => m.x === x && m.z === z && (m.h === h || (m.template === 'ramp' && m.h + 1 === h)));
+  // Rooms the engine laid out (areas, corridors) and rooms whose exits the
+  // patch set explicitly: the first open onto neighbours at the end, unless
+  // the patch said otherwise.
+  const laidOut: string[] = [];
+  const explicitPorts = new Set<string>();
+  // Corridor ends to join with whatever room lies ahead once the patch is done.
+  const farEnds: Array<{ id: string; direction: Cardinal }> = [];
+  const openSide = (m: LevelModule, dir: Cardinal): void => {
+    if (!m.ports.includes(dir)) m.ports = CARDINALS.filter((side) => side === dir || m.ports.includes(side));
+  };
 
   for (const op of operations) {
     switch (op.kind) {
@@ -275,6 +289,51 @@ export function applyOperations(base: Level, operations: Operation[]): ApplyResu
         const m = findModule(op.id);
         if (!m) return fail(`Unknown module "${op.id}".`);
         m.ports = [...op.ports];
+        explicitPorts.add(op.id);
+        break;
+      }
+      case 'addArea': {
+        const { id, x, z, h, width, depth, label } = op.area;
+        if (x + width - 1 > BOUNDS.maxX || z + depth - 1 > BOUNDS.maxZ) return fail(`Area "${id}" runs off the grid.`);
+        for (let row = 1; row <= depth; row++) {
+          for (let col = 1; col <= width; col++) {
+            const cellId = `${id}-${col}-${row}`;
+            if (findModule(cellId)) return fail(`Module "${cellId}" already exists.`);
+            const ports = CARDINALS.filter((dir) => (dir === 'N' ? row > 1 : dir === 'S' ? row < depth : dir === 'E' ? col < width : col > 1));
+            draft.modules.push({ id: cellId, template: 'flat', x: x + col - 1, z: z + row - 1, h, ...(label !== undefined ? { label } : {}), ports });
+            laidOut.push(cellId);
+          }
+        }
+        break;
+      }
+      case 'addCorridor': {
+        const { id, from, direction, length, label, template } = op.corridor;
+        const start = findModule(from);
+        if (!start) return fail(`Unknown module "${from}".`);
+        if (start.template === 'ramp') return fail(`A corridor starts from a flat room or bridge, not the ramp "${from}".`);
+        const { dx, dz } = dirDelta(direction);
+        let last: LevelModule = start;
+        for (let step = 1; step <= length; step++) {
+          const cx = start.x + dx * step;
+          const cz = start.z + dz * step;
+          if (cx < 0 || cx > BOUNDS.maxX || cz < 0 || cz > BOUNDS.maxZ) return fail(`Corridor "${id}" runs off the grid.`);
+          const cellId = `${id}-${step}`;
+          if (findModule(cellId)) return fail(`Module "${cellId}" already exists.`);
+          const cell: LevelModule = {
+            id: cellId,
+            template: template ?? 'flat',
+            x: cx,
+            z: cz,
+            h: start.h,
+            ...(label !== undefined ? { label } : {}),
+            ports: CARDINALS.filter((dir) => dir === opposite(direction) || (dir === direction && step < length)),
+          };
+          draft.modules.push(cell);
+          laidOut.push(cellId);
+          last = cell;
+        }
+        openSide(start, direction);
+        farEnds.push({ id: last.id, direction });
         break;
       }
       case 'setModuleLabel': {
@@ -397,6 +456,32 @@ export function applyOperations(base: Level, operations: Operation[]): ApplyResu
   }
   // An emptied scenery list is the same level as one that never had it.
   if (draft.props !== undefined && draft.props.length === 0) delete draft.props;
+
+  // A corridor's far end joins the room it runs into, at the same walking
+  // level — whichever order the patch built them in.
+  for (const { id, direction } of farEnds) {
+    const last = findModule(id);
+    if (last === undefined) continue;
+    const { dx, dz } = dirDelta(direction);
+    const ahead = moduleAt(last.x + dx, last.z + dz, last.h);
+    const back = opposite(direction);
+    if (ahead === undefined) continue;
+    const joins = ahead.template === 'ramp' ? portElevation(ahead, back) === last.h : ahead.h === last.h;
+    if (!joins) continue;
+    openSide(last, direction);
+    if (ahead.template !== 'ramp') openSide(ahead, back);
+  }
+  // Laid-out rooms open onto any neighbour that already opens toward them.
+  for (const id of laidOut) {
+    const m = findModule(id);
+    if (m === undefined || explicitPorts.has(id)) continue;
+    for (const dir of CARDINALS) {
+      if (m.ports.includes(dir)) continue;
+      const { dx, dz } = dirDelta(dir);
+      const neighbour = moduleAt(m.x + dx, m.z + dz, m.h);
+      if (neighbour !== undefined && portElevation(neighbour, opposite(dir)) === m.h) openSide(m, dir);
+    }
+  }
 
   const errors = validateLevel(draft);
   if (errors.length > 0) return { ok: false, errors };

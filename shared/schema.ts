@@ -17,9 +17,14 @@ export const BOUNDS = {
   maxRequirements: 3,
   maxDoors: 64,
   maxProps: 24,
-  // A from-scratch build plus its scenery (environment and a handful of
-  // landmark props) needs more room than a single gameplay edit.
-  maxOpsPerPatch: 32,
+  // A from-scratch build plus its scenery (environment and landmark props)
+  // needs more room than a single gameplay edit. Big worlds stay inside it
+  // by laying out areas and corridors with one operation each.
+  maxOpsPerPatch: 40,
+  /** Largest block of rooms one addArea lays out (per side). */
+  maxAreaSide: 4,
+  /** Longest straight run one addCorridor lays out. */
+  maxCorridorLength: 8,
   maxStringLength: 64,
   /** Turn-based guards (§6.4). */
   maxPatrols: 3,
@@ -173,6 +178,44 @@ export type Door = z.infer<typeof doorSchema>;
  * caught: the level restarts. Routes are 2-4 distinct connected rooms and
  * never include the spawn or the goal.
  */
+/** A base id with room for the engine's cell suffix ("-4-4" or "-8"). */
+const macroIdSchema = z
+  .string()
+  .regex(/^[a-z][a-z0-9-]{1,27}$/, 'id must be 2-28 chars: [a-z][a-z0-9]-, starting with a letter');
+
+/**
+ * A block of connected flat rooms laid out by the engine (§5): width × depth
+ * cells from (x, z), named id-col-row from the north-west corner. Its outer
+ * sides open onto any neighbour that opens toward them.
+ */
+export const areaSchema = z
+  .strictObject({
+    id: macroIdSchema,
+    x: z.number().int().min(0).max(BOUNDS.maxX),
+    z: z.number().int().min(0).max(BOUNDS.maxZ),
+    h: z.number().int().min(0).max(BOUNDS.maxElevation),
+    width: z.number().int().min(1).max(BOUNDS.maxAreaSide),
+    depth: z.number().int().min(1).max(BOUNDS.maxAreaSide),
+    label: z.string().min(1).max(60).optional(),
+  })
+  .refine((area) => area.width * area.depth >= 2, { message: 'an area needs at least two rooms' });
+export type Area = z.infer<typeof areaSchema>;
+
+/**
+ * A straight run of rooms leaving an existing flat room or bridge (§5),
+ * named id-1 … id-N, at that room's elevation. The engine opens the start
+ * room toward it and joins the room it runs into at the far end.
+ */
+export const corridorSchema = z.strictObject({
+  id: macroIdSchema,
+  from: idSchema,
+  direction: cardinalSchema,
+  length: z.number().int().min(1).max(BOUNDS.maxCorridorLength),
+  label: z.string().min(1).max(60).optional(),
+  template: z.enum(['flat', 'bridge']).optional(),
+});
+export type Corridor = z.infer<typeof corridorSchema>;
+
 export const patrolSchema = z.strictObject({
   id: idSchema,
   route: z.array(idSchema).min(2).max(4),
@@ -238,6 +281,8 @@ export const operationSchema = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('setDoorConditions'), id: idSchema, conditions: doorConditionsSchema }),
   z.strictObject({ kind: z.literal('removeDoor'), id: idSchema }),
   z.strictObject({ kind: z.literal('addPatrol'), patrol: patrolSchema }),
+  z.strictObject({ kind: z.literal('addArea'), area: areaSchema }),
+  z.strictObject({ kind: z.literal('addCorridor'), corridor: corridorSchema }),
   z.strictObject({ kind: z.literal('removePatrol'), id: idSchema }),
   // Scenery operations: cosmetic only, never read by the engine.
   z.strictObject({
