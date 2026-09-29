@@ -1,0 +1,6907 @@
+{
+ "baseline": {
+  "revision": "rev-9e992f1fe87ea3c9",
+  "report": {
+   "valid": true,
+   "invalidReasons": [],
+   "revisionId": "rev-9e992f1fe87ea3c9",
+   "complete": true,
+   "completionExplanation": "Exploration finished within the state bound.",
+   "exploredCount": 17,
+   "accepted": true,
+   "recoveryMap": {
+    "stranded": [],
+    "unreachable": []
+   },
+   "checks": {
+    "solution": {
+     "status": "pass",
+     "explanation": "Solution found.",
+     "witness": {
+      "kind": "solution",
+      "route": [
+       {
+        "action": "N",
+        "before": {
+         "moduleId": "entrance",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "lower-hall",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "source": "entrance",
+        "destination": "lower-hall",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          600,
+          0,
+          2200
+         ],
+         [
+          600,
+          0,
+          2000
+         ],
+         [
+          600,
+          0,
+          1800
+         ]
+        ]
+       },
+       {
+        "action": "N",
+        "before": {
+         "moduleId": "lower-hall",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "gallery-ramp",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "source": "lower-hall",
+        "destination": "gallery-ramp",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          600,
+          0,
+          1800
+         ],
+         [
+          600,
+          0,
+          1600
+         ],
+         [
+          600,
+          150,
+          1400
+         ]
+        ]
+       },
+       {
+        "action": "N",
+        "before": {
+         "moduleId": "gallery-ramp",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "gallery",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "source": "gallery-ramp",
+        "destination": "gallery",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          600,
+          150,
+          1400
+         ],
+         [
+          600,
+          300,
+          1200
+         ],
+         [
+          600,
+          300,
+          1000
+         ]
+        ]
+       },
+       {
+        "action": "E",
+        "before": {
+         "moduleId": "gallery",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "key-walk",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "source": "gallery",
+        "destination": "key-walk",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          600,
+          300,
+          1000
+         ],
+         [
+          800,
+          300,
+          1000
+         ],
+         [
+          1000,
+          300,
+          1000
+         ]
+        ]
+       },
+       {
+        "action": "E",
+        "before": {
+         "moduleId": "key-walk",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "key-balcony",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "source": "key-walk",
+        "destination": "key-balcony",
+        "doorId": null,
+        "events": {
+         "collectedKey": "brass-key"
+        },
+        "segments": [
+         [
+          1000,
+          300,
+          1000
+         ],
+         [
+          1200,
+          300,
+          1000
+         ],
+         [
+          1400,
+          300,
+          1000
+         ]
+        ]
+       },
+       {
+        "action": "W",
+        "before": {
+         "moduleId": "key-balcony",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "key-walk",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "source": "key-balcony",
+        "destination": "key-walk",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          1400,
+          300,
+          1000
+         ],
+         [
+          1200,
+          300,
+          1000
+         ],
+         [
+          1000,
+          300,
+          1000
+         ]
+        ]
+       },
+       {
+        "action": "W",
+        "before": {
+         "moduleId": "key-walk",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "gallery",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "source": "key-walk",
+        "destination": "gallery",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          1000,
+          300,
+          1000
+         ],
+         [
+          800,
+          300,
+          1000
+         ],
+         [
+          600,
+          300,
+          1000
+         ]
+        ]
+       },
+       {
+        "action": "N",
+        "before": {
+         "moduleId": "gallery",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "bridge-landing",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "source": "gallery",
+        "destination": "bridge-landing",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          600,
+          300,
+          1000
+         ],
+         [
+          600,
+          300,
+          800
+         ],
+         [
+          600,
+          300,
+          600
+         ]
+        ]
+       },
+       {
+        "action": "E",
+        "before": {
+         "moduleId": "bridge-landing",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "vault-approach",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "source": "bridge-landing",
+        "destination": "vault-approach",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          600,
+          300,
+          600
+         ],
+         [
+          800,
+          300,
+          600
+         ],
+         [
+          1000,
+          300,
+          600
+         ]
+        ]
+       },
+       {
+        "action": "E",
+        "before": {
+         "moduleId": "vault-approach",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "vault-entry",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "source": "vault-approach",
+        "destination": "vault-entry",
+        "doorId": "vault-door",
+        "events": {},
+        "segments": [
+         [
+          1000,
+          300,
+          600
+         ],
+         [
+          1200,
+          300,
+          600
+         ],
+         [
+          1400,
+          300,
+          600
+         ]
+        ]
+       },
+       {
+        "action": "E",
+        "before": {
+         "moduleId": "vault-entry",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "treasure-landing",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "source": "vault-entry",
+        "destination": "treasure-landing",
+        "doorId": null,
+        "events": {
+         "reachedGoal": true
+        },
+        "segments": [
+         [
+          1400,
+          300,
+          600
+         ],
+         [
+          1600,
+          300,
+          600
+         ],
+         [
+          1800,
+          300,
+          600
+         ]
+        ]
+       }
+      ],
+      "endState": {
+       "moduleId": "treasure-landing",
+       "keyMask": 1,
+       "switchMask": 0
+      },
+      "missingKeys": null,
+      "requirement": null,
+      "violationText": null
+     }
+    },
+    "requirements": {
+     "status": "pass",
+     "explanation": "Every reachable winning state satisfies every rule.",
+     "witness": null
+    },
+    "recovery": {
+     "status": "pass",
+     "explanation": "Every reachable non-winning state can still reach the goal.",
+     "witness": null
+    }
+   }
+  },
+  "openingMoves": [
+   {
+    "action": "N",
+    "before": {
+     "moduleId": "entrance",
+     "keyMask": 0,
+     "switchMask": 0
+    },
+    "after": {
+     "moduleId": "lower-hall",
+     "keyMask": 0,
+     "switchMask": 0
+    },
+    "source": "entrance",
+    "destination": "lower-hall",
+    "doorId": null,
+    "events": {},
+    "segments": [
+     [
+      600,
+      0,
+      2200
+     ],
+     [
+      600,
+      0,
+      2000
+     ],
+     [
+      600,
+      0,
+      1800
+     ]
+    ]
+   }
+  ],
+  "hint": {
+   "kind": "move",
+   "move": {
+    "action": "N",
+    "before": {
+     "moduleId": "entrance",
+     "keyMask": 0,
+     "switchMask": 0
+    },
+    "after": {
+     "moduleId": "lower-hall",
+     "keyMask": 0,
+     "switchMask": 0
+    },
+    "source": "entrance",
+    "destination": "lower-hall",
+    "doorId": null,
+    "events": {},
+    "segments": [
+     [
+      600,
+      0,
+      2200
+     ],
+     [
+      600,
+      0,
+      2000
+     ],
+     [
+      600,
+      0,
+      1800
+     ]
+    ]
+   },
+   "movesToGoal": 11
+  },
+  "canWin": [
+   "bridge-landing|0|0",
+   "bridge-landing|1|0",
+   "entrance|0|0",
+   "entrance|1|0",
+   "gallery-ramp|0|0",
+   "gallery-ramp|1|0",
+   "gallery|0|0",
+   "gallery|1|0",
+   "key-balcony|1|0",
+   "key-walk|0|0",
+   "key-walk|1|0",
+   "lower-hall|0|0",
+   "lower-hall|1|0",
+   "treasure-landing|1|0",
+   "vault-approach|0|0",
+   "vault-approach|1|0",
+   "vault-entry|1|0"
+  ],
+  "chapter": {
+   "accepted": true,
+   "shortest": 11,
+   "gatesOnRoute": 1,
+   "exploredStates": 17
+  }
+ },
+ "blankCanvas": {
+  "revision": "rev-1f45f73e31cc5e01",
+  "report": {
+   "valid": true,
+   "invalidReasons": [],
+   "revisionId": "rev-1f45f73e31cc5e01",
+   "complete": true,
+   "completionExplanation": "Exploration finished within the state bound.",
+   "exploredCount": 3,
+   "accepted": true,
+   "recoveryMap": {
+    "stranded": [],
+    "unreachable": []
+   },
+   "checks": {
+    "solution": {
+     "status": "pass",
+     "explanation": "Solution found.",
+     "witness": {
+      "kind": "solution",
+      "route": [
+       {
+        "action": "N",
+        "before": {
+         "moduleId": "entry-pad",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "start-walk",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "source": "entry-pad",
+        "destination": "start-walk",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          3000,
+          0,
+          3400
+         ],
+         [
+          3000,
+          0,
+          3200
+         ],
+         [
+          3000,
+          0,
+          3000
+         ]
+        ]
+       },
+       {
+        "action": "N",
+        "before": {
+         "moduleId": "start-walk",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "goal-pad",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "source": "start-walk",
+        "destination": "goal-pad",
+        "doorId": null,
+        "events": {
+         "reachedGoal": true
+        },
+        "segments": [
+         [
+          3000,
+          0,
+          3000
+         ],
+         [
+          3000,
+          0,
+          2800
+         ],
+         [
+          3000,
+          0,
+          2600
+         ]
+        ]
+       }
+      ],
+      "endState": {
+       "moduleId": "goal-pad",
+       "keyMask": 0,
+       "switchMask": 0
+      },
+      "missingKeys": null,
+      "requirement": null,
+      "violationText": null
+     }
+    },
+    "requirements": {
+     "status": "not_applicable",
+     "explanation": "No rules set.",
+     "witness": null
+    },
+    "recovery": {
+     "status": "pass",
+     "explanation": "Every reachable non-winning state can still reach the goal.",
+     "witness": null
+    }
+   }
+  },
+  "openingMoves": [
+   {
+    "action": "N",
+    "before": {
+     "moduleId": "entry-pad",
+     "keyMask": 0,
+     "switchMask": 0
+    },
+    "after": {
+     "moduleId": "start-walk",
+     "keyMask": 0,
+     "switchMask": 0
+    },
+    "source": "entry-pad",
+    "destination": "start-walk",
+    "doorId": null,
+    "events": {},
+    "segments": [
+     [
+      3000,
+      0,
+      3400
+     ],
+     [
+      3000,
+      0,
+      3200
+     ],
+     [
+      3000,
+      0,
+      3000
+     ]
+    ]
+   }
+  ],
+  "hint": {
+   "kind": "move",
+   "move": {
+    "action": "N",
+    "before": {
+     "moduleId": "entry-pad",
+     "keyMask": 0,
+     "switchMask": 0
+    },
+    "after": {
+     "moduleId": "start-walk",
+     "keyMask": 0,
+     "switchMask": 0
+    },
+    "source": "entry-pad",
+    "destination": "start-walk",
+    "doorId": null,
+    "events": {},
+    "segments": [
+     [
+      3000,
+      0,
+      3400
+     ],
+     [
+      3000,
+      0,
+      3200
+     ],
+     [
+      3000,
+      0,
+      3000
+     ]
+    ]
+   },
+   "movesToGoal": 2
+  },
+  "canWin": [
+   "entry-pad|0|0",
+   "goal-pad|0|0",
+   "start-walk|0|0"
+  ],
+  "chapter": {
+   "accepted": true,
+   "shortest": 2,
+   "gatesOnRoute": 0,
+   "exploredStates": 3
+  }
+ },
+ "bypass": {
+  "revision": "rev-c1553b89e64637c7",
+  "report": {
+   "valid": true,
+   "invalidReasons": [],
+   "revisionId": "rev-c1553b89e64637c7",
+   "complete": true,
+   "completionExplanation": "Exploration finished within the state bound.",
+   "exploredCount": 33,
+   "accepted": false,
+   "recoveryMap": {
+    "stranded": [],
+    "unreachable": []
+   },
+   "checks": {
+    "solution": {
+     "status": "pass",
+     "explanation": "Solution found.",
+     "witness": {
+      "kind": "solution",
+      "route": [
+       {
+        "action": "N",
+        "before": {
+         "moduleId": "entrance",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "lower-hall",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "source": "entrance",
+        "destination": "lower-hall",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          600,
+          0,
+          2200
+         ],
+         [
+          600,
+          0,
+          2000
+         ],
+         [
+          600,
+          0,
+          1800
+         ]
+        ]
+       },
+       {
+        "action": "N",
+        "before": {
+         "moduleId": "lower-hall",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "gallery-ramp",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "source": "lower-hall",
+        "destination": "gallery-ramp",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          600,
+          0,
+          1800
+         ],
+         [
+          600,
+          0,
+          1600
+         ],
+         [
+          600,
+          150,
+          1400
+         ]
+        ]
+       },
+       {
+        "action": "N",
+        "before": {
+         "moduleId": "gallery-ramp",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "gallery",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "source": "gallery-ramp",
+        "destination": "gallery",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          600,
+          150,
+          1400
+         ],
+         [
+          600,
+          300,
+          1200
+         ],
+         [
+          600,
+          300,
+          1000
+         ]
+        ]
+       },
+       {
+        "action": "N",
+        "before": {
+         "moduleId": "gallery",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "bridge-landing",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "source": "gallery",
+        "destination": "bridge-landing",
+        "doorId": "gallery-door",
+        "events": {},
+        "segments": [
+         [
+          600,
+          300,
+          1000
+         ],
+         [
+          600,
+          300,
+          800
+         ],
+         [
+          600,
+          300,
+          600
+         ]
+        ]
+       },
+       {
+        "action": "N",
+        "before": {
+         "moduleId": "bridge-landing",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "bridge-west",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "source": "bridge-landing",
+        "destination": "bridge-west",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          600,
+          300,
+          600
+         ],
+         [
+          600,
+          300,
+          400
+         ],
+         [
+          600,
+          300,
+          200
+         ]
+        ]
+       },
+       {
+        "action": "E",
+        "before": {
+         "moduleId": "bridge-west",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "bridge-mid-west",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "source": "bridge-west",
+        "destination": "bridge-mid-west",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          600,
+          300,
+          200
+         ],
+         [
+          800,
+          300,
+          200
+         ],
+         [
+          1000,
+          300,
+          200
+         ]
+        ]
+       },
+       {
+        "action": "E",
+        "before": {
+         "moduleId": "bridge-mid-west",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "bridge-mid-east",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "source": "bridge-mid-west",
+        "destination": "bridge-mid-east",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          1000,
+          300,
+          200
+         ],
+         [
+          1200,
+          300,
+          200
+         ],
+         [
+          1400,
+          300,
+          200
+         ]
+        ]
+       },
+       {
+        "action": "E",
+        "before": {
+         "moduleId": "bridge-mid-east",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "bridge-east",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "source": "bridge-mid-east",
+        "destination": "bridge-east",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          1400,
+          300,
+          200
+         ],
+         [
+          1600,
+          300,
+          200
+         ],
+         [
+          1800,
+          300,
+          200
+         ]
+        ]
+       },
+       {
+        "action": "S",
+        "before": {
+         "moduleId": "bridge-east",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "treasure-landing",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "source": "bridge-east",
+        "destination": "treasure-landing",
+        "doorId": null,
+        "events": {
+         "reachedGoal": true
+        },
+        "segments": [
+         [
+          1800,
+          300,
+          200
+         ],
+         [
+          1800,
+          300,
+          400
+         ],
+         [
+          1800,
+          300,
+          600
+         ]
+        ]
+       }
+      ],
+      "endState": {
+       "moduleId": "treasure-landing",
+       "keyMask": 0,
+       "switchMask": 0
+      },
+      "missingKeys": null,
+      "requirement": null,
+      "violationText": null
+     }
+    },
+    "requirements": {
+     "status": "fail",
+     "explanation": "A winning route reaches the goal without the required key \"brass-key\".",
+     "witness": {
+      "kind": "bypass",
+      "route": [
+       {
+        "action": "N",
+        "before": {
+         "moduleId": "entrance",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "lower-hall",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "source": "entrance",
+        "destination": "lower-hall",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          600,
+          0,
+          2200
+         ],
+         [
+          600,
+          0,
+          2000
+         ],
+         [
+          600,
+          0,
+          1800
+         ]
+        ]
+       },
+       {
+        "action": "N",
+        "before": {
+         "moduleId": "lower-hall",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "gallery-ramp",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "source": "lower-hall",
+        "destination": "gallery-ramp",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          600,
+          0,
+          1800
+         ],
+         [
+          600,
+          0,
+          1600
+         ],
+         [
+          600,
+          150,
+          1400
+         ]
+        ]
+       },
+       {
+        "action": "N",
+        "before": {
+         "moduleId": "gallery-ramp",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "gallery",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "source": "gallery-ramp",
+        "destination": "gallery",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          600,
+          150,
+          1400
+         ],
+         [
+          600,
+          300,
+          1200
+         ],
+         [
+          600,
+          300,
+          1000
+         ]
+        ]
+       },
+       {
+        "action": "N",
+        "before": {
+         "moduleId": "gallery",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "bridge-landing",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "source": "gallery",
+        "destination": "bridge-landing",
+        "doorId": "gallery-door",
+        "events": {},
+        "segments": [
+         [
+          600,
+          300,
+          1000
+         ],
+         [
+          600,
+          300,
+          800
+         ],
+         [
+          600,
+          300,
+          600
+         ]
+        ]
+       },
+       {
+        "action": "N",
+        "before": {
+         "moduleId": "bridge-landing",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "bridge-west",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "source": "bridge-landing",
+        "destination": "bridge-west",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          600,
+          300,
+          600
+         ],
+         [
+          600,
+          300,
+          400
+         ],
+         [
+          600,
+          300,
+          200
+         ]
+        ]
+       },
+       {
+        "action": "E",
+        "before": {
+         "moduleId": "bridge-west",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "bridge-mid-west",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "source": "bridge-west",
+        "destination": "bridge-mid-west",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          600,
+          300,
+          200
+         ],
+         [
+          800,
+          300,
+          200
+         ],
+         [
+          1000,
+          300,
+          200
+         ]
+        ]
+       },
+       {
+        "action": "E",
+        "before": {
+         "moduleId": "bridge-mid-west",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "bridge-mid-east",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "source": "bridge-mid-west",
+        "destination": "bridge-mid-east",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          1000,
+          300,
+          200
+         ],
+         [
+          1200,
+          300,
+          200
+         ],
+         [
+          1400,
+          300,
+          200
+         ]
+        ]
+       },
+       {
+        "action": "E",
+        "before": {
+         "moduleId": "bridge-mid-east",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "bridge-east",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "source": "bridge-mid-east",
+        "destination": "bridge-east",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          1400,
+          300,
+          200
+         ],
+         [
+          1600,
+          300,
+          200
+         ],
+         [
+          1800,
+          300,
+          200
+         ]
+        ]
+       },
+       {
+        "action": "S",
+        "before": {
+         "moduleId": "bridge-east",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "treasure-landing",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "source": "bridge-east",
+        "destination": "treasure-landing",
+        "doorId": null,
+        "events": {
+         "reachedGoal": true
+        },
+        "segments": [
+         [
+          1800,
+          300,
+          200
+         ],
+         [
+          1800,
+          300,
+          400
+         ],
+         [
+          1800,
+          300,
+          600
+         ]
+        ]
+       }
+      ],
+      "endState": {
+       "moduleId": "treasure-landing",
+       "keyMask": 0,
+       "switchMask": 0
+      },
+      "missingKeys": [
+       "brass-key"
+      ],
+      "requirement": {
+       "type": "collectBeforeGoal",
+       "keyId": "brass-key"
+      },
+      "violationText": "without the required key \"brass-key\""
+     }
+    },
+    "recovery": {
+     "status": "pass",
+     "explanation": "Every reachable non-winning state can still reach the goal.",
+     "witness": null
+    }
+   }
+  },
+  "openingMoves": [
+   {
+    "action": "N",
+    "before": {
+     "moduleId": "entrance",
+     "keyMask": 0,
+     "switchMask": 0
+    },
+    "after": {
+     "moduleId": "lower-hall",
+     "keyMask": 0,
+     "switchMask": 0
+    },
+    "source": "entrance",
+    "destination": "lower-hall",
+    "doorId": null,
+    "events": {},
+    "segments": [
+     [
+      600,
+      0,
+      2200
+     ],
+     [
+      600,
+      0,
+      2000
+     ],
+     [
+      600,
+      0,
+      1800
+     ]
+    ]
+   }
+  ],
+  "hint": {
+   "kind": "move",
+   "move": {
+    "action": "N",
+    "before": {
+     "moduleId": "entrance",
+     "keyMask": 0,
+     "switchMask": 0
+    },
+    "after": {
+     "moduleId": "lower-hall",
+     "keyMask": 0,
+     "switchMask": 0
+    },
+    "source": "entrance",
+    "destination": "lower-hall",
+    "doorId": null,
+    "events": {},
+    "segments": [
+     [
+      600,
+      0,
+      2200
+     ],
+     [
+      600,
+      0,
+      2000
+     ],
+     [
+      600,
+      0,
+      1800
+     ]
+    ]
+   },
+   "movesToGoal": 11
+  },
+  "canWin": [
+   "bridge-east|0|0",
+   "bridge-east|1|0",
+   "bridge-east|1|1",
+   "bridge-landing|0|0",
+   "bridge-landing|1|0",
+   "bridge-landing|1|1",
+   "bridge-mid-east|0|0",
+   "bridge-mid-east|1|0",
+   "bridge-mid-east|1|1",
+   "bridge-mid-west|0|0",
+   "bridge-mid-west|1|0",
+   "bridge-mid-west|1|1",
+   "bridge-west|0|0",
+   "bridge-west|1|0",
+   "bridge-west|1|1",
+   "entrance|0|0",
+   "entrance|1|0",
+   "gallery-ramp|0|0",
+   "gallery-ramp|1|0",
+   "gallery|0|0",
+   "gallery|1|0",
+   "key-balcony|1|0",
+   "key-walk|0|0",
+   "key-walk|1|0",
+   "lower-hall|0|0",
+   "lower-hall|1|0",
+   "treasure-landing|0|0",
+   "treasure-landing|1|0",
+   "treasure-landing|1|1",
+   "vault-approach|0|0",
+   "vault-approach|1|0",
+   "vault-approach|1|1",
+   "vault-entry|1|1"
+  ],
+  "chapter": {
+   "accepted": false,
+   "shortest": 9,
+   "gatesOnRoute": 0,
+   "exploredStates": 33
+  }
+ },
+ "gauntlet": {
+  "revision": "rev-fd6ead57a00671ab",
+  "report": {
+   "valid": true,
+   "invalidReasons": [],
+   "revisionId": "rev-fd6ead57a00671ab",
+   "complete": true,
+   "completionExplanation": "Exploration finished within the state bound.",
+   "exploredCount": 54,
+   "accepted": true,
+   "recoveryMap": {
+    "stranded": [],
+    "unreachable": []
+   },
+   "checks": {
+    "solution": {
+     "status": "pass",
+     "explanation": "Solution found.",
+     "witness": {
+      "kind": "solution",
+      "route": [
+       {
+        "action": "N",
+        "before": {
+         "moduleId": "entrance",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "hall-one",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "source": "entrance",
+        "destination": "hall-one",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          1000,
+          0,
+          5400
+         ],
+         [
+          1000,
+          0,
+          5200
+         ],
+         [
+          1000,
+          0,
+          5000
+         ]
+        ]
+       },
+       {
+        "action": "N",
+        "before": {
+         "moduleId": "hall-one",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "bend-south",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "source": "hall-one",
+        "destination": "bend-south",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          1000,
+          0,
+          5000
+         ],
+         [
+          1000,
+          0,
+          4800
+         ],
+         [
+          1000,
+          0,
+          4600
+         ]
+        ]
+       },
+       {
+        "action": "E",
+        "before": {
+         "moduleId": "bend-south",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "low-run",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "source": "bend-south",
+        "destination": "low-run",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          1000,
+          0,
+          4600
+         ],
+         [
+          1200,
+          0,
+          4600
+         ],
+         [
+          1400,
+          0,
+          4600
+         ]
+        ]
+       },
+       {
+        "action": "E",
+        "before": {
+         "moduleId": "low-run",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "bend-north",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "source": "low-run",
+        "destination": "bend-north",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          1400,
+          0,
+          4600
+         ],
+         [
+          1600,
+          0,
+          4600
+         ],
+         [
+          1800,
+          0,
+          4600
+         ]
+        ]
+       },
+       {
+        "action": "N",
+        "before": {
+         "moduleId": "bend-north",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "gauntlet-ramp",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "source": "bend-north",
+        "destination": "gauntlet-ramp",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          1800,
+          0,
+          4600
+         ],
+         [
+          1800,
+          0,
+          4400
+         ],
+         [
+          1800,
+          150,
+          4200
+         ]
+        ]
+       },
+       {
+        "action": "N",
+        "before": {
+         "moduleId": "gauntlet-ramp",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "gallery-start",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "source": "gauntlet-ramp",
+        "destination": "gallery-start",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          1800,
+          150,
+          4200
+         ],
+         [
+          1800,
+          300,
+          4000
+         ],
+         [
+          1800,
+          300,
+          3800
+         ]
+        ]
+       },
+       {
+        "action": "E",
+        "before": {
+         "moduleId": "gallery-start",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "gallery-run",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "source": "gallery-start",
+        "destination": "gallery-run",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          1800,
+          300,
+          3800
+         ],
+         [
+          2000,
+          300,
+          3800
+         ],
+         [
+          2200,
+          300,
+          3800
+         ]
+        ]
+       },
+       {
+        "action": "S",
+        "before": {
+         "moduleId": "gallery-run",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "key-walk",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "source": "gallery-run",
+        "destination": "key-walk",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          2200,
+          300,
+          3800
+         ],
+         [
+          2200,
+          300,
+          4000
+         ],
+         [
+          2200,
+          300,
+          4200
+         ]
+        ]
+       },
+       {
+        "action": "S",
+        "before": {
+         "moduleId": "key-walk",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "key-nook",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "source": "key-walk",
+        "destination": "key-nook",
+        "doorId": null,
+        "events": {
+         "collectedKey": "brass-key"
+        },
+        "segments": [
+         [
+          2200,
+          300,
+          4200
+         ],
+         [
+          2200,
+          300,
+          4400
+         ],
+         [
+          2200,
+          300,
+          4600
+         ]
+        ]
+       },
+       {
+        "action": "N",
+        "before": {
+         "moduleId": "key-nook",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "key-walk",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "source": "key-nook",
+        "destination": "key-walk",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          2200,
+          300,
+          4600
+         ],
+         [
+          2200,
+          300,
+          4400
+         ],
+         [
+          2200,
+          300,
+          4200
+         ]
+        ]
+       },
+       {
+        "action": "N",
+        "before": {
+         "moduleId": "key-walk",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "gallery-run",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "source": "key-walk",
+        "destination": "gallery-run",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          2200,
+          300,
+          4200
+         ],
+         [
+          2200,
+          300,
+          4000
+         ],
+         [
+          2200,
+          300,
+          3800
+         ]
+        ]
+       },
+       {
+        "action": "E",
+        "before": {
+         "moduleId": "gallery-run",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "gallery-mid",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "source": "gallery-run",
+        "destination": "gallery-mid",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          2200,
+          300,
+          3800
+         ],
+         [
+          2400,
+          300,
+          3800
+         ],
+         [
+          2600,
+          300,
+          3800
+         ]
+        ]
+       },
+       {
+        "action": "E",
+        "before": {
+         "moduleId": "gallery-mid",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "gallery-end",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "source": "gallery-mid",
+        "destination": "gallery-end",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          2600,
+          300,
+          3800
+         ],
+         [
+          2800,
+          300,
+          3800
+         ],
+         [
+          3000,
+          300,
+          3800
+         ]
+        ]
+       },
+       {
+        "action": "N",
+        "before": {
+         "moduleId": "gallery-end",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "vault-approach",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "source": "gallery-end",
+        "destination": "vault-approach",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          3000,
+          300,
+          3800
+         ],
+         [
+          3000,
+          300,
+          3600
+         ],
+         [
+          3000,
+          300,
+          3400
+         ]
+        ]
+       },
+       {
+        "action": "E",
+        "before": {
+         "moduleId": "vault-approach",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "bonus-walk",
+         "keyMask": 1,
+         "switchMask": 1
+        },
+        "source": "vault-approach",
+        "destination": "bonus-walk",
+        "doorId": null,
+        "events": {
+         "activatedSwitch": "gate-primer"
+        },
+        "segments": [
+         [
+          3000,
+          300,
+          3400
+         ],
+         [
+          3200,
+          300,
+          3400
+         ],
+         [
+          3400,
+          300,
+          3400
+         ]
+        ]
+       },
+       {
+        "action": "W",
+        "before": {
+         "moduleId": "bonus-walk",
+         "keyMask": 1,
+         "switchMask": 1
+        },
+        "after": {
+         "moduleId": "vault-approach",
+         "keyMask": 1,
+         "switchMask": 1
+        },
+        "source": "bonus-walk",
+        "destination": "vault-approach",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          3400,
+          300,
+          3400
+         ],
+         [
+          3200,
+          300,
+          3400
+         ],
+         [
+          3000,
+          300,
+          3400
+         ]
+        ]
+       },
+       {
+        "action": "N",
+        "before": {
+         "moduleId": "vault-approach",
+         "keyMask": 1,
+         "switchMask": 1
+        },
+        "after": {
+         "moduleId": "sanctum",
+         "keyMask": 1,
+         "switchMask": 3
+        },
+        "source": "vault-approach",
+        "destination": "sanctum",
+        "doorId": "gauntlet-door",
+        "events": {
+         "activatedSwitch": "vault-seal"
+        },
+        "segments": [
+         [
+          3000,
+          300,
+          3400
+         ],
+         [
+          3000,
+          300,
+          3200
+         ],
+         [
+          3000,
+          300,
+          3000
+         ]
+        ]
+       },
+       {
+        "action": "N",
+        "before": {
+         "moduleId": "sanctum",
+         "keyMask": 1,
+         "switchMask": 3
+        },
+        "after": {
+         "moduleId": "treasure-room",
+         "keyMask": 1,
+         "switchMask": 3
+        },
+        "source": "sanctum",
+        "destination": "treasure-room",
+        "doorId": "treasure-door",
+        "events": {
+         "reachedGoal": true
+        },
+        "segments": [
+         [
+          3000,
+          300,
+          3000
+         ],
+         [
+          3000,
+          300,
+          2800
+         ],
+         [
+          3000,
+          300,
+          2600
+         ]
+        ]
+       }
+      ],
+      "endState": {
+       "moduleId": "treasure-room",
+       "keyMask": 1,
+       "switchMask": 3
+      },
+      "missingKeys": null,
+      "requirement": null,
+      "violationText": null
+     }
+    },
+    "requirements": {
+     "status": "pass",
+     "explanation": "Every reachable winning state satisfies every rule.",
+     "witness": null
+    },
+    "recovery": {
+     "status": "pass",
+     "explanation": "Every reachable non-winning state can still reach the goal.",
+     "witness": null
+    }
+   }
+  },
+  "openingMoves": [
+   {
+    "action": "N",
+    "before": {
+     "moduleId": "entrance",
+     "keyMask": 0,
+     "switchMask": 0
+    },
+    "after": {
+     "moduleId": "hall-one",
+     "keyMask": 0,
+     "switchMask": 0
+    },
+    "source": "entrance",
+    "destination": "hall-one",
+    "doorId": null,
+    "events": {},
+    "segments": [
+     [
+      1000,
+      0,
+      5400
+     ],
+     [
+      1000,
+      0,
+      5200
+     ],
+     [
+      1000,
+      0,
+      5000
+     ]
+    ]
+   }
+  ],
+  "hint": {
+   "kind": "move",
+   "move": {
+    "action": "N",
+    "before": {
+     "moduleId": "entrance",
+     "keyMask": 0,
+     "switchMask": 0
+    },
+    "after": {
+     "moduleId": "hall-one",
+     "keyMask": 0,
+     "switchMask": 0
+    },
+    "source": "entrance",
+    "destination": "hall-one",
+    "doorId": null,
+    "events": {},
+    "segments": [
+     [
+      1000,
+      0,
+      5400
+     ],
+     [
+      1000,
+      0,
+      5200
+     ],
+     [
+      1000,
+      0,
+      5000
+     ]
+    ]
+   },
+   "movesToGoal": 18
+  },
+  "canWin": [
+   "bend-north|0|0",
+   "bend-north|0|1",
+   "bend-north|1|0",
+   "bend-north|1|1",
+   "bend-south|0|0",
+   "bend-south|0|1",
+   "bend-south|1|0",
+   "bend-south|1|1",
+   "bonus-walk|0|1",
+   "bonus-walk|1|1",
+   "entrance|0|0",
+   "entrance|0|1",
+   "entrance|1|0",
+   "entrance|1|1",
+   "gallery-end|0|0",
+   "gallery-end|0|1",
+   "gallery-end|1|0",
+   "gallery-end|1|1",
+   "gallery-mid|0|0",
+   "gallery-mid|0|1",
+   "gallery-mid|1|0",
+   "gallery-mid|1|1",
+   "gallery-run|0|0",
+   "gallery-run|0|1",
+   "gallery-run|1|0",
+   "gallery-run|1|1",
+   "gallery-start|0|0",
+   "gallery-start|0|1",
+   "gallery-start|1|0",
+   "gallery-start|1|1",
+   "gauntlet-ramp|0|0",
+   "gauntlet-ramp|0|1",
+   "gauntlet-ramp|1|0",
+   "gauntlet-ramp|1|1",
+   "hall-one|0|0",
+   "hall-one|0|1",
+   "hall-one|1|0",
+   "hall-one|1|1",
+   "key-nook|1|0",
+   "key-nook|1|1",
+   "key-walk|0|0",
+   "key-walk|0|1",
+   "key-walk|1|0",
+   "key-walk|1|1",
+   "low-run|0|0",
+   "low-run|0|1",
+   "low-run|1|0",
+   "low-run|1|1",
+   "sanctum|1|3",
+   "treasure-room|1|3",
+   "vault-approach|0|0",
+   "vault-approach|0|1",
+   "vault-approach|1|0",
+   "vault-approach|1|1"
+  ],
+  "chapter": {
+   "accepted": true,
+   "shortest": 18,
+   "gatesOnRoute": 2,
+   "exploredStates": 54
+  }
+ },
+ "overpass": {
+  "revision": "rev-ea6a62666db72ac1",
+  "report": {
+   "valid": true,
+   "invalidReasons": [],
+   "revisionId": "rev-ea6a62666db72ac1",
+   "complete": true,
+   "completionExplanation": "Exploration finished within the state bound.",
+   "exploredCount": 33,
+   "accepted": true,
+   "recoveryMap": {
+    "stranded": [],
+    "unreachable": []
+   },
+   "checks": {
+    "solution": {
+     "status": "pass",
+     "explanation": "Solution found.",
+     "witness": {
+      "kind": "solution",
+      "route": [
+       {
+        "action": "N",
+        "before": {
+         "moduleId": "south-gate",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "under-hall",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "source": "south-gate",
+        "destination": "under-hall",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          3400,
+          0,
+          4600
+         ],
+         [
+          3400,
+          0,
+          4400
+         ],
+         [
+          3400,
+          0,
+          4200
+         ]
+        ]
+       },
+       {
+        "action": "N",
+        "before": {
+         "moduleId": "under-hall",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "under-passage",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "source": "under-hall",
+        "destination": "under-passage",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          3400,
+          0,
+          4200
+         ],
+         [
+          3400,
+          0,
+          4000
+         ],
+         [
+          3400,
+          0,
+          3800
+         ]
+        ]
+       },
+       {
+        "action": "N",
+        "before": {
+         "moduleId": "under-passage",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "under-north",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "source": "under-passage",
+        "destination": "under-north",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          3400,
+          0,
+          3800
+         ],
+         [
+          3400,
+          0,
+          3600
+         ],
+         [
+          3400,
+          0,
+          3400
+         ]
+        ]
+       },
+       {
+        "action": "N",
+        "before": {
+         "moduleId": "under-north",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "key-deep",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "source": "under-north",
+        "destination": "key-deep",
+        "doorId": "lower-seal",
+        "events": {
+         "collectedKey": "pass-key"
+        },
+        "segments": [
+         [
+          3400,
+          0,
+          3400
+         ],
+         [
+          3400,
+          0,
+          3200
+         ],
+         [
+          3400,
+          0,
+          3000
+         ]
+        ]
+       },
+       {
+        "action": "S",
+        "before": {
+         "moduleId": "key-deep",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "under-north",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "source": "key-deep",
+        "destination": "under-north",
+        "doorId": "lower-seal",
+        "events": {},
+        "segments": [
+         [
+          3400,
+          0,
+          3000
+         ],
+         [
+          3400,
+          0,
+          3200
+         ],
+         [
+          3400,
+          0,
+          3400
+         ]
+        ]
+       },
+       {
+        "action": "E",
+        "before": {
+         "moduleId": "under-north",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "climb-ramp",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "source": "under-north",
+        "destination": "climb-ramp",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          3400,
+          0,
+          3400
+         ],
+         [
+          3600,
+          0,
+          3400
+         ],
+         [
+          3800,
+          150,
+          3400
+         ]
+        ]
+       },
+       {
+        "action": "E",
+        "before": {
+         "moduleId": "climb-ramp",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "east-loft",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "source": "climb-ramp",
+        "destination": "east-loft",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          3800,
+          150,
+          3400
+         ],
+         [
+          4000,
+          300,
+          3400
+         ],
+         [
+          4200,
+          300,
+          3400
+         ]
+        ]
+       },
+       {
+        "action": "S",
+        "before": {
+         "moduleId": "east-loft",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "bridge-a",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "source": "east-loft",
+        "destination": "bridge-a",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          4200,
+          300,
+          3400
+         ],
+         [
+          4200,
+          300,
+          3600
+         ],
+         [
+          4200,
+          300,
+          3800
+         ]
+        ]
+       },
+       {
+        "action": "W",
+        "before": {
+         "moduleId": "bridge-a",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "bridge-b",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "source": "bridge-a",
+        "destination": "bridge-b",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          4200,
+          300,
+          3800
+         ],
+         [
+          4000,
+          300,
+          3800
+         ],
+         [
+          3800,
+          300,
+          3800
+         ]
+        ]
+       },
+       {
+        "action": "W",
+        "before": {
+         "moduleId": "bridge-b",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "bridge-c",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "source": "bridge-b",
+        "destination": "bridge-c",
+        "doorId": "overpass-door",
+        "events": {},
+        "segments": [
+         [
+          3800,
+          300,
+          3800
+         ],
+         [
+          3600,
+          300,
+          3800
+         ],
+         [
+          3400,
+          300,
+          3800
+         ]
+        ]
+       },
+       {
+        "action": "W",
+        "before": {
+         "moduleId": "bridge-c",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "bridge-d",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "source": "bridge-c",
+        "destination": "bridge-d",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          3400,
+          300,
+          3800
+         ],
+         [
+          3200,
+          300,
+          3800
+         ],
+         [
+          3000,
+          300,
+          3800
+         ]
+        ]
+       },
+       {
+        "action": "W",
+        "before": {
+         "moduleId": "bridge-d",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "west-loft",
+         "keyMask": 1,
+         "switchMask": 1
+        },
+        "source": "bridge-d",
+        "destination": "west-loft",
+        "doorId": null,
+        "events": {
+         "activatedSwitch": "bridge-relay"
+        },
+        "segments": [
+         [
+          3000,
+          300,
+          3800
+         ],
+         [
+          2800,
+          300,
+          3800
+         ],
+         [
+          2600,
+          300,
+          3800
+         ]
+        ]
+       },
+       {
+        "action": "N",
+        "before": {
+         "moduleId": "west-loft",
+         "keyMask": 1,
+         "switchMask": 1
+        },
+        "after": {
+         "moduleId": "return-ramp",
+         "keyMask": 1,
+         "switchMask": 1
+        },
+        "source": "west-loft",
+        "destination": "return-ramp",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          2600,
+          300,
+          3800
+         ],
+         [
+          2600,
+          300,
+          3600
+         ],
+         [
+          2600,
+          150,
+          3400
+         ]
+        ]
+       },
+       {
+        "action": "N",
+        "before": {
+         "moduleId": "return-ramp",
+         "keyMask": 1,
+         "switchMask": 1
+        },
+        "after": {
+         "moduleId": "lower-west",
+         "keyMask": 1,
+         "switchMask": 1
+        },
+        "source": "return-ramp",
+        "destination": "lower-west",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          2600,
+          150,
+          3400
+         ],
+         [
+          2600,
+          0,
+          3200
+         ],
+         [
+          2600,
+          0,
+          3000
+         ]
+        ]
+       },
+       {
+        "action": "E",
+        "before": {
+         "moduleId": "lower-west",
+         "keyMask": 1,
+         "switchMask": 1
+        },
+        "after": {
+         "moduleId": "relay-vault",
+         "keyMask": 1,
+         "switchMask": 1
+        },
+        "source": "lower-west",
+        "destination": "relay-vault",
+        "doorId": "relay-exit",
+        "events": {
+         "reachedGoal": true
+        },
+        "segments": [
+         [
+          2600,
+          0,
+          3000
+         ],
+         [
+          2800,
+          0,
+          3000
+         ],
+         [
+          3000,
+          0,
+          3000
+         ]
+        ]
+       }
+      ],
+      "endState": {
+       "moduleId": "relay-vault",
+       "keyMask": 1,
+       "switchMask": 1
+      },
+      "missingKeys": null,
+      "requirement": null,
+      "violationText": null
+     }
+    },
+    "requirements": {
+     "status": "pass",
+     "explanation": "Every reachable winning state satisfies every rule.",
+     "witness": null
+    },
+    "recovery": {
+     "status": "pass",
+     "explanation": "Every reachable non-winning state can still reach the goal.",
+     "witness": null
+    }
+   }
+  },
+  "openingMoves": [
+   {
+    "action": "N",
+    "before": {
+     "moduleId": "south-gate",
+     "keyMask": 0,
+     "switchMask": 0
+    },
+    "after": {
+     "moduleId": "under-hall",
+     "keyMask": 0,
+     "switchMask": 0
+    },
+    "source": "south-gate",
+    "destination": "under-hall",
+    "doorId": null,
+    "events": {},
+    "segments": [
+     [
+      3400,
+      0,
+      4600
+     ],
+     [
+      3400,
+      0,
+      4400
+     ],
+     [
+      3400,
+      0,
+      4200
+     ]
+    ]
+   }
+  ],
+  "hint": {
+   "kind": "move",
+   "move": {
+    "action": "N",
+    "before": {
+     "moduleId": "south-gate",
+     "keyMask": 0,
+     "switchMask": 0
+    },
+    "after": {
+     "moduleId": "under-hall",
+     "keyMask": 0,
+     "switchMask": 0
+    },
+    "source": "south-gate",
+    "destination": "under-hall",
+    "doorId": null,
+    "events": {},
+    "segments": [
+     [
+      3400,
+      0,
+      4600
+     ],
+     [
+      3400,
+      0,
+      4400
+     ],
+     [
+      3400,
+      0,
+      4200
+     ]
+    ]
+   },
+   "movesToGoal": 15
+  },
+  "canWin": [
+   "bridge-a|0|0",
+   "bridge-a|1|0",
+   "bridge-a|1|1",
+   "bridge-b|0|0",
+   "bridge-b|1|0",
+   "bridge-b|1|1",
+   "bridge-c|1|0",
+   "bridge-c|1|1",
+   "bridge-d|1|0",
+   "bridge-d|1|1",
+   "climb-ramp|0|0",
+   "climb-ramp|1|0",
+   "climb-ramp|1|1",
+   "east-loft|0|0",
+   "east-loft|1|0",
+   "east-loft|1|1",
+   "key-deep|1|0",
+   "lower-west|1|1",
+   "relay-vault|1|1",
+   "return-ramp|1|1",
+   "south-gate|0|0",
+   "south-gate|1|0",
+   "south-gate|1|1",
+   "under-hall|0|0",
+   "under-hall|1|0",
+   "under-hall|1|1",
+   "under-north|0|0",
+   "under-north|1|0",
+   "under-north|1|1",
+   "under-passage|0|0",
+   "under-passage|1|0",
+   "under-passage|1|1",
+   "west-loft|1|1"
+  ],
+  "chapter": {
+   "accepted": true,
+   "shortest": 15,
+   "gatesOnRoute": 2,
+   "exploredStates": 33
+  }
+ },
+ "twinKeys": {
+  "revision": "rev-e603610324869529",
+  "report": {
+   "valid": true,
+   "invalidReasons": [],
+   "revisionId": "rev-e603610324869529",
+   "complete": true,
+   "completionExplanation": "Exploration finished within the state bound.",
+   "exploredCount": 39,
+   "accepted": true,
+   "recoveryMap": {
+    "stranded": [],
+    "unreachable": []
+   },
+   "checks": {
+    "solution": {
+     "status": "pass",
+     "explanation": "Solution found.",
+     "witness": {
+      "kind": "solution",
+      "route": [
+       {
+        "action": "N",
+        "before": {
+         "moduleId": "entrance",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "lower-hall",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "source": "entrance",
+        "destination": "lower-hall",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          2600,
+          0,
+          3400
+         ],
+         [
+          2600,
+          0,
+          3200
+         ],
+         [
+          2600,
+          0,
+          3000
+         ]
+        ]
+       },
+       {
+        "action": "N",
+        "before": {
+         "moduleId": "lower-hall",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "grand-stair",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "source": "lower-hall",
+        "destination": "grand-stair",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          2600,
+          0,
+          3000
+         ],
+         [
+          2600,
+          0,
+          2800
+         ],
+         [
+          2600,
+          150,
+          2600
+         ]
+        ]
+       },
+       {
+        "action": "N",
+        "before": {
+         "moduleId": "grand-stair",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "grand-gallery",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "source": "grand-stair",
+        "destination": "grand-gallery",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          2600,
+          150,
+          2600
+         ],
+         [
+          2600,
+          300,
+          2400
+         ],
+         [
+          2600,
+          300,
+          2200
+         ]
+        ]
+       },
+       {
+        "action": "W",
+        "before": {
+         "moduleId": "grand-gallery",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "west-walk",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "source": "grand-gallery",
+        "destination": "west-walk",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          2600,
+          300,
+          2200
+         ],
+         [
+          2400,
+          300,
+          2200
+         ],
+         [
+          2200,
+          300,
+          2200
+         ]
+        ]
+       },
+       {
+        "action": "W",
+        "before": {
+         "moduleId": "west-walk",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "west-balcony",
+         "keyMask": 2,
+         "switchMask": 0
+        },
+        "source": "west-walk",
+        "destination": "west-balcony",
+        "doorId": null,
+        "events": {
+         "collectedKey": "silver-key"
+        },
+        "segments": [
+         [
+          2200,
+          300,
+          2200
+         ],
+         [
+          2000,
+          300,
+          2200
+         ],
+         [
+          1800,
+          300,
+          2200
+         ]
+        ]
+       },
+       {
+        "action": "E",
+        "before": {
+         "moduleId": "west-balcony",
+         "keyMask": 2,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "west-walk",
+         "keyMask": 2,
+         "switchMask": 0
+        },
+        "source": "west-balcony",
+        "destination": "west-walk",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          1800,
+          300,
+          2200
+         ],
+         [
+          2000,
+          300,
+          2200
+         ],
+         [
+          2200,
+          300,
+          2200
+         ]
+        ]
+       },
+       {
+        "action": "E",
+        "before": {
+         "moduleId": "west-walk",
+         "keyMask": 2,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "grand-gallery",
+         "keyMask": 2,
+         "switchMask": 0
+        },
+        "source": "west-walk",
+        "destination": "grand-gallery",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          2200,
+          300,
+          2200
+         ],
+         [
+          2400,
+          300,
+          2200
+         ],
+         [
+          2600,
+          300,
+          2200
+         ]
+        ]
+       },
+       {
+        "action": "E",
+        "before": {
+         "moduleId": "grand-gallery",
+         "keyMask": 2,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "east-walk",
+         "keyMask": 2,
+         "switchMask": 0
+        },
+        "source": "grand-gallery",
+        "destination": "east-walk",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          2600,
+          300,
+          2200
+         ],
+         [
+          2800,
+          300,
+          2200
+         ],
+         [
+          3000,
+          300,
+          2200
+         ]
+        ]
+       },
+       {
+        "action": "E",
+        "before": {
+         "moduleId": "east-walk",
+         "keyMask": 2,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "east-balcony",
+         "keyMask": 3,
+         "switchMask": 0
+        },
+        "source": "east-walk",
+        "destination": "east-balcony",
+        "doorId": "gold-wing-door",
+        "events": {
+         "collectedKey": "gold-key"
+        },
+        "segments": [
+         [
+          3000,
+          300,
+          2200
+         ],
+         [
+          3200,
+          300,
+          2200
+         ],
+         [
+          3400,
+          300,
+          2200
+         ]
+        ]
+       },
+       {
+        "action": "N",
+        "before": {
+         "moduleId": "east-balcony",
+         "keyMask": 3,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "east-return",
+         "keyMask": 3,
+         "switchMask": 1
+        },
+        "source": "east-balcony",
+        "destination": "east-return",
+        "doorId": null,
+        "events": {
+         "activatedSwitch": "vault-power"
+        },
+        "segments": [
+         [
+          3400,
+          300,
+          2200
+         ],
+         [
+          3400,
+          300,
+          2000
+         ],
+         [
+          3400,
+          300,
+          1800
+         ]
+        ]
+       },
+       {
+        "action": "W",
+        "before": {
+         "moduleId": "east-return",
+         "keyMask": 3,
+         "switchMask": 1
+        },
+        "after": {
+         "moduleId": "north-return",
+         "keyMask": 3,
+         "switchMask": 1
+        },
+        "source": "east-return",
+        "destination": "north-return",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          3400,
+          300,
+          1800
+         ],
+         [
+          3200,
+          300,
+          1800
+         ],
+         [
+          3000,
+          300,
+          1800
+         ]
+        ]
+       },
+       {
+        "action": "W",
+        "before": {
+         "moduleId": "north-return",
+         "keyMask": 3,
+         "switchMask": 1
+        },
+        "after": {
+         "moduleId": "north-approach",
+         "keyMask": 3,
+         "switchMask": 1
+        },
+        "source": "north-return",
+        "destination": "north-approach",
+        "doorId": "return-door",
+        "events": {},
+        "segments": [
+         [
+          3000,
+          300,
+          1800
+         ],
+         [
+          2800,
+          300,
+          1800
+         ],
+         [
+          2600,
+          300,
+          1800
+         ]
+        ]
+       },
+       {
+        "action": "N",
+        "before": {
+         "moduleId": "north-approach",
+         "keyMask": 3,
+         "switchMask": 1
+        },
+        "after": {
+         "moduleId": "inner-sanctum",
+         "keyMask": 3,
+         "switchMask": 1
+        },
+        "source": "north-approach",
+        "destination": "inner-sanctum",
+        "doorId": "outer-vault-door",
+        "events": {},
+        "segments": [
+         [
+          2600,
+          300,
+          1800
+         ],
+         [
+          2600,
+          300,
+          1600
+         ],
+         [
+          2600,
+          300,
+          1400
+         ]
+        ]
+       },
+       {
+        "action": "N",
+        "before": {
+         "moduleId": "inner-sanctum",
+         "keyMask": 3,
+         "switchMask": 1
+        },
+        "after": {
+         "moduleId": "treasure-vault",
+         "keyMask": 3,
+         "switchMask": 1
+        },
+        "source": "inner-sanctum",
+        "destination": "treasure-vault",
+        "doorId": "inner-vault-door",
+        "events": {
+         "reachedGoal": true
+        },
+        "segments": [
+         [
+          2600,
+          300,
+          1400
+         ],
+         [
+          2600,
+          300,
+          1200
+         ],
+         [
+          2600,
+          300,
+          1000
+         ]
+        ]
+       }
+      ],
+      "endState": {
+       "moduleId": "treasure-vault",
+       "keyMask": 3,
+       "switchMask": 1
+      },
+      "missingKeys": null,
+      "requirement": null,
+      "violationText": null
+     }
+    },
+    "requirements": {
+     "status": "pass",
+     "explanation": "Every reachable winning state satisfies every rule.",
+     "witness": null
+    },
+    "recovery": {
+     "status": "pass",
+     "explanation": "Every reachable non-winning state can still reach the goal.",
+     "witness": null
+    }
+   }
+  },
+  "openingMoves": [
+   {
+    "action": "N",
+    "before": {
+     "moduleId": "entrance",
+     "keyMask": 0,
+     "switchMask": 0
+    },
+    "after": {
+     "moduleId": "lower-hall",
+     "keyMask": 0,
+     "switchMask": 0
+    },
+    "source": "entrance",
+    "destination": "lower-hall",
+    "doorId": null,
+    "events": {},
+    "segments": [
+     [
+      2600,
+      0,
+      3400
+     ],
+     [
+      2600,
+      0,
+      3200
+     ],
+     [
+      2600,
+      0,
+      3000
+     ]
+    ]
+   }
+  ],
+  "hint": {
+   "kind": "move",
+   "move": {
+    "action": "N",
+    "before": {
+     "moduleId": "entrance",
+     "keyMask": 0,
+     "switchMask": 0
+    },
+    "after": {
+     "moduleId": "lower-hall",
+     "keyMask": 0,
+     "switchMask": 0
+    },
+    "source": "entrance",
+    "destination": "lower-hall",
+    "doorId": null,
+    "events": {},
+    "segments": [
+     [
+      2600,
+      0,
+      3400
+     ],
+     [
+      2600,
+      0,
+      3200
+     ],
+     [
+      2600,
+      0,
+      3000
+     ]
+    ]
+   },
+   "movesToGoal": 14
+  },
+  "canWin": [
+   "east-balcony|3|0",
+   "east-balcony|3|1",
+   "east-return|3|1",
+   "east-walk|0|0",
+   "east-walk|2|0",
+   "east-walk|3|0",
+   "east-walk|3|1",
+   "entrance|0|0",
+   "entrance|2|0",
+   "entrance|3|0",
+   "entrance|3|1",
+   "grand-gallery|0|0",
+   "grand-gallery|2|0",
+   "grand-gallery|3|0",
+   "grand-gallery|3|1",
+   "grand-stair|0|0",
+   "grand-stair|2|0",
+   "grand-stair|3|0",
+   "grand-stair|3|1",
+   "inner-sanctum|3|0",
+   "inner-sanctum|3|1",
+   "lower-hall|0|0",
+   "lower-hall|2|0",
+   "lower-hall|3|0",
+   "lower-hall|3|1",
+   "north-approach|0|0",
+   "north-approach|2|0",
+   "north-approach|3|0",
+   "north-approach|3|1",
+   "north-return|3|0",
+   "north-return|3|1",
+   "treasure-vault|3|1",
+   "west-balcony|2|0",
+   "west-balcony|3|0",
+   "west-balcony|3|1",
+   "west-walk|0|0",
+   "west-walk|2|0",
+   "west-walk|3|0",
+   "west-walk|3|1"
+  ],
+  "chapter": {
+   "accepted": true,
+   "shortest": 14,
+   "gatesOnRoute": 4,
+   "exploredStates": 39
+  }
+ },
+ "trapRepaired": {
+  "revision": "rev-8a7b4311dbd5caeb",
+  "report": {
+   "valid": true,
+   "invalidReasons": [],
+   "revisionId": "rev-8a7b4311dbd5caeb",
+   "complete": true,
+   "completionExplanation": "Exploration finished within the state bound.",
+   "exploredCount": 19,
+   "accepted": true,
+   "recoveryMap": {
+    "stranded": [],
+    "unreachable": []
+   },
+   "checks": {
+    "solution": {
+     "status": "pass",
+     "explanation": "Solution found.",
+     "witness": {
+      "kind": "solution",
+      "route": [
+       {
+        "action": "N",
+        "before": {
+         "moduleId": "entrance",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "lower-hall",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "source": "entrance",
+        "destination": "lower-hall",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          600,
+          0,
+          2200
+         ],
+         [
+          600,
+          0,
+          2000
+         ],
+         [
+          600,
+          0,
+          1800
+         ]
+        ]
+       },
+       {
+        "action": "N",
+        "before": {
+         "moduleId": "lower-hall",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "gallery-ramp",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "source": "lower-hall",
+        "destination": "gallery-ramp",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          600,
+          0,
+          1800
+         ],
+         [
+          600,
+          0,
+          1600
+         ],
+         [
+          600,
+          150,
+          1400
+         ]
+        ]
+       },
+       {
+        "action": "N",
+        "before": {
+         "moduleId": "gallery-ramp",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "gallery",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "source": "gallery-ramp",
+        "destination": "gallery",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          600,
+          150,
+          1400
+         ],
+         [
+          600,
+          300,
+          1200
+         ],
+         [
+          600,
+          300,
+          1000
+         ]
+        ]
+       },
+       {
+        "action": "E",
+        "before": {
+         "moduleId": "gallery",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "key-walk",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "source": "gallery",
+        "destination": "key-walk",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          600,
+          300,
+          1000
+         ],
+         [
+          800,
+          300,
+          1000
+         ],
+         [
+          1000,
+          300,
+          1000
+         ]
+        ]
+       },
+       {
+        "action": "E",
+        "before": {
+         "moduleId": "key-walk",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "key-balcony",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "source": "key-walk",
+        "destination": "key-balcony",
+        "doorId": null,
+        "events": {
+         "collectedKey": "brass-key"
+        },
+        "segments": [
+         [
+          1000,
+          300,
+          1000
+         ],
+         [
+          1200,
+          300,
+          1000
+         ],
+         [
+          1400,
+          300,
+          1000
+         ]
+        ]
+       },
+       {
+        "action": "W",
+        "before": {
+         "moduleId": "key-balcony",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "key-walk",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "source": "key-balcony",
+        "destination": "key-walk",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          1400,
+          300,
+          1000
+         ],
+         [
+          1200,
+          300,
+          1000
+         ],
+         [
+          1000,
+          300,
+          1000
+         ]
+        ]
+       },
+       {
+        "action": "W",
+        "before": {
+         "moduleId": "key-walk",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "gallery",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "source": "key-walk",
+        "destination": "gallery",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          1000,
+          300,
+          1000
+         ],
+         [
+          800,
+          300,
+          1000
+         ],
+         [
+          600,
+          300,
+          1000
+         ]
+        ]
+       },
+       {
+        "action": "N",
+        "before": {
+         "moduleId": "gallery",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "bridge-landing",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "source": "gallery",
+        "destination": "bridge-landing",
+        "doorId": "gallery-door",
+        "events": {},
+        "segments": [
+         [
+          600,
+          300,
+          1000
+         ],
+         [
+          600,
+          300,
+          800
+         ],
+         [
+          600,
+          300,
+          600
+         ]
+        ]
+       },
+       {
+        "action": "E",
+        "before": {
+         "moduleId": "bridge-landing",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "vault-approach",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "source": "bridge-landing",
+        "destination": "vault-approach",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          600,
+          300,
+          600
+         ],
+         [
+          800,
+          300,
+          600
+         ],
+         [
+          1000,
+          300,
+          600
+         ]
+        ]
+       },
+       {
+        "action": "E",
+        "before": {
+         "moduleId": "vault-approach",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "vault-entry",
+         "keyMask": 1,
+         "switchMask": 1
+        },
+        "source": "vault-approach",
+        "destination": "vault-entry",
+        "doorId": "vault-door",
+        "events": {
+         "activatedSwitch": "seal-switch"
+        },
+        "segments": [
+         [
+          1000,
+          300,
+          600
+         ],
+         [
+          1200,
+          300,
+          600
+         ],
+         [
+          1400,
+          300,
+          600
+         ]
+        ]
+       },
+       {
+        "action": "E",
+        "before": {
+         "moduleId": "vault-entry",
+         "keyMask": 1,
+         "switchMask": 1
+        },
+        "after": {
+         "moduleId": "treasure-landing",
+         "keyMask": 1,
+         "switchMask": 1
+        },
+        "source": "vault-entry",
+        "destination": "treasure-landing",
+        "doorId": null,
+        "events": {
+         "reachedGoal": true
+        },
+        "segments": [
+         [
+          1400,
+          300,
+          600
+         ],
+         [
+          1600,
+          300,
+          600
+         ],
+         [
+          1800,
+          300,
+          600
+         ]
+        ]
+       }
+      ],
+      "endState": {
+       "moduleId": "treasure-landing",
+       "keyMask": 1,
+       "switchMask": 1
+      },
+      "missingKeys": null,
+      "requirement": null,
+      "violationText": null
+     }
+    },
+    "requirements": {
+     "status": "pass",
+     "explanation": "Every reachable winning state satisfies every rule.",
+     "witness": null
+    },
+    "recovery": {
+     "status": "pass",
+     "explanation": "Every reachable non-winning state can still reach the goal.",
+     "witness": null
+    }
+   }
+  },
+  "openingMoves": [
+   {
+    "action": "N",
+    "before": {
+     "moduleId": "entrance",
+     "keyMask": 0,
+     "switchMask": 0
+    },
+    "after": {
+     "moduleId": "lower-hall",
+     "keyMask": 0,
+     "switchMask": 0
+    },
+    "source": "entrance",
+    "destination": "lower-hall",
+    "doorId": null,
+    "events": {},
+    "segments": [
+     [
+      600,
+      0,
+      2200
+     ],
+     [
+      600,
+      0,
+      2000
+     ],
+     [
+      600,
+      0,
+      1800
+     ]
+    ]
+   }
+  ],
+  "hint": {
+   "kind": "move",
+   "move": {
+    "action": "N",
+    "before": {
+     "moduleId": "entrance",
+     "keyMask": 0,
+     "switchMask": 0
+    },
+    "after": {
+     "moduleId": "lower-hall",
+     "keyMask": 0,
+     "switchMask": 0
+    },
+    "source": "entrance",
+    "destination": "lower-hall",
+    "doorId": null,
+    "events": {},
+    "segments": [
+     [
+      600,
+      0,
+      2200
+     ],
+     [
+      600,
+      0,
+      2000
+     ],
+     [
+      600,
+      0,
+      1800
+     ]
+    ]
+   },
+   "movesToGoal": 11
+  },
+  "canWin": [
+   "bridge-landing|0|0",
+   "bridge-landing|1|0",
+   "bridge-landing|1|1",
+   "entrance|0|0",
+   "entrance|1|0",
+   "gallery-ramp|0|0",
+   "gallery-ramp|1|0",
+   "gallery|0|0",
+   "gallery|1|0",
+   "key-balcony|1|0",
+   "key-walk|0|0",
+   "key-walk|1|0",
+   "lower-hall|0|0",
+   "lower-hall|1|0",
+   "treasure-landing|1|1",
+   "vault-approach|0|0",
+   "vault-approach|1|0",
+   "vault-approach|1|1",
+   "vault-entry|1|1"
+  ],
+  "chapter": {
+   "accepted": true,
+   "shortest": 11,
+   "gatesOnRoute": 1,
+   "exploredStates": 19
+  }
+ },
+ "trap": {
+  "revision": "rev-1739f1ddbfd4d13d",
+  "report": {
+   "valid": true,
+   "invalidReasons": [],
+   "revisionId": "rev-1739f1ddbfd4d13d",
+   "complete": true,
+   "completionExplanation": "Exploration finished within the state bound.",
+   "exploredCount": 19,
+   "accepted": false,
+   "recoveryMap": {
+    "stranded": [
+     "bridge-landing",
+     "vault-approach"
+    ],
+    "unreachable": []
+   },
+   "checks": {
+    "solution": {
+     "status": "pass",
+     "explanation": "Solution found.",
+     "witness": {
+      "kind": "solution",
+      "route": [
+       {
+        "action": "N",
+        "before": {
+         "moduleId": "entrance",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "lower-hall",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "source": "entrance",
+        "destination": "lower-hall",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          600,
+          0,
+          2200
+         ],
+         [
+          600,
+          0,
+          2000
+         ],
+         [
+          600,
+          0,
+          1800
+         ]
+        ]
+       },
+       {
+        "action": "N",
+        "before": {
+         "moduleId": "lower-hall",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "gallery-ramp",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "source": "lower-hall",
+        "destination": "gallery-ramp",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          600,
+          0,
+          1800
+         ],
+         [
+          600,
+          0,
+          1600
+         ],
+         [
+          600,
+          150,
+          1400
+         ]
+        ]
+       },
+       {
+        "action": "N",
+        "before": {
+         "moduleId": "gallery-ramp",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "gallery",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "source": "gallery-ramp",
+        "destination": "gallery",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          600,
+          150,
+          1400
+         ],
+         [
+          600,
+          300,
+          1200
+         ],
+         [
+          600,
+          300,
+          1000
+         ]
+        ]
+       },
+       {
+        "action": "E",
+        "before": {
+         "moduleId": "gallery",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "key-walk",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "source": "gallery",
+        "destination": "key-walk",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          600,
+          300,
+          1000
+         ],
+         [
+          800,
+          300,
+          1000
+         ],
+         [
+          1000,
+          300,
+          1000
+         ]
+        ]
+       },
+       {
+        "action": "E",
+        "before": {
+         "moduleId": "key-walk",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "key-balcony",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "source": "key-walk",
+        "destination": "key-balcony",
+        "doorId": null,
+        "events": {
+         "collectedKey": "brass-key"
+        },
+        "segments": [
+         [
+          1000,
+          300,
+          1000
+         ],
+         [
+          1200,
+          300,
+          1000
+         ],
+         [
+          1400,
+          300,
+          1000
+         ]
+        ]
+       },
+       {
+        "action": "W",
+        "before": {
+         "moduleId": "key-balcony",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "key-walk",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "source": "key-balcony",
+        "destination": "key-walk",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          1400,
+          300,
+          1000
+         ],
+         [
+          1200,
+          300,
+          1000
+         ],
+         [
+          1000,
+          300,
+          1000
+         ]
+        ]
+       },
+       {
+        "action": "W",
+        "before": {
+         "moduleId": "key-walk",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "gallery",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "source": "key-walk",
+        "destination": "gallery",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          1000,
+          300,
+          1000
+         ],
+         [
+          800,
+          300,
+          1000
+         ],
+         [
+          600,
+          300,
+          1000
+         ]
+        ]
+       },
+       {
+        "action": "N",
+        "before": {
+         "moduleId": "gallery",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "bridge-landing",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "source": "gallery",
+        "destination": "bridge-landing",
+        "doorId": "gallery-door",
+        "events": {},
+        "segments": [
+         [
+          600,
+          300,
+          1000
+         ],
+         [
+          600,
+          300,
+          800
+         ],
+         [
+          600,
+          300,
+          600
+         ]
+        ]
+       },
+       {
+        "action": "E",
+        "before": {
+         "moduleId": "bridge-landing",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "vault-approach",
+         "keyMask": 1,
+         "switchMask": 1
+        },
+        "source": "bridge-landing",
+        "destination": "vault-approach",
+        "doorId": null,
+        "events": {
+         "activatedSwitch": "seal-switch"
+        },
+        "segments": [
+         [
+          600,
+          300,
+          600
+         ],
+         [
+          800,
+          300,
+          600
+         ],
+         [
+          1000,
+          300,
+          600
+         ]
+        ]
+       },
+       {
+        "action": "E",
+        "before": {
+         "moduleId": "vault-approach",
+         "keyMask": 1,
+         "switchMask": 1
+        },
+        "after": {
+         "moduleId": "vault-entry",
+         "keyMask": 1,
+         "switchMask": 1
+        },
+        "source": "vault-approach",
+        "destination": "vault-entry",
+        "doorId": "vault-door",
+        "events": {},
+        "segments": [
+         [
+          1000,
+          300,
+          600
+         ],
+         [
+          1200,
+          300,
+          600
+         ],
+         [
+          1400,
+          300,
+          600
+         ]
+        ]
+       },
+       {
+        "action": "E",
+        "before": {
+         "moduleId": "vault-entry",
+         "keyMask": 1,
+         "switchMask": 1
+        },
+        "after": {
+         "moduleId": "treasure-landing",
+         "keyMask": 1,
+         "switchMask": 1
+        },
+        "source": "vault-entry",
+        "destination": "treasure-landing",
+        "doorId": null,
+        "events": {
+         "reachedGoal": true
+        },
+        "segments": [
+         [
+          1400,
+          300,
+          600
+         ],
+         [
+          1600,
+          300,
+          600
+         ],
+         [
+          1800,
+          300,
+          600
+         ]
+        ]
+       }
+      ],
+      "endState": {
+       "moduleId": "treasure-landing",
+       "keyMask": 1,
+       "switchMask": 1
+      },
+      "missingKeys": null,
+      "requirement": null,
+      "violationText": null
+     }
+    },
+    "requirements": {
+     "status": "pass",
+     "explanation": "Every reachable winning state satisfies every rule.",
+     "witness": null
+    },
+    "recovery": {
+     "status": "fail",
+     "explanation": "A player can be stranded at “vault-approach” holding no keys, with the seal-switch active — no winning route remains.",
+     "witness": {
+      "kind": "dead_end",
+      "route": [
+       {
+        "action": "N",
+        "before": {
+         "moduleId": "entrance",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "lower-hall",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "source": "entrance",
+        "destination": "lower-hall",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          600,
+          0,
+          2200
+         ],
+         [
+          600,
+          0,
+          2000
+         ],
+         [
+          600,
+          0,
+          1800
+         ]
+        ]
+       },
+       {
+        "action": "N",
+        "before": {
+         "moduleId": "lower-hall",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "gallery-ramp",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "source": "lower-hall",
+        "destination": "gallery-ramp",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          600,
+          0,
+          1800
+         ],
+         [
+          600,
+          0,
+          1600
+         ],
+         [
+          600,
+          150,
+          1400
+         ]
+        ]
+       },
+       {
+        "action": "N",
+        "before": {
+         "moduleId": "gallery-ramp",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "gallery",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "source": "gallery-ramp",
+        "destination": "gallery",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          600,
+          150,
+          1400
+         ],
+         [
+          600,
+          300,
+          1200
+         ],
+         [
+          600,
+          300,
+          1000
+         ]
+        ]
+       },
+       {
+        "action": "N",
+        "before": {
+         "moduleId": "gallery",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "bridge-landing",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "source": "gallery",
+        "destination": "bridge-landing",
+        "doorId": "gallery-door",
+        "events": {},
+        "segments": [
+         [
+          600,
+          300,
+          1000
+         ],
+         [
+          600,
+          300,
+          800
+         ],
+         [
+          600,
+          300,
+          600
+         ]
+        ]
+       },
+       {
+        "action": "E",
+        "before": {
+         "moduleId": "bridge-landing",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "vault-approach",
+         "keyMask": 0,
+         "switchMask": 1
+        },
+        "source": "bridge-landing",
+        "destination": "vault-approach",
+        "doorId": null,
+        "events": {
+         "activatedSwitch": "seal-switch"
+        },
+        "segments": [
+         [
+          600,
+          300,
+          600
+         ],
+         [
+          800,
+          300,
+          600
+         ],
+         [
+          1000,
+          300,
+          600
+         ]
+        ]
+       }
+      ],
+      "endState": {
+       "moduleId": "vault-approach",
+       "keyMask": 0,
+       "switchMask": 1
+      },
+      "missingKeys": null,
+      "requirement": null,
+      "violationText": null
+     }
+    }
+   }
+  },
+  "openingMoves": [
+   {
+    "action": "N",
+    "before": {
+     "moduleId": "entrance",
+     "keyMask": 0,
+     "switchMask": 0
+    },
+    "after": {
+     "moduleId": "lower-hall",
+     "keyMask": 0,
+     "switchMask": 0
+    },
+    "source": "entrance",
+    "destination": "lower-hall",
+    "doorId": null,
+    "events": {},
+    "segments": [
+     [
+      600,
+      0,
+      2200
+     ],
+     [
+      600,
+      0,
+      2000
+     ],
+     [
+      600,
+      0,
+      1800
+     ]
+    ]
+   }
+  ],
+  "hint": {
+   "kind": "move",
+   "move": {
+    "action": "N",
+    "before": {
+     "moduleId": "entrance",
+     "keyMask": 0,
+     "switchMask": 0
+    },
+    "after": {
+     "moduleId": "lower-hall",
+     "keyMask": 0,
+     "switchMask": 0
+    },
+    "source": "entrance",
+    "destination": "lower-hall",
+    "doorId": null,
+    "events": {},
+    "segments": [
+     [
+      600,
+      0,
+      2200
+     ],
+     [
+      600,
+      0,
+      2000
+     ],
+     [
+      600,
+      0,
+      1800
+     ]
+    ]
+   },
+   "movesToGoal": 11
+  },
+  "canWin": [
+   "bridge-landing|0|0",
+   "bridge-landing|1|0",
+   "bridge-landing|1|1",
+   "entrance|0|0",
+   "entrance|1|0",
+   "gallery-ramp|0|0",
+   "gallery-ramp|1|0",
+   "gallery|0|0",
+   "gallery|1|0",
+   "key-balcony|1|0",
+   "key-walk|0|0",
+   "key-walk|1|0",
+   "lower-hall|0|0",
+   "lower-hall|1|0",
+   "treasure-landing|1|1",
+   "vault-approach|1|1",
+   "vault-entry|1|1"
+  ],
+  "chapter": {
+   "accepted": false,
+   "shortest": 11,
+   "gatesOnRoute": 1,
+   "exploredStates": 19
+  }
+ },
+ "unfamiliar": {
+  "revision": "rev-d138ce68f31cde20",
+  "report": {
+   "valid": true,
+   "invalidReasons": [],
+   "revisionId": "rev-d138ce68f31cde20",
+   "complete": true,
+   "completionExplanation": "Exploration finished within the state bound.",
+   "exploredCount": 13,
+   "accepted": true,
+   "recoveryMap": {
+    "stranded": [],
+    "unreachable": []
+   },
+   "checks": {
+    "solution": {
+     "status": "pass",
+     "explanation": "Solution found.",
+     "witness": {
+      "kind": "solution",
+      "route": [
+       {
+        "action": "N",
+        "before": {
+         "moduleId": "great-hall",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "corridor",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "source": "great-hall",
+        "destination": "corridor",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          1000,
+          0,
+          2200
+         ],
+         [
+          1000,
+          0,
+          2000
+         ],
+         [
+          1000,
+          0,
+          1800
+         ]
+        ]
+       },
+       {
+        "action": "W",
+        "before": {
+         "moduleId": "corridor",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "side-crypt",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "source": "corridor",
+        "destination": "side-crypt",
+        "doorId": null,
+        "events": {
+         "collectedKey": "iron-key"
+        },
+        "segments": [
+         [
+          1000,
+          0,
+          1800
+         ],
+         [
+          800,
+          0,
+          1800
+         ],
+         [
+          600,
+          0,
+          1800
+         ]
+        ]
+       },
+       {
+        "action": "E",
+        "before": {
+         "moduleId": "side-crypt",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "corridor",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "source": "side-crypt",
+        "destination": "corridor",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          600,
+          0,
+          1800
+         ],
+         [
+          800,
+          0,
+          1800
+         ],
+         [
+          1000,
+          0,
+          1800
+         ]
+        ]
+       },
+       {
+        "action": "N",
+        "before": {
+         "moduleId": "corridor",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "spiral-stair",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "source": "corridor",
+        "destination": "spiral-stair",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          1000,
+          0,
+          1800
+         ],
+         [
+          1000,
+          0,
+          1600
+         ],
+         [
+          1000,
+          150,
+          1400
+         ]
+        ]
+       },
+       {
+        "action": "N",
+        "before": {
+         "moduleId": "spiral-stair",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "watch-gallery",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "source": "spiral-stair",
+        "destination": "watch-gallery",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          1000,
+          150,
+          1400
+         ],
+         [
+          1000,
+          300,
+          1200
+         ],
+         [
+          1000,
+          300,
+          1000
+         ]
+        ]
+       },
+       {
+        "action": "E",
+        "before": {
+         "moduleId": "watch-gallery",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "strong-approach",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "source": "watch-gallery",
+        "destination": "strong-approach",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          1000,
+          300,
+          1000
+         ],
+         [
+          1200,
+          300,
+          1000
+         ],
+         [
+          1400,
+          300,
+          1000
+         ]
+        ]
+       },
+       {
+        "action": "E",
+        "before": {
+         "moduleId": "strong-approach",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "strong-entry",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "source": "strong-approach",
+        "destination": "strong-entry",
+        "doorId": "strong-door",
+        "events": {},
+        "segments": [
+         [
+          1400,
+          300,
+          1000
+         ],
+         [
+          1600,
+          300,
+          1000
+         ],
+         [
+          1800,
+          300,
+          1000
+         ]
+        ]
+       },
+       {
+        "action": "E",
+        "before": {
+         "moduleId": "strong-entry",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "prize-chamber",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "source": "strong-entry",
+        "destination": "prize-chamber",
+        "doorId": null,
+        "events": {
+         "reachedGoal": true
+        },
+        "segments": [
+         [
+          1800,
+          300,
+          1000
+         ],
+         [
+          2000,
+          300,
+          1000
+         ],
+         [
+          2200,
+          300,
+          1000
+         ]
+        ]
+       }
+      ],
+      "endState": {
+       "moduleId": "prize-chamber",
+       "keyMask": 1,
+       "switchMask": 0
+      },
+      "missingKeys": null,
+      "requirement": null,
+      "violationText": null
+     }
+    },
+    "requirements": {
+     "status": "pass",
+     "explanation": "Every reachable winning state satisfies every rule.",
+     "witness": null
+    },
+    "recovery": {
+     "status": "pass",
+     "explanation": "Every reachable non-winning state can still reach the goal.",
+     "witness": null
+    }
+   }
+  },
+  "openingMoves": [
+   {
+    "action": "N",
+    "before": {
+     "moduleId": "great-hall",
+     "keyMask": 0,
+     "switchMask": 0
+    },
+    "after": {
+     "moduleId": "corridor",
+     "keyMask": 0,
+     "switchMask": 0
+    },
+    "source": "great-hall",
+    "destination": "corridor",
+    "doorId": null,
+    "events": {},
+    "segments": [
+     [
+      1000,
+      0,
+      2200
+     ],
+     [
+      1000,
+      0,
+      2000
+     ],
+     [
+      1000,
+      0,
+      1800
+     ]
+    ]
+   }
+  ],
+  "hint": {
+   "kind": "move",
+   "move": {
+    "action": "N",
+    "before": {
+     "moduleId": "great-hall",
+     "keyMask": 0,
+     "switchMask": 0
+    },
+    "after": {
+     "moduleId": "corridor",
+     "keyMask": 0,
+     "switchMask": 0
+    },
+    "source": "great-hall",
+    "destination": "corridor",
+    "doorId": null,
+    "events": {},
+    "segments": [
+     [
+      1000,
+      0,
+      2200
+     ],
+     [
+      1000,
+      0,
+      2000
+     ],
+     [
+      1000,
+      0,
+      1800
+     ]
+    ]
+   },
+   "movesToGoal": 8
+  },
+  "canWin": [
+   "corridor|0|0",
+   "corridor|1|0",
+   "great-hall|0|0",
+   "great-hall|1|0",
+   "prize-chamber|1|0",
+   "side-crypt|1|0",
+   "spiral-stair|0|0",
+   "spiral-stair|1|0",
+   "strong-approach|0|0",
+   "strong-approach|1|0",
+   "strong-entry|1|0",
+   "watch-gallery|0|0",
+   "watch-gallery|1|0"
+  ],
+  "chapter": {
+   "accepted": true,
+   "shortest": 8,
+   "gatesOnRoute": 1,
+   "exploredStates": 13
+  }
+ },
+ "vaultEmpty": {
+  "revision": "rev-23eafd9af0f04554",
+  "report": {
+   "valid": true,
+   "invalidReasons": [],
+   "revisionId": "rev-23eafd9af0f04554",
+   "complete": true,
+   "completionExplanation": "Exploration finished within the state bound.",
+   "exploredCount": 10,
+   "accepted": true,
+   "recoveryMap": {
+    "stranded": [],
+    "unreachable": []
+   },
+   "checks": {
+    "solution": {
+     "status": "pass",
+     "explanation": "Solution found.",
+     "witness": {
+      "kind": "solution",
+      "route": [
+       {
+        "action": "N",
+        "before": {
+         "moduleId": "entrance",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "lower-hall",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "source": "entrance",
+        "destination": "lower-hall",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          600,
+          0,
+          2200
+         ],
+         [
+          600,
+          0,
+          2000
+         ],
+         [
+          600,
+          0,
+          1800
+         ]
+        ]
+       },
+       {
+        "action": "N",
+        "before": {
+         "moduleId": "lower-hall",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "gallery-ramp",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "source": "lower-hall",
+        "destination": "gallery-ramp",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          600,
+          0,
+          1800
+         ],
+         [
+          600,
+          0,
+          1600
+         ],
+         [
+          600,
+          150,
+          1400
+         ]
+        ]
+       },
+       {
+        "action": "N",
+        "before": {
+         "moduleId": "gallery-ramp",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "gallery",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "source": "gallery-ramp",
+        "destination": "gallery",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          600,
+          150,
+          1400
+         ],
+         [
+          600,
+          300,
+          1200
+         ],
+         [
+          600,
+          300,
+          1000
+         ]
+        ]
+       },
+       {
+        "action": "N",
+        "before": {
+         "moduleId": "gallery",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "bridge-landing",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "source": "gallery",
+        "destination": "bridge-landing",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          600,
+          300,
+          1000
+         ],
+         [
+          600,
+          300,
+          800
+         ],
+         [
+          600,
+          300,
+          600
+         ]
+        ]
+       },
+       {
+        "action": "E",
+        "before": {
+         "moduleId": "bridge-landing",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "vault-approach",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "source": "bridge-landing",
+        "destination": "vault-approach",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          600,
+          300,
+          600
+         ],
+         [
+          800,
+          300,
+          600
+         ],
+         [
+          1000,
+          300,
+          600
+         ]
+        ]
+       },
+       {
+        "action": "E",
+        "before": {
+         "moduleId": "vault-approach",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "vault-entry",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "source": "vault-approach",
+        "destination": "vault-entry",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          1000,
+          300,
+          600
+         ],
+         [
+          1200,
+          300,
+          600
+         ],
+         [
+          1400,
+          300,
+          600
+         ]
+        ]
+       },
+       {
+        "action": "E",
+        "before": {
+         "moduleId": "vault-entry",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "treasure-landing",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "source": "vault-entry",
+        "destination": "treasure-landing",
+        "doorId": null,
+        "events": {
+         "reachedGoal": true
+        },
+        "segments": [
+         [
+          1400,
+          300,
+          600
+         ],
+         [
+          1600,
+          300,
+          600
+         ],
+         [
+          1800,
+          300,
+          600
+         ]
+        ]
+       }
+      ],
+      "endState": {
+       "moduleId": "treasure-landing",
+       "keyMask": 0,
+       "switchMask": 0
+      },
+      "missingKeys": null,
+      "requirement": null,
+      "violationText": null
+     }
+    },
+    "requirements": {
+     "status": "not_applicable",
+     "explanation": "No rules set.",
+     "witness": null
+    },
+    "recovery": {
+     "status": "pass",
+     "explanation": "Every reachable non-winning state can still reach the goal.",
+     "witness": null
+    }
+   }
+  },
+  "openingMoves": [
+   {
+    "action": "N",
+    "before": {
+     "moduleId": "entrance",
+     "keyMask": 0,
+     "switchMask": 0
+    },
+    "after": {
+     "moduleId": "lower-hall",
+     "keyMask": 0,
+     "switchMask": 0
+    },
+    "source": "entrance",
+    "destination": "lower-hall",
+    "doorId": null,
+    "events": {},
+    "segments": [
+     [
+      600,
+      0,
+      2200
+     ],
+     [
+      600,
+      0,
+      2000
+     ],
+     [
+      600,
+      0,
+      1800
+     ]
+    ]
+   }
+  ],
+  "hint": {
+   "kind": "move",
+   "move": {
+    "action": "N",
+    "before": {
+     "moduleId": "entrance",
+     "keyMask": 0,
+     "switchMask": 0
+    },
+    "after": {
+     "moduleId": "lower-hall",
+     "keyMask": 0,
+     "switchMask": 0
+    },
+    "source": "entrance",
+    "destination": "lower-hall",
+    "doorId": null,
+    "events": {},
+    "segments": [
+     [
+      600,
+      0,
+      2200
+     ],
+     [
+      600,
+      0,
+      2000
+     ],
+     [
+      600,
+      0,
+      1800
+     ]
+    ]
+   },
+   "movesToGoal": 7
+  },
+  "canWin": [
+   "bridge-landing|0|0",
+   "entrance|0|0",
+   "gallery-ramp|0|0",
+   "gallery|0|0",
+   "key-balcony|0|0",
+   "key-walk|0|0",
+   "lower-hall|0|0",
+   "treasure-landing|0|0",
+   "vault-approach|0|0",
+   "vault-entry|0|0"
+  ],
+  "chapter": {
+   "accepted": true,
+   "shortest": 7,
+   "gatesOnRoute": 0,
+   "exploredStates": 10
+  }
+ },
+ "baselinePassThrough": {
+  "revision": "rev-30a42149578f83c9",
+  "report": {
+   "valid": true,
+   "invalidReasons": [],
+   "revisionId": "rev-30a42149578f83c9",
+   "complete": true,
+   "completionExplanation": "Exploration finished within the state bound.",
+   "exploredCount": 17,
+   "accepted": true,
+   "recoveryMap": {
+    "stranded": [],
+    "unreachable": []
+   },
+   "checks": {
+    "solution": {
+     "status": "pass",
+     "explanation": "Solution found.",
+     "witness": {
+      "kind": "solution",
+      "route": [
+       {
+        "action": "N",
+        "before": {
+         "moduleId": "entrance",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "lower-hall",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "source": "entrance",
+        "destination": "lower-hall",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          600,
+          0,
+          2200
+         ],
+         [
+          600,
+          0,
+          2000
+         ],
+         [
+          600,
+          0,
+          1800
+         ]
+        ]
+       },
+       {
+        "action": "N",
+        "before": {
+         "moduleId": "lower-hall",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "gallery-ramp",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "source": "lower-hall",
+        "destination": "gallery-ramp",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          600,
+          0,
+          1800
+         ],
+         [
+          600,
+          0,
+          1600
+         ],
+         [
+          600,
+          150,
+          1400
+         ]
+        ]
+       },
+       {
+        "action": "N",
+        "before": {
+         "moduleId": "gallery-ramp",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "gallery",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "source": "gallery-ramp",
+        "destination": "gallery",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          600,
+          150,
+          1400
+         ],
+         [
+          600,
+          300,
+          1200
+         ],
+         [
+          600,
+          300,
+          1000
+         ]
+        ]
+       },
+       {
+        "action": "E",
+        "before": {
+         "moduleId": "gallery",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "key-walk",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "source": "gallery",
+        "destination": "key-walk",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          600,
+          300,
+          1000
+         ],
+         [
+          800,
+          300,
+          1000
+         ],
+         [
+          1000,
+          300,
+          1000
+         ]
+        ]
+       },
+       {
+        "action": "E",
+        "before": {
+         "moduleId": "key-walk",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "key-balcony",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "source": "key-walk",
+        "destination": "key-balcony",
+        "doorId": null,
+        "events": {
+         "collectedKey": "brass-key"
+        },
+        "segments": [
+         [
+          1000,
+          300,
+          1000
+         ],
+         [
+          1200,
+          300,
+          1000
+         ],
+         [
+          1400,
+          300,
+          1000
+         ]
+        ]
+       },
+       {
+        "action": "W",
+        "before": {
+         "moduleId": "key-balcony",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "key-walk",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "source": "key-balcony",
+        "destination": "key-walk",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          1400,
+          300,
+          1000
+         ],
+         [
+          1200,
+          300,
+          1000
+         ],
+         [
+          1000,
+          300,
+          1000
+         ]
+        ]
+       },
+       {
+        "action": "W",
+        "before": {
+         "moduleId": "key-walk",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "gallery",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "source": "key-walk",
+        "destination": "gallery",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          1000,
+          300,
+          1000
+         ],
+         [
+          800,
+          300,
+          1000
+         ],
+         [
+          600,
+          300,
+          1000
+         ]
+        ]
+       },
+       {
+        "action": "N",
+        "before": {
+         "moduleId": "gallery",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "bridge-landing",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "source": "gallery",
+        "destination": "bridge-landing",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          600,
+          300,
+          1000
+         ],
+         [
+          600,
+          300,
+          800
+         ],
+         [
+          600,
+          300,
+          600
+         ]
+        ]
+       },
+       {
+        "action": "E",
+        "before": {
+         "moduleId": "bridge-landing",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "vault-approach",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "source": "bridge-landing",
+        "destination": "vault-approach",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          600,
+          300,
+          600
+         ],
+         [
+          800,
+          300,
+          600
+         ],
+         [
+          1000,
+          300,
+          600
+         ]
+        ]
+       },
+       {
+        "action": "E",
+        "before": {
+         "moduleId": "vault-approach",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "vault-entry",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "source": "vault-approach",
+        "destination": "vault-entry",
+        "doorId": "vault-door",
+        "events": {},
+        "segments": [
+         [
+          1000,
+          300,
+          600
+         ],
+         [
+          1200,
+          300,
+          600
+         ],
+         [
+          1400,
+          300,
+          600
+         ]
+        ]
+       },
+       {
+        "action": "E",
+        "before": {
+         "moduleId": "vault-entry",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "treasure-landing",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "source": "vault-entry",
+        "destination": "treasure-landing",
+        "doorId": null,
+        "events": {
+         "reachedGoal": true
+        },
+        "segments": [
+         [
+          1400,
+          300,
+          600
+         ],
+         [
+          1600,
+          300,
+          600
+         ],
+         [
+          1800,
+          300,
+          600
+         ]
+        ]
+       }
+      ],
+      "endState": {
+       "moduleId": "treasure-landing",
+       "keyMask": 1,
+       "switchMask": 0
+      },
+      "missingKeys": null,
+      "requirement": null,
+      "violationText": null
+     }
+    },
+    "requirements": {
+     "status": "pass",
+     "explanation": "Every reachable winning state satisfies every rule.",
+     "witness": null
+    },
+    "recovery": {
+     "status": "pass",
+     "explanation": "Every reachable non-winning state can still reach the goal.",
+     "witness": null
+    }
+   }
+  },
+  "openingMoves": [
+   {
+    "action": "N",
+    "before": {
+     "moduleId": "entrance",
+     "keyMask": 0,
+     "switchMask": 0
+    },
+    "after": {
+     "moduleId": "lower-hall",
+     "keyMask": 0,
+     "switchMask": 0
+    },
+    "source": "entrance",
+    "destination": "lower-hall",
+    "doorId": null,
+    "events": {},
+    "segments": [
+     [
+      600,
+      0,
+      2200
+     ],
+     [
+      600,
+      0,
+      2000
+     ],
+     [
+      600,
+      0,
+      1800
+     ]
+    ]
+   }
+  ],
+  "hint": {
+   "kind": "move",
+   "move": {
+    "action": "N",
+    "before": {
+     "moduleId": "entrance",
+     "keyMask": 0,
+     "switchMask": 0
+    },
+    "after": {
+     "moduleId": "lower-hall",
+     "keyMask": 0,
+     "switchMask": 0
+    },
+    "source": "entrance",
+    "destination": "lower-hall",
+    "doorId": null,
+    "events": {},
+    "segments": [
+     [
+      600,
+      0,
+      2200
+     ],
+     [
+      600,
+      0,
+      2000
+     ],
+     [
+      600,
+      0,
+      1800
+     ]
+    ]
+   },
+   "movesToGoal": 11
+  },
+  "canWin": [
+   "bridge-landing|0|0",
+   "bridge-landing|1|0",
+   "entrance|0|0",
+   "entrance|1|0",
+   "gallery-ramp|0|0",
+   "gallery-ramp|1|0",
+   "gallery|0|0",
+   "gallery|1|0",
+   "key-balcony|1|0",
+   "key-walk|0|0",
+   "key-walk|1|0",
+   "lower-hall|0|0",
+   "lower-hall|1|0",
+   "treasure-landing|1|0",
+   "vault-approach|0|0",
+   "vault-approach|1|0",
+   "vault-entry|1|0"
+  ],
+  "chapter": {
+   "accepted": true,
+   "shortest": 11,
+   "gatesOnRoute": 1,
+   "exploredStates": 17
+  }
+ },
+ "trapSwitchRule": {
+  "revision": "rev-5a6ec62b6b8f48c0",
+  "report": {
+   "valid": true,
+   "invalidReasons": [],
+   "revisionId": "rev-5a6ec62b6b8f48c0",
+   "complete": true,
+   "completionExplanation": "Exploration finished within the state bound.",
+   "exploredCount": 19,
+   "accepted": false,
+   "recoveryMap": {
+    "stranded": [
+     "bridge-landing",
+     "vault-approach"
+    ],
+    "unreachable": []
+   },
+   "checks": {
+    "solution": {
+     "status": "pass",
+     "explanation": "Solution found.",
+     "witness": {
+      "kind": "solution",
+      "route": [
+       {
+        "action": "N",
+        "before": {
+         "moduleId": "entrance",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "lower-hall",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "source": "entrance",
+        "destination": "lower-hall",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          600,
+          0,
+          2200
+         ],
+         [
+          600,
+          0,
+          2000
+         ],
+         [
+          600,
+          0,
+          1800
+         ]
+        ]
+       },
+       {
+        "action": "N",
+        "before": {
+         "moduleId": "lower-hall",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "gallery-ramp",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "source": "lower-hall",
+        "destination": "gallery-ramp",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          600,
+          0,
+          1800
+         ],
+         [
+          600,
+          0,
+          1600
+         ],
+         [
+          600,
+          150,
+          1400
+         ]
+        ]
+       },
+       {
+        "action": "N",
+        "before": {
+         "moduleId": "gallery-ramp",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "gallery",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "source": "gallery-ramp",
+        "destination": "gallery",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          600,
+          150,
+          1400
+         ],
+         [
+          600,
+          300,
+          1200
+         ],
+         [
+          600,
+          300,
+          1000
+         ]
+        ]
+       },
+       {
+        "action": "E",
+        "before": {
+         "moduleId": "gallery",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "key-walk",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "source": "gallery",
+        "destination": "key-walk",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          600,
+          300,
+          1000
+         ],
+         [
+          800,
+          300,
+          1000
+         ],
+         [
+          1000,
+          300,
+          1000
+         ]
+        ]
+       },
+       {
+        "action": "E",
+        "before": {
+         "moduleId": "key-walk",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "key-balcony",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "source": "key-walk",
+        "destination": "key-balcony",
+        "doorId": null,
+        "events": {
+         "collectedKey": "brass-key"
+        },
+        "segments": [
+         [
+          1000,
+          300,
+          1000
+         ],
+         [
+          1200,
+          300,
+          1000
+         ],
+         [
+          1400,
+          300,
+          1000
+         ]
+        ]
+       },
+       {
+        "action": "W",
+        "before": {
+         "moduleId": "key-balcony",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "key-walk",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "source": "key-balcony",
+        "destination": "key-walk",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          1400,
+          300,
+          1000
+         ],
+         [
+          1200,
+          300,
+          1000
+         ],
+         [
+          1000,
+          300,
+          1000
+         ]
+        ]
+       },
+       {
+        "action": "W",
+        "before": {
+         "moduleId": "key-walk",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "gallery",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "source": "key-walk",
+        "destination": "gallery",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          1000,
+          300,
+          1000
+         ],
+         [
+          800,
+          300,
+          1000
+         ],
+         [
+          600,
+          300,
+          1000
+         ]
+        ]
+       },
+       {
+        "action": "N",
+        "before": {
+         "moduleId": "gallery",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "bridge-landing",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "source": "gallery",
+        "destination": "bridge-landing",
+        "doorId": "gallery-door",
+        "events": {},
+        "segments": [
+         [
+          600,
+          300,
+          1000
+         ],
+         [
+          600,
+          300,
+          800
+         ],
+         [
+          600,
+          300,
+          600
+         ]
+        ]
+       },
+       {
+        "action": "E",
+        "before": {
+         "moduleId": "bridge-landing",
+         "keyMask": 1,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "vault-approach",
+         "keyMask": 1,
+         "switchMask": 1
+        },
+        "source": "bridge-landing",
+        "destination": "vault-approach",
+        "doorId": null,
+        "events": {
+         "activatedSwitch": "seal-switch"
+        },
+        "segments": [
+         [
+          600,
+          300,
+          600
+         ],
+         [
+          800,
+          300,
+          600
+         ],
+         [
+          1000,
+          300,
+          600
+         ]
+        ]
+       },
+       {
+        "action": "E",
+        "before": {
+         "moduleId": "vault-approach",
+         "keyMask": 1,
+         "switchMask": 1
+        },
+        "after": {
+         "moduleId": "vault-entry",
+         "keyMask": 1,
+         "switchMask": 1
+        },
+        "source": "vault-approach",
+        "destination": "vault-entry",
+        "doorId": "vault-door",
+        "events": {},
+        "segments": [
+         [
+          1000,
+          300,
+          600
+         ],
+         [
+          1200,
+          300,
+          600
+         ],
+         [
+          1400,
+          300,
+          600
+         ]
+        ]
+       },
+       {
+        "action": "E",
+        "before": {
+         "moduleId": "vault-entry",
+         "keyMask": 1,
+         "switchMask": 1
+        },
+        "after": {
+         "moduleId": "treasure-landing",
+         "keyMask": 1,
+         "switchMask": 1
+        },
+        "source": "vault-entry",
+        "destination": "treasure-landing",
+        "doorId": null,
+        "events": {
+         "reachedGoal": true
+        },
+        "segments": [
+         [
+          1400,
+          300,
+          600
+         ],
+         [
+          1600,
+          300,
+          600
+         ],
+         [
+          1800,
+          300,
+          600
+         ]
+        ]
+       }
+      ],
+      "endState": {
+       "moduleId": "treasure-landing",
+       "keyMask": 1,
+       "switchMask": 1
+      },
+      "missingKeys": null,
+      "requirement": null,
+      "violationText": null
+     }
+    },
+    "requirements": {
+     "status": "pass",
+     "explanation": "Every reachable winning state satisfies every rule.",
+     "witness": null
+    },
+    "recovery": {
+     "status": "fail",
+     "explanation": "A player can be stranded at “vault-approach” holding no keys, with the seal-switch active — no winning route remains.",
+     "witness": {
+      "kind": "dead_end",
+      "route": [
+       {
+        "action": "N",
+        "before": {
+         "moduleId": "entrance",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "lower-hall",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "source": "entrance",
+        "destination": "lower-hall",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          600,
+          0,
+          2200
+         ],
+         [
+          600,
+          0,
+          2000
+         ],
+         [
+          600,
+          0,
+          1800
+         ]
+        ]
+       },
+       {
+        "action": "N",
+        "before": {
+         "moduleId": "lower-hall",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "gallery-ramp",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "source": "lower-hall",
+        "destination": "gallery-ramp",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          600,
+          0,
+          1800
+         ],
+         [
+          600,
+          0,
+          1600
+         ],
+         [
+          600,
+          150,
+          1400
+         ]
+        ]
+       },
+       {
+        "action": "N",
+        "before": {
+         "moduleId": "gallery-ramp",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "gallery",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "source": "gallery-ramp",
+        "destination": "gallery",
+        "doorId": null,
+        "events": {},
+        "segments": [
+         [
+          600,
+          150,
+          1400
+         ],
+         [
+          600,
+          300,
+          1200
+         ],
+         [
+          600,
+          300,
+          1000
+         ]
+        ]
+       },
+       {
+        "action": "N",
+        "before": {
+         "moduleId": "gallery",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "bridge-landing",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "source": "gallery",
+        "destination": "bridge-landing",
+        "doorId": "gallery-door",
+        "events": {},
+        "segments": [
+         [
+          600,
+          300,
+          1000
+         ],
+         [
+          600,
+          300,
+          800
+         ],
+         [
+          600,
+          300,
+          600
+         ]
+        ]
+       },
+       {
+        "action": "E",
+        "before": {
+         "moduleId": "bridge-landing",
+         "keyMask": 0,
+         "switchMask": 0
+        },
+        "after": {
+         "moduleId": "vault-approach",
+         "keyMask": 0,
+         "switchMask": 1
+        },
+        "source": "bridge-landing",
+        "destination": "vault-approach",
+        "doorId": null,
+        "events": {
+         "activatedSwitch": "seal-switch"
+        },
+        "segments": [
+         [
+          600,
+          300,
+          600
+         ],
+         [
+          800,
+          300,
+          600
+         ],
+         [
+          1000,
+          300,
+          600
+         ]
+        ]
+       }
+      ],
+      "endState": {
+       "moduleId": "vault-approach",
+       "keyMask": 0,
+       "switchMask": 1
+      },
+      "missingKeys": null,
+      "requirement": null,
+      "violationText": null
+     }
+    }
+   }
+  },
+  "openingMoves": [
+   {
+    "action": "N",
+    "before": {
+     "moduleId": "entrance",
+     "keyMask": 0,
+     "switchMask": 0
+    },
+    "after": {
+     "moduleId": "lower-hall",
+     "keyMask": 0,
+     "switchMask": 0
+    },
+    "source": "entrance",
+    "destination": "lower-hall",
+    "doorId": null,
+    "events": {},
+    "segments": [
+     [
+      600,
+      0,
+      2200
+     ],
+     [
+      600,
+      0,
+      2000
+     ],
+     [
+      600,
+      0,
+      1800
+     ]
+    ]
+   }
+  ],
+  "hint": {
+   "kind": "move",
+   "move": {
+    "action": "N",
+    "before": {
+     "moduleId": "entrance",
+     "keyMask": 0,
+     "switchMask": 0
+    },
+    "after": {
+     "moduleId": "lower-hall",
+     "keyMask": 0,
+     "switchMask": 0
+    },
+    "source": "entrance",
+    "destination": "lower-hall",
+    "doorId": null,
+    "events": {},
+    "segments": [
+     [
+      600,
+      0,
+      2200
+     ],
+     [
+      600,
+      0,
+      2000
+     ],
+     [
+      600,
+      0,
+      1800
+     ]
+    ]
+   },
+   "movesToGoal": 11
+  },
+  "canWin": [
+   "bridge-landing|0|0",
+   "bridge-landing|1|0",
+   "bridge-landing|1|1",
+   "entrance|0|0",
+   "entrance|1|0",
+   "gallery-ramp|0|0",
+   "gallery-ramp|1|0",
+   "gallery|0|0",
+   "gallery|1|0",
+   "key-balcony|1|0",
+   "key-walk|0|0",
+   "key-walk|1|0",
+   "lower-hall|0|0",
+   "lower-hall|1|0",
+   "treasure-landing|1|1",
+   "vault-approach|1|1",
+   "vault-entry|1|1"
+  ],
+  "chapter": {
+   "accepted": false,
+   "shortest": 11,
+   "gatesOnRoute": 1,
+   "exploredStates": 19
+  }
+ }
+}
