@@ -17,10 +17,35 @@ local build were approximately 374 KB for the renderer, 219 KB for React, and
 it is not a claim of lower total download size or faster startup without a
 fresh production measurement.
 
+## 2026-09-29 — draw calls and a real-GPU sample (current build)
+
+The scene publishes whole-frame statistics on its host element every ten
+frames (`data-render-calls`, `data-render-triangles`, and `data-render-ms`,
+the CPU time spent submitting the frame), so tests can read them.
+
+Static room geometry — floors, walls, rails, piers, foundations — is now
+merged into one draw per material; every room keeps an invisible pick mesh
+of its exact shape, so click-to-select is unchanged (the selection e2e test
+passes). Measured on headless Chromium with the real GPU (ANGLE Metal, Apple
+M4 Pro, 1280×720), the same build with the merge on and off:
+
+| World | Draw calls off → on | Frame submit CPU (median) off → on | FPS |
+|---|---|---|---|
+| The Balcony Vault | 366 → 142 | 1.93 → 1.58 ms | 60 (vsync) |
+| The Sentry (guard, gates) | 439 → 249 | 2.35 → 2.29 ms | 60 |
+| 72-room world (areas and corridors) | 820 → 123 | 2.35 → 1.70 ms | 60 |
+
+Trade-off: merged geometry is not frustum-culled piece by piece, so the
+72-room world draws more triangles in the chase view (229k → 304k). Under
+software GL (triangle-bound) frame rate is unchanged within noise (3.6-3.7
+fps on the 72-room world, 4.2-4.8 on the vault); the win is CPU draw-call
+overhead, which is what dominates on phones. The replay performance test now
+fails above 220 draw calls (measured 114).
+
 ## Still to measure
 
 - [x] Five cold and five warm production-preview startup samples on local Chromium/SwiftShader; results below.
-- [ ] Repeat startup measurements against the deployed CDN/build on an ordinary GPU-backed desktop.
+- [ ] Repeat startup measurements against the deployed CDN/build on an ordinary GPU-backed desktop (frame submit cost measured on a real GPU on Sep 29, above).
 - [ ] Safari.
 - [ ] Real phone hardware.
 - [ ] Lower-powered laptop.

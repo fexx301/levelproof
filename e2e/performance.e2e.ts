@@ -14,6 +14,8 @@ const BUDGET = {
   controlsReadyMs: 1_500 * TIME_SCALE,
   longestStartupTaskMs: 250 * TIME_SCALE,
   replayMinFps: 2 / TIME_SCALE,
+  /** Whole-frame draw calls during the vault replay (merged room geometry). */
+  replayMaxDrawCalls: 220,
 };
 
 interface StartupSample {
@@ -201,6 +203,8 @@ test('records an eight-second witness replay frame-pacing sample', async ({ page
     maxFrameMs: ordered.at(-1) ?? null,
     framesOver33ms: sample.intervals.filter((interval) => interval > 33).length,
     routeStatus: await page.getByRole('region', { name: 'Playtester' }).getByRole('status').first().textContent(),
+    // Whole-frame draw calls (every pass, shadows included), published by the scene.
+    drawCalls: Number(await page.locator('[data-render-calls]').first().getAttribute('data-render-calls')),
   };
   await testInfo.attach('replay-frame-pacing.json', {
     body: JSON.stringify(report, null, 2),
@@ -209,4 +213,6 @@ test('records an eight-second witness replay frame-pacing sample', async ({ page
   console.log(`PRODUCTION_REPLAY_PERFORMANCE ${JSON.stringify(report)}`);
   expect(report.frameCount).toBeGreaterThan(0);
   expect(report.observedFps ?? 0, 'replay frame rate under software WebGL').toBeGreaterThanOrEqual(BUDGET.replayMinFps);
+  // Static room geometry is merged by material; 352 calls before, ~140 after.
+  expect(report.drawCalls, 'draw calls per frame during the replay').toBeLessThanOrEqual(BUDGET.replayMaxDrawCalls);
 });

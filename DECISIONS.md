@@ -2,6 +2,21 @@
 
 Build-window decisions and measured evidence, newest first. Dates are 2026.
 
+## Sep 29 (week 4 starts — draw calls)
+
+- **Measured before optimising**: 352 draw calls a frame on the vault, 425 on
+  the Sentry, 806 on a 72-room world — the world group held 150-470 separate
+  meshes, nearly all casting shadows (drawn twice). Scenery was already
+  merged (~21 meshes).
+- **Merged static room geometry by material**, keeping an invisible
+  exact-shape pick mesh per room (never drawn, not in the shadow pass) so
+  selection still names the room; foundations merged too. All or nothing:
+  if any geometry cannot merge, the scene is left as it was.
+- Real-GPU result (Apple M4 Pro): 820 → 123 calls and 2.35 → 1.70 ms frame
+  submit on the 72-room world; the vault 366 → 142 and 1.93 → 1.58 ms. A
+  draw-call budget now guards the replay test. Real phones are still to be
+  measured (the owner's devices, next).
+
 ## Sep 29 (bigger worlds — areas and corridors)
 
 - **Where the limit really was.** Not the checker (256 rooms, 32,768 states,

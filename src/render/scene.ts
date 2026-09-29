@@ -12,6 +12,7 @@ import { doorPassable, initialState } from '../core/movement.js';
 import { craftedBox, rampGeometry, sceneBounds, framingPoints, fitOverview } from './craft.js';
 import { createMechanisms, type WorldVisuals } from './mechanisms.js';
 import { GuardView } from './guards.js';
+import { mergeStatic } from './merge-static.js';
 import { buildKeyLook } from './props.js';
 import { preloadCharacter } from './character.js';
 import { atmosphere, buildScenery, FOUNDATION_TOP_Y, GROUND_Y } from './scenery.js';
@@ -664,6 +665,9 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel, theme?: T
     addModule(world, mats, compiled, m);
     for (const child of world.children.slice(firstIndex)) tag(child, m.id);
   }
+  // Room geometry never moves: one draw per material, and each room keeps an
+  // invisible pick mesh so clicking still selects it.
+  mergeStatic(world, [...world.children], meshToEntity, tag);
   addDoorFrames(world, mats, compiled, visuals, tag);
   const decorUpdates: DecorUpdate[] = [];
   addItems(world, mats, compiled, decorUpdates, visuals, tag, dark);
@@ -771,6 +775,7 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel, theme?: T
     block.receiveShadow = true;
     stage.add(block);
   }
+  mergeStatic(stage, [...stage.children]);
   scene.add(stage);
 
   const viewDir = new THREE.Vector3(...direction.camera).normalize();
@@ -967,8 +972,15 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel, theme?: T
     bloom = null;
   };
 
+  // Draw statistics for the whole frame (every pass), published on the host
+  // every 10 frames for performance tests: data-render-calls / -triangles,
+  // and data-render-ms (CPU time submitting the frame, averaged).
+  renderer.info.autoReset = false;
+  let statsFrame = 0;
+  let renderCpuMs = 0;
   const tick = () => {
     const now = performance.now();
+    renderer.info.reset();
     adaptQuality(now - lastTime);
     const dt = Math.min((now - lastTime) / 1000, 0.1);
     lastTime = now;
@@ -981,8 +993,16 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel, theme?: T
       facing = nextFacing;
       facingHandler?.(facing);
     }
+    const renderStart = performance.now();
     if (composer !== null) composer.render(dt);
     else renderer.render(scene, camera);
+    renderCpuMs += performance.now() - renderStart;
+    if (++statsFrame % 10 === 0) {
+      host.dataset.renderCalls = String(renderer.info.render.calls);
+      host.dataset.renderTriangles = String(renderer.info.render.triangles);
+      host.dataset.renderMs = (renderCpuMs / 10).toFixed(2);
+      renderCpuMs = 0;
+    }
     frame = requestAnimationFrame(tick);
   };
   frame = requestAnimationFrame(tick);
