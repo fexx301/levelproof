@@ -42,3 +42,20 @@ describe('adventure chapter loop', () => {
     expect(state.acceptedLevel.scenery?.environment).toBe('cavern');
   });
 });
+
+describe('adventure refusals', () => {
+  it('names a rate limit plainly and does not retry into it', async () => {
+    let calls = 0;
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      calls += 1;
+      return Response.json({ error: 'request_limit_reached' }, { status: 429 });
+    }));
+    const before = useApp.getState().acceptedLevel;
+    await continueAdventure('Surprise me.', 'steady');
+    const state = useApp.getState();
+    expect(calls).toBe(1);
+    expect(state.adventure.error).toMatch(/Too many requests/);
+    expect(state.busy).toBe(false);
+    expect(state.acceptedLevel).toBe(before);
+  });
+});

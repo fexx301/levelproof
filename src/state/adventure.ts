@@ -147,6 +147,19 @@ async function writeChapter(prompt: string, adventure: AdventureContext, chapter
         },
       );
       if (!compileContextIsCurrent(generation)) return;
+      // A refusal from the service is not the AI failing: say what it is and
+      // do not spend the retry on a request that will be refused again.
+      if (!response.ok && (response.status === 429 || response.status === 503)) {
+        if (best === null) {
+          stop(
+            response.status === 429
+              ? 'Too many requests from this network right now — wait a minute, then try again. Nothing was changed.'
+              : 'The service is busy for a moment — try again shortly. Nothing was changed.',
+          );
+          return;
+        }
+        break;
+      }
       const parsed = response.ok ? compileOkResponseSchema.safeParse(response.body) : null;
       const result = parsed?.success === true && parsed.data.result.type === 'patch' ? parsed.data.result : null;
       const applied = result === null ? null : applyOperations(blankCanvasLevel, result.operations);
