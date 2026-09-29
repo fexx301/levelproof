@@ -13,7 +13,7 @@
 import { compileOkResponseSchema } from '../shared/api';
 import type { Level, Operation } from '../shared/schema';
 import { blankCanvasLevel } from '../src/core/fixtures/blank-canvas';
-import { gauntletLevel, overpassLevel, twinKeysLevel } from '../src/core/fixtures/gallery';
+import { gauntletLevel, overpassLevel, sentryLevel, twinKeysLevel } from '../src/core/fixtures/gallery';
 import { vaultEmptyLevel } from '../src/core/fixtures/vault-empty';
 import { applyOperations, applyRuleProposal } from '../src/core/level';
 import { MAX_AUTO_REVISIONS, shouldAutoRevise } from '../src/core/revision-policy';
@@ -42,7 +42,7 @@ const JOBS: Job[] = [
   { scene: 'vault', level: vaultEmptyLevel, prompt: MAKEOVER_PROMPT },
   { scene: 'vault', level: vaultEmptyLevel, prompt: EXAMPLE_PROMPTS.removeRamp },
   { scene: 'vault', level: vaultEmptyLevel, prompt: TWIST_PROMPT },
-  ...[['twin keys', twinKeysLevel], ['overpass', overpassLevel], ['gauntlet', gauntletLevel]].flatMap(([scene, level]) =>
+  ...[['twin keys', twinKeysLevel], ['overpass', overpassLevel], ['gauntlet', gauntletLevel], ['sentry', sentryLevel]].flatMap(([scene, level]) =>
     [MAKEOVER_PROMPT, WINTER_PROMPT, TWIST_PROMPT].map((prompt) => ({ scene: scene as string, level: level as Level, prompt }))),
   ...BUILD_PROMPTS.map((build) => ({ scene: 'blank', level: blankCanvasLevel, prompt: build.prompt })),
   // Play-mode reactions on the vault, as a player first meets them (at spawn).
@@ -51,6 +51,13 @@ const JOBS: Job[] = [
     level: vaultEmptyLevel,
     prompt: reaction.prompt,
     ...(reaction.here === true ? { selection: [vaultEmptyLevel.spawn] } : {}),
+  })),
+  // The same reactions on the hazard showcase, where "a trap here" meets a guard.
+  ...PLAY_REACTIONS.map((reaction) => ({
+    scene: 'sentry (play)',
+    level: sentryLevel,
+    prompt: reaction.prompt,
+    ...(reaction.here === true ? { selection: [sentryLevel.spawn] } : {}),
   })),
 ];
 
@@ -139,6 +146,11 @@ try {
   for (const job of JOBS) {
     const label = `${job.scene}: ${job.prompt.slice(0, 48)}`;
     const next = await warm(label, job.level, job.prompt, [], job.selection ?? []);
+    // A cached answer must be one the engine accepts, not merely a patch.
+    if (next !== null) {
+      const report = verify(next);
+      console.log(`     ${report.accepted ? 'accepted' : `NOT ACCEPTED (win ${report.checks.solution.status}, stuck ${report.checks.recovery.status}, rules ${report.checks.requirements.status})`}`);
+    }
     if (job.then !== undefined && next !== null) await warm(`${job.scene} (step 2): ${job.then.slice(0, 40)}`, next, job.then, [job.prompt]);
   }
   console.log(`Known provider-reported spend: $${budget.spentUsd.toFixed(5)} / $${limit.toFixed(5)}.`);

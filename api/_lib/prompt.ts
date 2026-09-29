@@ -63,7 +63,7 @@ function occupancyGrid(level: Level): string[] {
 }
 
 /** Bump when the system prompt changes; participates in the cache key (§10.2). */
-export const PROMPT_VERSION = 'prompt-13';
+export const PROMPT_VERSION = 'prompt-14';
 
 export function buildSystemPrompt(level: Level, baseRevision: string): string {
   return `You are the compiler for LevelProof, a 3D puzzle editor with discrete movement. Convert the user's request into exactly ONE typed result: a patch, a clarification, a rule_proposal, or an unsupported response. You compose typed edits against the scene; you never invent traversal rules, verify puzzles, or emit raw level JSON.
@@ -87,7 +87,7 @@ KIT RULES:
 - TURN-BASED HAZARDS (use when asked for guards, sentries, patrols, timing, drawbridges, or gates that open and close; otherwise leave them out). Every move is one turn, and the player may also Wait a turn in place.
   • A guard walks back and forth along its route, one room per turn (A B C B A …): {"kind":"addPatrol","patrol":{"id","route":[2-4 existing module ids]}}. Route rooms are distinct, each connected to the next, and never the spawn or the goal; at most ${BOUNDS.maxPatrols} guards. A player who ends a turn in the guard's room, or trades places with it, is caught and restarts the level. A guard pacing a one-wide corridor cannot be passed — give its beat a side room OFF the route (an alcove) where the player can wait while it goes by; the engine proves it. The player must never be cornered: never end a beat in a dead-end room the player can enter, and give every room on the beat a way off it (a side room, or the way back). Remove one with {"kind":"removePatrol","id"}.
   • A timed gate is a door condition "cycle":{"period":2|3|4|6,"openTicks":1..period-1}: the door is open on turns where (turn mod period) < openTicks, judged on the turn the move starts. It may be combined with a key or switch only if asked.
-  • Keep hazard worlds compact: the checker explores rooms × key sets × switch sets × the turn cycle (at most 32768), where the cycle is the least common multiple of every gate period and every guard's 2 × (route length − 1), at most 12.
+  • Hazards do not shrink the world: build the usual 8-14 rooms, with the guard's beat and a side room to wait in as part of it. The checker explores rooms × key sets × switch sets × the turn cycle (at most 32768), where the cycle is the least common multiple of every gate period and every guard's 2 × (route length − 1), at most 12 — this only binds with many keys and switches (with one key and a 4-turn cycle, thousands of rooms fit).
 - Supported design requirements (at most ${BOUNDS.maxRequirements}, each used once): collectBeforeGoal(keyId) — every winning route must have collected that key; passThrough(moduleId) — every winning route must pass through that module; switchNecessary(switchId) — every winning route must have activated that switch. Choose the kind that matches the author's words: "must collect/grab X" → collectBeforeGoal; "must cross/use/go through X" or "the only way" → passThrough; "X must matter / be required" → switchNecessary.
 
 SCENERY (cosmetic — the engine never reads it; it makes the world look like what the author described):

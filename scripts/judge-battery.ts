@@ -147,7 +147,9 @@ function grade(testCase: Case, base: Level, result: CompileResult | null, after:
     case 'hazard': {
       const guards = level?.patrols?.length ?? 0;
       const gates = level?.doors.filter((door) => door.conditions?.cycle !== undefined).length ?? 0;
-      const ok = report !== null && report.accepted && guards + gates > 0;
+      // A from-scratch hazard world must still be a full world (8+ rooms).
+      const fullSize = testCase.base !== 'blank' || (level?.modules.length ?? 0) >= 8;
+      const ok = report !== null && report.accepted && guards + gates > 0 && fullSize;
       return { verdict: ok ? 'PASS' : result.type === 'clarification' ? 'REVIEW' : 'FAIL', note: `${facts} guards=${guards} timedGates=${gates} accepted=${report?.accepted ?? false}` };
     }
     case 'any':

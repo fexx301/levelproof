@@ -144,9 +144,12 @@ export const gauntletLevel: Level = {
 /**
  * The Sentry (§6.4): the hazard showcase. A castle yard at night: the key
  * waits atop the watchtower, a sentry paces between the middle of the yard
- * and the well alcove, and the drawbridge over the moat is down two turns
- * in every four. Time your crossing behind the sentry, then time the bridge.
- * Every reachable situation — position, key, and turn — was checked.
+ * and the well, and the drawbridge over the moat is down two turns in every
+ * four. Every loop in the yard is even, so no walk changes the turn parity:
+ * the player must wait once to slip past. The herb garden joins the well to
+ * the east yard, so every floor can be reached (and nobody who reaches the
+ * well is cornered there). Every reachable situation — position, key, and
+ * turn — was checked.
  */
 export const sentryLevel: Level = {
   modules: [
@@ -155,8 +158,9 @@ export const sentryLevel: Level = {
     { id: 'tower-stair', template: 'ramp', x: 3, z: 7, h: 0, orientation: 'N', ports: ['S', 'N'] },
     { id: 'tower-top', template: 'flat', x: 3, z: 6, h: 1, label: 'watchtower', ports: ['S'] },
     { id: 'yard-mid', template: 'flat', x: 4, z: 8, h: 0, label: 'yard', ports: ['E', 'W', 'N'] },
-    { id: 'well', template: 'flat', x: 4, z: 7, h: 0, label: 'well alcove', ports: ['S'] },
-    { id: 'yard-east', template: 'flat', x: 5, z: 8, h: 0, label: 'east yard', ports: ['E', 'W'] },
+    { id: 'well', template: 'flat', x: 4, z: 7, h: 0, label: 'well', ports: ['S', 'E'] },
+    { id: 'herb-garden', template: 'flat', x: 5, z: 7, h: 0, label: 'herb garden', ports: ['W', 'S'] },
+    { id: 'yard-east', template: 'flat', x: 5, z: 8, h: 0, label: 'east yard', ports: ['E', 'W', 'N'] },
     { id: 'bridge-landing', template: 'flat', x: 6, z: 8, h: 0, label: 'drawbridge', ports: ['E', 'W'] },
     { id: 'treasury', template: 'flat', x: 7, z: 8, h: 0, label: 'treasury', ports: ['W'] },
   ],
