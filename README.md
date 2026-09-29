@@ -53,6 +53,15 @@ the next move of a shortest winning route from exactly where you stand, and
 the moment you walk into a dead end the panel says so — even while moves
 remain — because every continuation has already been explored.
 
+**An endless adventure the engine keeps honest.** Win a level and press
+**Continue the adventure** (*Surprise me*, *Harder*, *Easier*, or say where
+next). The AI writes the next chapter — a new world that follows the story so
+far and adapts to how you played (hints, dead ends, restarts) — and the engine
+must prove it fair before you step in: winnable, nobody can get stuck, rules
+hold, and its shortest route inside the difficulty band the engine chose. The
+title card shows the proof: *✓ Verified solvable · N states checked · shortest
+route M moves*.
+
 **Talk to the world while you play it.** Found it too easy? Press **Too easy
 — make it harder**, **Add a trap here** (where you are standing), **Add a
 secret room**, **Make it spookier**, or just type what you want. The AI
@@ -168,7 +177,7 @@ The example chips are prewarmed after each deploy (`scripts/prewarm.ts`).
 npm install
 cp .env.example .env   # add your OpenRouter key (and optionally Upstash)
 npm run dev            # Vite dev server; also serves /api/compile and /api/explain
-npm run verify         # typecheck, lint, 285 unit tests, production build
+npm run verify         # typecheck, lint, 298 unit tests, production build
 npm run test:e2e       # Playwright browser journeys (fixture-backed, no model calls)
 ```
 

@@ -2,6 +2,27 @@
 
 Build-window decisions and measured evidence, newest first. Dates are 2026.
 
+## Sep 29 (endless verified adventure — the AI as game master)
+
+- **Decision**: evolve LevelProof for the Nov 11 deadline rather than pivot
+  (honest self-score ~7.5; target ~9). VR mode dropped: no headset to test.
+- **Adventure**: after a win the model writes the next chapter as a new world
+  from the story so far, the player's words, and how they played. The engine
+  gates entry: a chapter must be accepted (fairness is not negotiable) and
+  should hit a difficulty band measured as the shortest winning route
+  (up after a clean win, down after hints, dead ends, or restarts). The
+  server writes difficulty findings for accepted-but-off-band chapters so
+  revisions are not short-circuited; the add-on has its own version in
+  adventure cache keys only; a non-patch answer is invalid for a chapter.
+  Unfair bests fall back to the repair search, then to an honest try-again.
+- **Measured** (docs/model-eval.md): with explicit move counting in the
+  add-on, 7/8 chapters fair and in band on the first try, p50 10.4 s,
+  ~$0.008/chapter; one intermittent empty result led to a one-time fresh
+  retry. The fallback model cannot write chapters.
+- **Stall detection** replaced the fixed compile watchdog (heartbeat every
+  10 s; abort after 45 s of silence), after the third revision round made the
+  old 130 s ceiling wrong.
+
 ## Sep 28 (the AI in play — talk to the world while playing)
 
 - **Why**: the brief asks for AI in how the experience is created, changed,

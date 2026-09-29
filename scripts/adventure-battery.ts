@@ -17,10 +17,11 @@ import { readFileSync } from 'node:fs';
 import { resetCache } from '../api/_lib/cache';
 import { compile } from '../api/_lib/compile-service';
 import type { AdventureContext } from '../shared/api';
-import { chapterPlayable, measureChapter, nextDifficultyBand, type AdventureIntent, type ChapterStats } from '../src/core/adventure';
+import { chapterFindings, chapterPlayable, measureChapter, nextDifficultyBand, type AdventureIntent, type ChapterStats } from '../src/core/adventure';
 import { blankCanvasLevel } from '../src/core/fixtures/blank-canvas';
 import { applyOperations } from '../src/core/level';
 import { MAX_AUTO_REVISIONS } from '../src/core/revision-policy';
+import { findRepairs } from '../src/core/search';
 import type { Level } from '../shared/schema';
 import { LiveBudget, LiveEvaluationStop, requireLiveBudget } from './live-budget';
 
@@ -60,6 +61,11 @@ function simulatedStats(shortest: number, played: Step['played']): ChapterStats 
   return { moves: shortest + 12, hints: 4, deadEnds: 2, restarts: 3, shortest };
 }
 
+function distance(measure: ReturnType<typeof measureChapter>, band: { minMoves: number; maxMoves: number }): number {
+  if (!measure.accepted || measure.shortest === null) return Number.POSITIVE_INFINITY;
+  return measure.shortest < band.minMoves ? band.minMoves - measure.shortest : Math.max(0, measure.shortest - band.maxMoves);
+}
+
 const percentile = (values: number[], p: number): number => {
   const sorted = [...values].sort((a, b) => a - b);
   return sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * p))] ?? 0;
@@ -82,6 +88,7 @@ try {
   const latencies: number[] = [];
   const costs: number[] = [];
   let firstTry = 0;
+  let inBand = 0;
   let playable = 0;
   let total = 0;
 
@@ -108,21 +115,33 @@ try {
       let best: { level: Level; story?: { title: string; narration: string } } | null = null;
       let latest: Parameters<typeof compile>[1]['revision'] | undefined;
       let firstPlayable = false;
+      let freshRetryLeft = 1;
       for (let attempt = 0; attempt <= MAX_AUTO_REVISIONS; attempt++) {
         budget.ensureCanCall(`chapter ${chapter}`);
         const outcome = await compile(process.env, { level: blankCanvasLevel, prompt, adventure, ...(latest !== undefined ? { revision: latest } : {}) });
         budget.record(outcome.totalCostUsd, `chapter ${chapter}`);
         spent += outcome.totalCostUsd ?? 0;
-        if (outcome.result === null || outcome.result.type !== 'patch') break;
-        const applied = applyOperations(blankCanvasLevel, outcome.result.operations);
-        if (!applied.ok) break;
+        const applied = outcome.result === null || outcome.result.type !== 'patch' ? null : applyOperations(blankCanvasLevel, outcome.result.operations);
+        if (outcome.result === null || outcome.result.type !== 'patch' || applied === null || !applied.ok) {
+          console.log(`        attempt failed: ${outcome.result?.type ?? outcome.error ?? 'error'} [${outcome.attempts.map((a) => `${a.model.split('/').at(-1)}:${a.outcome}`).join(', ')}]`);
+          // As in the client: one fresh retry when nothing usable came back yet.
+          if (best === null && freshRetryLeft > 0) {
+            freshRetryLeft -= 1;
+            latest = undefined;
+            attempt -= 1;
+            continue;
+          }
+          break;
+        }
         const measure = measureChapter(applied.level);
         const ok = chapterPlayable(measure, band);
         if (attempt === 0) firstPlayable = ok;
         const candidate = { level: applied.level, ...(outcome.result.story !== undefined ? { story: outcome.result.story } : {}) };
-        if (best === null || ok) best = candidate;
+        // As in the client: keep the fair attempt closest to the band.
+        if (best === null || distance(measure, band) < distance(measureChapter(best.level), band)) best = candidate;
         if (ok) break;
         rounds += 1;
+        console.log(`        round ${rounds}: ${(chapterFindings(applied.level, band)[0] ?? '').slice(0, 150)}`);
         latest = { operations: outcome.result.operations };
       }
       const ms = Math.round(performance.now() - started);
@@ -133,12 +152,24 @@ try {
         console.log(`FAIL  ch${chapter} ${String(ms).padStart(6)} ms | no applicable chapter`);
         break;
       }
+      // Mirror the client: an unfair best gets the deterministic repair search.
+      let repaired = false;
+      if (!measureChapter(best.level).accepted) {
+        const fix = findRepairs(blankCanvasLevel, best.level, measureChapter(best.level).report, [], 1500).candidates[0];
+        const fixedLevel = fix === undefined ? null : applyOperations(best.level, fix.operations);
+        if (fixedLevel !== null && fixedLevel.ok) {
+          best = { ...best, level: fixedLevel.level };
+          repaired = true;
+        }
+      }
       const measure = measureChapter(best.level);
-      const ok = chapterPlayable(measure, band);
+      // The client enters any fair chapter; the band is best-effort.
+      const ok = measure.accepted;
       if (ok) playable += 1;
+      if (chapterPlayable(measure, band)) inBand += 1;
       if (firstPlayable) firstTry += 1;
       console.log(
-        `${ok ? 'PASS' : 'FAIL'}  ch${chapter} ${String(ms).padStart(6)} ms | "${prompt.slice(0, 26)}" band ${band.minMoves}-${band.maxMoves} → shortest ${measure.shortest ?? '-'} gates ${measure.gatesOnRoute} accepted=${measure.accepted} rounds=${rounds} env=${best.level.scenery?.environment ?? '-'}/${best.level.scenery?.lighting ?? '-'} $${spent.toFixed(4)}\n        ${best.story ? `“${best.story.title}” — ${best.story.narration}` : '(no story)'}`,
+        `${ok ? 'PASS' : 'FAIL'}  ch${chapter} ${String(ms).padStart(6)} ms | "${prompt.slice(0, 26)}" band ${band.minMoves}-${band.maxMoves} → shortest ${measure.shortest ?? '-'} gates ${measure.gatesOnRoute} accepted=${measure.accepted}${repaired ? ' (repair search)' : ''} rounds=${rounds} env=${best.level.scenery?.environment ?? '-'}/${best.level.scenery?.lighting ?? '-'} $${spent.toFixed(4)}\n        ${best.story ? `“${best.story.title}” — ${best.story.narration}` : '(no story)'}`,
       );
       if (!ok) break;
       story.push(best.story ?? { title: `Chapter ${chapter}`, narration: 'The adventure continues.' });
@@ -146,7 +177,7 @@ try {
     }
   }
   console.log(
-    `\nplayable ${playable}/${total} · first try ${firstTry}/${total} · latency p50 ${percentile(latencies, 0.5)} ms p95 ${percentile(latencies, 0.95)} ms · cost/chapter p50 $${percentile(costs, 0.5).toFixed(4)}`,
+    `\nfair (enterable) ${playable}/${total} · in band ${inBand}/${total} · in band first try ${firstTry}/${total} · latency p50 ${percentile(latencies, 0.5)} ms p95 ${percentile(latencies, 0.95)} ms · cost/chapter p50 $${percentile(costs, 0.5).toFixed(4)}`,
   );
   console.log(`Known provider-reported spend: $${budget.spentUsd.toFixed(5)} / $${limit.toFixed(5)}.`);
 } catch (error) {

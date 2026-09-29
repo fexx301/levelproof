@@ -123,7 +123,7 @@ Respond with a single JSON object and nothing else.`;
 }
 
 /** Bump when the adventure add-on changes; part of adventure cache keys only. */
-export const ADVENTURE_PROMPT_VERSION = 'adventure-1';
+export const ADVENTURE_PROMPT_VERSION = 'adventure-2';
 
 /** Printable, single-line text from client-supplied story fields. */
 function oneLine(text: string, max: number): string {
@@ -155,7 +155,8 @@ ADVENTURE MODE — you are also the game master of an endless adventure. This re
 Story so far (oldest first):
 ${story}
 ${how} ${direction}
-DIFFICULTY (measured by the puzzle engine, not by you): the engine's shortest winning route must be ${minMoves}-${maxMoves} moves, where a move is one step between two connected modules. Longer routes come from more rooms, a key or switch placed off the direct path, and locked doors the player must go around.
+DIFFICULTY (measured by the puzzle engine, not by you): the engine's shortest winning route must be ${minMoves}-${maxMoves} moves. A move is one step between two connected modules; the shortest route includes every detour the player MUST make, and a dead-end side branch counts twice (there and back).
+Count before you answer. Example: spawn → 5 rooms in a line → goal is 6 moves; put the key at the end of a 3-room side branch off the 2nd room, and lock the door before the goal, and it becomes 6 + 3 + 3 = 12 moves. A ramp up to a balcony and back adds 2 per room. Aim for the middle of the band (about ${Math.round((minMoves + maxMoves) / 2)} moves).
 FAIRNESS (checked by the engine): the chapter must be winnable, and NO reachable position may leave the player unable to win — so no switch traps or one-way paths that strand the player. The engine sends the chapter back if fairness or difficulty fails.
 CONTINUITY: continue the story — a new place reached from the last (descending, sailing on, climbing higher, crossing a border), usually a fresh environment, lighting, and architecture unless the player asks otherwise, and when difficulty rises add a new twist (a second key, a switch-opened gate, a keycard behind a bridge).
 The player's words for this chapter are in the user message; honor them within these limits.

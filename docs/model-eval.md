@@ -179,3 +179,17 @@ OpenAI and Anthropic reject the strict per-type anyOf envelope (top-level
 anyOf; null in enums), so they need the plain-JSON path. None beats the
 current fallback, whose clarifying question is a graceful outcome where a
 failed patch would be an error. Spend on this comparison ≈ $0.6.
+
+## Sep 29 — adventure chapters (the AI as game master)
+
+`scripts/adventure-battery.ts` chains chapters as play does (blank canvas,
+story so far, band from simulated player stats, the player's words), cache
+off, revising while the engine says a chapter is unfair or off-band.
+
+| Run | Result |
+|---|---|
+| `adventure-1` prompt, 2 chains × 5 | 7/8 fair; 4/8 in band on the first try; p50 21 s, p95 46 s; ~$0.017/chapter |
+| `adventure-2` prompt (explicit move counting: detours count twice, a worked example, aim for the band's middle), 2 chains × 4 | 7/8 fair and in band — all 7 on the first try; p50 10.4 s; ~$0.008/chapter. The miss returned nothing usable on any attempt (one diagnostic rerun of the same context succeeded first try, 22 operations), so the client now retries once from scratch before giving up. |
+| Fallback forced (`gemini-2.5-flash-lite`), 1 chain × 3 | 0/1: every attempt left the goal disconnected; repairs cannot fix geometry. If the primary fails, adventure says "try again" — it never sends the player into an unfair chapter. |
+
+Spend for this series: $0.22 (of an owner-approved $0.35).

@@ -114,6 +114,9 @@ export async function continueAdventure(words: string, intent: AdventureIntent):
 
   let best: Candidate | null = null;
   let revision: { operations: unknown[] } | undefined;
+  // One fresh retry when a request yields nothing usable at all (a malformed
+  // answer on every attempt is intermittent; a second try usually succeeds).
+  let freshRetryLeft = 1;
   try {
     for (let round = 0; round <= MAX_AUTO_REVISIONS; round++) {
       const response = await postCompile(
@@ -127,12 +130,18 @@ export async function continueAdventure(words: string, intent: AdventureIntent):
         },
       );
       if (!compileContextIsCurrent(generation)) return;
-      if (!response.ok) break;
-      const parsed = compileOkResponseSchema.safeParse(response.body);
-      if (!parsed.success || parsed.data.result.type !== 'patch') break;
-      const result = parsed.data.result;
-      const applied = applyOperations(blankCanvasLevel, result.operations);
-      if (!applied.ok) break;
+      const parsed = response.ok ? compileOkResponseSchema.safeParse(response.body) : null;
+      const result = parsed?.success === true && parsed.data.result.type === 'patch' ? parsed.data.result : null;
+      const applied = result === null ? null : applyOperations(blankCanvasLevel, result.operations);
+      if (result === null || applied === null || !applied.ok) {
+        if (best === null && freshRetryLeft > 0) {
+          freshRetryLeft -= 1;
+          revision = undefined;
+          round -= 1;
+          continue;
+        }
+        break;
+      }
       const candidate: Candidate = { level: applied.level, story: result.story ?? null, measure: measureChapter(applied.level) };
       if (best === null || bandDistance(candidate.measure, band) < bandDistance(best.measure, band)) best = candidate;
       if (chapterPlayable(candidate.measure, band)) break;
