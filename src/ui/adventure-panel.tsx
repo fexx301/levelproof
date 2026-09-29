@@ -116,7 +116,7 @@ export function ChapterCard() {
       <span className="chapter-card-title">{intro.title}</span>
       <span className="chapter-card-story">{intro.narration}</span>
       <span className="chapter-card-proof">
-        ✓ Verified solvable · {intro.explored.toLocaleString()} states checked · nobody can get stuck · shortest route {intro.shortest} moves
+        ✓ Verified solvable — all {intro.explored.toLocaleString()} reachable states checked · nobody can get stuck · shortest route {intro.shortest} moves
         {intro.gates > 0 ? ` · ${intro.gates} locked door${intro.gates === 1 ? '' : 's'}` : ''}
       </span>
     </button>
