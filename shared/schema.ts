@@ -21,11 +21,20 @@ export const BOUNDS = {
   // landmark props) needs more room than a single gameplay edit.
   maxOpsPerPatch: 32,
   maxStringLength: 64,
+  /** Turn-based guards (§6.4). */
+  maxPatrols: 3,
+  /** Longest world cycle (the LCM of every timed door and patrol period). */
+  maxCycle: 12,
 } as const;
+
+/** The checker's exploration bound: the kit's largest state space without
+ * hazards (modules × key subsets × switch subsets). Hazard levels are
+ * validated to fit inside it (× their cycle), so every check is exhaustive. */
+export const EXPLORATION_BOUND = BOUNDS.maxModules * 2 ** BOUNDS.maxKeys * 2 ** BOUNDS.maxSwitches;
 
 /** The most entities one level can hold — the ceiling for "Keep these"
  * everywhere it is stored or sent (request schema, session recovery). */
-export const MAX_ENTITY_IDS = BOUNDS.maxModules + BOUNDS.maxKeys + BOUNDS.maxSwitches + BOUNDS.maxDoors + BOUNDS.maxProps;
+export const MAX_ENTITY_IDS = BOUNDS.maxModules + BOUNDS.maxKeys + BOUNDS.maxSwitches + BOUNDS.maxDoors + BOUNDS.maxProps + BOUNDS.maxPatrols;
 
 export const CARDINALS = ['N', 'E', 'S', 'W'] as const;
 export type Cardinal = (typeof CARDINALS)[number];
@@ -123,12 +132,28 @@ export const switchItemSchema = z.strictObject({ id: idSchema, moduleId: idSchem
  * requiresKey and requiresSwitch gate passage; closesAfterSwitch seals the
  * door permanently once that switch activates.
  */
+/**
+ * A timed door (§6.4): the world keeps a turn counter (every move or wait is
+ * one turn), and the door is open while (turn mod period) < openTicks —
+ * a drawbridge, a moving platform, a gate on a timer. Turn-based, so the
+ * checker still explores every reachable situation.
+ */
+export const DOOR_CYCLE_PERIODS = [2, 3, 4, 6] as const;
+export const doorCycleSchema = z
+  .strictObject({
+    period: z.union([z.literal(2), z.literal(3), z.literal(4), z.literal(6)]),
+    openTicks: z.number().int().min(1).max(5),
+  })
+  .refine((cycle) => cycle.openTicks < cycle.period, { message: 'openTicks must be less than period' });
+export type DoorCycle = z.infer<typeof doorCycleSchema>;
+
 export const doorConditionsSchema = z.strictObject({
   requiresKey: idSchema.optional(),
   /** AND semantics: every listed key must be held (at most 3, one per kit key). */
   requiresKeys: z.array(idSchema).max(3).optional(),
   requiresSwitch: idSchema.optional(),
   closesAfterSwitch: idSchema.optional(),
+  cycle: doorCycleSchema.optional(),
 });
 export type DoorConditions = z.infer<typeof doorConditionsSchema>;
 
@@ -140,6 +165,19 @@ export const doorSchema = z.strictObject({
   conditions: doorConditionsSchema.optional(),
 });
 export type Door = z.infer<typeof doorSchema>;
+
+/**
+ * A turn-based guard (§6.4): it walks its route back and forth, one room per
+ * turn (A B C B A B C …), on a schedule that depends only on the turn —
+ * never on the player. Walking into it, or trading places with it, is being
+ * caught: the level restarts. Routes are 2-4 distinct connected rooms and
+ * never include the spawn or the goal.
+ */
+export const patrolSchema = z.strictObject({
+  id: idSchema,
+  route: z.array(idSchema).min(2).max(4),
+});
+export type Patrol = z.infer<typeof patrolSchema>;
 
 /** Supported requirement kinds (§5, extended): collect a key before the
  * goal; every winning route must pass through a module; every winning route
@@ -163,6 +201,8 @@ export const levelSchema = z.strictObject({
   /** Cosmetic world dressing; absent on levels that predate it. */
   scenery: scenerySchema.optional(),
   props: z.array(propSchema).max(BOUNDS.maxProps).optional(),
+  /** Turn-based guards; absent on levels without them. */
+  patrols: z.array(patrolSchema).max(BOUNDS.maxPatrols).optional(),
 });
 export type Level = z.infer<typeof levelSchema>;
 
@@ -197,6 +237,8 @@ export const operationSchema = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('addDoor'), door: doorSchema }),
   z.strictObject({ kind: z.literal('setDoorConditions'), id: idSchema, conditions: doorConditionsSchema }),
   z.strictObject({ kind: z.literal('removeDoor'), id: idSchema }),
+  z.strictObject({ kind: z.literal('addPatrol'), patrol: patrolSchema }),
+  z.strictObject({ kind: z.literal('removePatrol'), id: idSchema }),
   // Scenery operations: cosmetic only, never read by the engine.
   z.strictObject({
     kind: z.literal('setScenery'),

@@ -15,7 +15,7 @@ describe('movement derivation (§4, §13.1)', () => {
   });
 
   it('moves are returned in N/E/S/W order', () => {
-    const moves = transitions(compiled, { moduleId: 'gallery', keyMask: 0, switchMask: 0 });
+    const moves = transitions(compiled, { moduleId: 'gallery', keyMask: 0, switchMask: 0, phase: 0 });
     expect(moves.map((m) => m.action)).toEqual(['N', 'E', 'S']);
   });
 
@@ -24,7 +24,7 @@ describe('movement derivation (§4, §13.1)', () => {
     expect(portElevation(ramp, 'S')).toBe(0);
     expect(portElevation(ramp, 'N')).toBe(1);
     expect(portElevation(ramp, 'E')).toBeNull();
-    const up = step(compiled, { moduleId: 'gallery-ramp', keyMask: 0, switchMask: 0 }, 'N');
+    const up = step(compiled, { moduleId: 'gallery-ramp', keyMask: 0, switchMask: 0, phase: 0 }, 'N');
     expect(up?.destination).toBe('gallery');
   });
 
@@ -74,11 +74,11 @@ describe('movement derivation (§4, §13.1)', () => {
   });
 
   it('goal states are terminal with no outgoing transitions', () => {
-    expect(transitions(compiled, { moduleId: 'treasure-landing', keyMask: 1, switchMask: 0 })).toEqual([]);
+    expect(transitions(compiled, { moduleId: 'treasure-landing', keyMask: 1, switchMask: 0, phase: 0 })).toEqual([]);
   });
 
   it('the vault door blocks without the key and passes with it', () => {
-    const state = { moduleId: 'vault-approach', keyMask: 0, switchMask: 0 };
+    const state = { moduleId: 'vault-approach', keyMask: 0, switchMask: 0, phase: 0 };
     expect(step(compiled, state, 'E')).toBeNull();
     const open = step(compiled, { ...state, keyMask: 1 }, 'E');
     expect(open?.destination).toBe('vault-entry');
@@ -86,10 +86,10 @@ describe('movement derivation (§4, §13.1)', () => {
   });
 
   it('keys are collected on arrival exactly once', () => {
-    const first = step(compiled, { moduleId: 'key-walk', keyMask: 0, switchMask: 0 }, 'E');
+    const first = step(compiled, { moduleId: 'key-walk', keyMask: 0, switchMask: 0, phase: 0 }, 'E');
     expect(first?.events.collectedKey).toBe('brass-key');
     expect(first?.after.keyMask).toBe(1);
-    const again = step(compiled, { moduleId: 'key-walk', keyMask: 1, switchMask: 0 }, 'E');
+    const again = step(compiled, { moduleId: 'key-walk', keyMask: 1, switchMask: 0, phase: 0 }, 'E');
     expect(again?.events.collectedKey).toBeUndefined();
     expect(again?.after.keyMask).toBe(1);
   });
@@ -139,13 +139,13 @@ describe('multi-key doors (§4.3 requiresKeys — AND semantics)', () => {
   });
 
   it('blocks with either key missing, passes only with both', () => {
-    const none = step(compiled, { moduleId: 'spawn-pad', keyMask: 0, switchMask: 0 }, 'N');
+    const none = step(compiled, { moduleId: 'spawn-pad', keyMask: 0, switchMask: 0, phase: 0 }, 'N');
     expect(none).toBeNull();
-    const onlyIron = step(compiled, { moduleId: 'spawn-pad', keyMask: IRON, switchMask: 0 }, 'N');
+    const onlyIron = step(compiled, { moduleId: 'spawn-pad', keyMask: IRON, switchMask: 0, phase: 0 }, 'N');
     expect(onlyIron).toBeNull();
-    const onlyBrass = step(compiled, { moduleId: 'spawn-pad', keyMask: BRASS, switchMask: 0 }, 'N');
+    const onlyBrass = step(compiled, { moduleId: 'spawn-pad', keyMask: BRASS, switchMask: 0, phase: 0 }, 'N');
     expect(onlyBrass).toBeNull();
-    const both = step(compiled, { moduleId: 'spawn-pad', keyMask: IRON | BRASS, switchMask: 0 }, 'N');
+    const both = step(compiled, { moduleId: 'spawn-pad', keyMask: IRON | BRASS, switchMask: 0, phase: 0 }, 'N');
     expect(both?.destination).toBe('gate-room');
   });
 

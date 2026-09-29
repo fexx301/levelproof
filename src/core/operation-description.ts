@@ -78,6 +78,9 @@ function conditionPhrases(conditions: DoorConditions | undefined): string[] {
   if (conditions.closesAfterSwitch !== undefined) {
     phrases.push(`closes permanently when “${humanize(conditions.closesAfterSwitch)}” is activated`);
   }
+  if (conditions.cycle !== undefined) {
+    phrases.push(`is open ${conditions.cycle.openTicks} of every ${conditions.cycle.period} turns`);
+  }
   return phrases;
 }
 
@@ -142,6 +145,10 @@ export function describeOperation(operation: Operation, before: Level, after: Le
     }
     case 'removeDoor':
       return `Remove ${entityName(before, operation.id)}.`;
+    case 'addPatrol':
+      return `Add a guard “${humanize(operation.patrol.id)}” who walks back and forth: ${operation.patrol.route.map((id) => moduleName(after, id)).join(' ↔ ')}.`;
+    case 'removePatrol':
+      return `Remove the guard “${humanize(operation.id)}”.`;
     case 'setScenery': {
       const parts: string[] = [];
       if (operation.environment !== undefined) parts.push(`set the world to ${ENVIRONMENT_LABELS[operation.environment]}`);

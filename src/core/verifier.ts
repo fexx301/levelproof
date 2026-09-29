@@ -1,3 +1,4 @@
+import { EXPLORATION_BOUND } from '../../shared/schema.js';
 import type { Level, Requirement } from '../../shared/schema.js';
 import { CATALOG_VERSION } from './catalog.js';
 import { validateLevel } from './level.js';
@@ -13,7 +14,7 @@ import { revisionId } from './serialize.js';
 export const VERIFIER_VERSION = 'verifier-1.0.0';
 
 /** 256 modules × 2^3 key masks × 2^4 switch masks (§7.1). */
-export const STATE_BOUND = 256 * 2 ** 3 * 2 ** 4;
+export const STATE_BOUND = EXPLORATION_BOUND;
 
 export type CheckStatus = 'pass' | 'fail' | 'unknown' | 'not_applicable';
 

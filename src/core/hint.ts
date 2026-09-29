@@ -38,6 +38,24 @@ export function nextStep(
   // Engine states × passThrough masks (at most three passThrough rules).
   cap: number = STATE_BOUND * 8,
 ): Hint {
+  // Never advise walking into a guard while any other way wins: search
+  // without captures first, and only then with them.
+  if (compiled.patrols.length > 0) {
+    const safe = search(compiled, state, visitedModules, cap, false);
+    if (safe.kind === 'move' || safe.kind === 'at_goal' || safe.kind === 'rule_broken' || safe.kind === 'unknown') return safe;
+    const any = search(compiled, state, visitedModules, cap, true);
+    return any.kind === 'move' ? any : safe.kind === 'rule_blocked' ? safe : any;
+  }
+  return search(compiled, state, visitedModules, cap, true);
+}
+
+function search(
+  compiled: CompiledLevel,
+  state: GameState,
+  visitedModules: ReadonlySet<string>,
+  cap: number,
+  allowCapture: boolean,
+): Hint {
   if (state.moduleId === compiled.goal) {
     return goalRequirementViolated(compiled, state, visitedModules) ? { kind: 'rule_broken' } : { kind: 'at_goal' };
   }
@@ -69,9 +87,11 @@ export function nextStep(
     const node = queue[head]!;
     if (node.state.moduleId === compiled.goal) continue;
     for (const move of transitions(compiled, node.state)) {
+      if (!allowCapture && move.events.caught !== undefined) continue;
       const next: Node = {
         state: move.after,
-        passMask: markVisit(node.passMask, move.after.moduleId),
+        // Caught restarts the level: rule tracking starts over at the spawn.
+        passMask: move.events.caught !== undefined ? markVisit(0, move.after.moduleId) : markVisit(node.passMask, move.after.moduleId),
         first: node.first ?? move,
         depth: node.depth + 1,
       };

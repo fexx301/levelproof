@@ -1,4 +1,5 @@
-import { BOUNDS, CARDINALS, type Cardinal, type Door, type Level, type LevelModule } from '../../shared/schema.js';
+import { worldCycle } from './hazards.js';
+import { BOUNDS, CARDINALS, type Cardinal, type Door, type Level, type LevelModule, type Patrol } from '../../shared/schema.js';
 import { CATALOG_VERSION, GEOMETRY, dirDelta, opposite, portElevation, verticalSpan } from './catalog.js';
 import { revisionId } from './serialize.js';
 
@@ -33,6 +34,10 @@ export interface CompiledLevel {
   switchByModule: Map<string, string>;
   spawn: string;
   goal: string;
+  /** Turns until every hazard repeats (1 = no hazards, no Wait action). */
+  cycle: number;
+  /** Turn-based guards (§6.4), in level order. */
+  patrols: Patrol[];
 }
 
 /** Canonical identity of the shared edge between two modules. */
@@ -149,6 +154,8 @@ export function compileLevel(level: Level): CompiledLevel {
     switchBit,
     doorById,
     keyByModule,
+    cycle: worldCycle(level),
+    patrols: level.patrols ?? [],
     switchByModule,
     spawn: level.spawn,
     goal: level.goal,

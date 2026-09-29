@@ -86,6 +86,8 @@ function routeText(report: Report, check: 'requirements' | 'recovery'): string |
   const witness = report.checks[check].witness;
   if (witness === undefined) return null;
   const steps = witness.route.map((move) => {
+    if (move.events.caught !== undefined) return `caught by guard ${quote(move.events.caught)} at ${move.destination} (the level restarts)`;
+    if (move.action === 'wait') return `waits a turn at ${move.destination}`;
     const events = [
       move.events.collectedKey !== undefined ? `takes ${quote(move.events.collectedKey)}` : null,
       move.events.activatedSwitch !== undefined ? `presses ${quote(move.events.activatedSwitch)}` : null,

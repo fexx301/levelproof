@@ -1,5 +1,7 @@
+import { worldCycle } from './hazards.js';
 import {
   BOUNDS,
+  EXPLORATION_BOUND,
   GROUND_TILE_PROPS,
   levelSchema,
   operationSchema,
@@ -64,6 +66,12 @@ export function validateLevel(level: Level): string[] {
   for (const id of switchIds) claim(id, 'switch');
   for (const id of doorIds) claim(id, 'door');
   for (const prop of lvl.props ?? []) claim(prop.id, 'prop');
+  const patrolIds = new Set<string>();
+  for (const patrol of lvl.patrols ?? []) {
+    if (patrolIds.has(patrol.id)) errors.push(`Duplicate guard id "${patrol.id}".`);
+    patrolIds.add(patrol.id);
+    claim(patrol.id, 'guard');
+  }
   const requiredKeyIds = new Set<string>();
   for (const r of lvl.requirements) {
     if (r.type === 'collectBeforeGoal') {
@@ -123,6 +131,24 @@ export function validateLevel(level: Level): string[] {
     }
     if (c?.closesAfterSwitch !== undefined && !switchIds.has(c.closesAfterSwitch)) {
       errors.push(`Door "${d.id}" would seal on unknown switch "${c.closesAfterSwitch}".`);
+    }
+  }
+  for (const patrol of lvl.patrols ?? []) {
+    if (new Set(patrol.route).size !== patrol.route.length) errors.push(`Guard "${patrol.id}" visits a room twice; its route must be distinct rooms (it walks back and forth).`);
+    for (const moduleId of patrol.route) {
+      if (!moduleIds.has(moduleId)) errors.push(`Guard "${patrol.id}" walks through unknown module "${moduleId}".`);
+      if (moduleId === lvl.spawn || moduleId === lvl.goal) errors.push(`Guard "${patrol.id}" may not patrol the ${moduleId === lvl.spawn ? 'spawn' : 'goal'} ("${moduleId}").`);
+    }
+  }
+  // The world cycle and the exploration bound: hazards multiply the states,
+  // and every check must still explore all of them.
+  const cycle = worldCycle(lvl);
+  if (cycle > BOUNDS.maxCycle) {
+    errors.push(`The timed doors and guards repeat only every ${cycle} turns; the kit allows at most ${BOUNDS.maxCycle}. Use periods that share factors (2, 4; or 3, 6) or shorter guard routes.`);
+  } else if (cycle > 1) {
+    const worst = lvl.modules.length * 2 ** lvl.keys.length * 2 ** lvl.switches.length * cycle;
+    if (worst > EXPLORATION_BOUND) {
+      errors.push(`With guards and timed doors this level could reach ${worst} situations, over the checker's ${EXPLORATION_BOUND}; use fewer rooms, keys, or switches, or a shorter cycle.`);
     }
   }
   for (const r of lvl.requirements) {
@@ -187,6 +213,13 @@ export function validateLevel(level: Level): string[] {
       }
       if (doorEdges.has(key)) errors.push(`Edge "${d.a}"–"${d.b}" carries more than one door.`);
       doorEdges.add(key);
+    }
+    for (const patrol of lvl.patrols ?? []) {
+      for (let i = 1; i < patrol.route.length; i++) {
+        if (!connected.has(edgeKey(patrol.route[i - 1]!, patrol.route[i]!))) {
+          errors.push(`Guard "${patrol.id}" steps from "${patrol.route[i - 1]}" to "${patrol.route[i]}", which are not connected.`);
+        }
+      }
     }
   }
 
@@ -306,6 +339,20 @@ export function applyOperations(base: Level, operations: Operation[]): ApplyResu
         const index = draft.doors.findIndex((d) => d.id === op.id);
         if (index < 0) return fail(`Unknown door "${op.id}".`);
         draft.doors.splice(index, 1);
+        break;
+      }
+      case 'addPatrol': {
+        const patrols = draft.patrols ?? [];
+        if (patrols.some((p) => p.id === op.patrol.id)) return fail(`Guard "${op.patrol.id}" already exists.`);
+        draft.patrols = [...patrols, structuredClone(op.patrol)];
+        break;
+      }
+      case 'removePatrol': {
+        const patrols = draft.patrols ?? [];
+        if (!patrols.some((p) => p.id === op.id)) return fail(`Unknown guard "${op.id}".`);
+        const remaining = patrols.filter((p) => p.id !== op.id);
+        if (remaining.length > 0) draft.patrols = remaining;
+        else delete draft.patrols;
         break;
       }
       case 'setScenery': {

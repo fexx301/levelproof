@@ -113,7 +113,8 @@ export function buildFailureEvidence(level: Level, report: Report, check: Eviden
           const door = id === undefined ? undefined : level.doors.find((d) => d.conditions?.closesAfterSwitch === id);
           return id !== undefined && door !== undefined ? [`“${id}” (it closed “${door.id}”)`] : [];
         });
-      fact = `At move ${decisiveMoveIndex}, the route enters “${decisiveMove.destination}”; from that state no winning route remains.${earlierSeals.length > 0 ? ` Already pressed before then: ${earlierSeals.join(', ')}.` : ''}`;
+      const act = decisiveMove.action === 'wait' ? `waiting a turn at “${decisiveMove.destination}”` : `the route enters “${decisiveMove.destination}”`;
+      fact = `At move ${decisiveMoveIndex}, ${act}; from that state no winning route remains.${earlierSeals.length > 0 ? ` Already pressed before then: ${earlierSeals.join(', ')}.` : ''}`;
     }
   }
   const suggestedAction =

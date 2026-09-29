@@ -49,7 +49,7 @@ describe('golden fixture: the trap (§8.2)', () => {
       'bridge-landing',
     ]);
     expect(witness.route.at(-1)!.destination).toBe('vault-approach');
-    expect(witness.endState).toEqual({ moduleId: 'vault-approach', keyMask: 0, switchMask: 1 });
+    expect(witness.endState).toEqual({ moduleId: 'vault-approach', keyMask: 0, switchMask: 1, phase: 0 });
     expect(report.accepted).toBe(false);
     expect(report.internalError).toBeUndefined();
   });

@@ -207,16 +207,17 @@ function masksMatch(bits: Map<string, number>, mask: number, held: string[]): bo
 }
 
 function hintText(hint: PlayHint, placeName: (id: string) => string, intent: MoveIntent | undefined): string {
+  const stepText = (h: Extract<PlayHint, { direction: unknown }>): string =>
+    h.direction === 'wait'
+      ? 'wait one turn where you are (Space)'
+      : `go ${CARDINAL_NAMES[h.direction]}${intent === undefined ? '' : ` (${ARROWS[intent]})`} to ${placeName(h.destination)}`;
   switch (hint.kind) {
     case 'move': {
-      const key = intent === undefined ? '' : ` (${ARROWS[intent]})`;
       const rest = hint.movesToGoal === 1 ? 'That reaches the goal.' : `${hint.movesToGoal} moves from the goal on the shortest winning route.`;
-      return `Next: go ${CARDINAL_NAMES[hint.direction]}${key} to ${placeName(hint.destination)}. ${rest}`;
+      return `Next: ${stepText(hint)}. ${rest}`;
     }
-    case 'rule_blocked': {
-      const key = intent === undefined ? '' : ` (${ARROWS[intent]})`;
-      return `The goal is still reachable, but every remaining route breaks a design rule. Toward the goal: go ${CARDINAL_NAMES[hint.direction]}${key} to ${placeName(hint.destination)}. R restarts for a clean win.`;
-    }
+    case 'rule_blocked':
+      return `The goal is still reachable, but every remaining route breaks a design rule. Toward the goal: ${stepText(hint)}. R restarts for a clean win.`;
     case 'stranded':
       return 'No winning route remains from here — every continuation was checked. R restarts.';
     case 'rule_broken':

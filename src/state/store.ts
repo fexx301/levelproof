@@ -21,7 +21,7 @@ import { engineFindings } from '../core/engine-findings.js';
 import { summarizeChange } from '../core/operation-description.js';
 import { MAX_AUTO_REVISIONS, shouldAutoRevise } from '../core/revision-policy.js';
 import { reportScore } from '../core/report-score.js';
-import type { MoveRecord } from '../core/movement.js';
+import type { MoveAction, MoveRecord } from '../core/movement.js';
 import { validateRoute } from '../core/replay.js';
 import { decodeLevelShare, encodeLevelShare, revisionId } from '../core/serialize.js';
 import type { PreviewState } from '../core/preview.js';
@@ -384,7 +384,7 @@ interface GhostSlice {
 
 /** A play-mode hint as the panel shows it (computed by core/hint). */
 export type PlayHint =
-  | { kind: 'move' | 'rule_blocked'; direction: Cardinal; destination: string; movesToGoal: number }
+  | { kind: 'move' | 'rule_blocked'; direction: MoveAction; destination: string; movesToGoal: number }
   | { kind: 'at_goal' | 'rule_broken' | 'stranded' | 'unknown' };
 
 interface PlaySlice {

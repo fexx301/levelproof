@@ -75,7 +75,7 @@ describe('gallery scenes (§12 showcase levels)', () => {
 
   it('Twin Keys cannot reach gold first or skip the power room', () => {
     const c = compileLevel(twinKeysLevel);
-    const empty = { moduleId: 'east-walk', keyMask: 0, switchMask: 0 };
+    const empty = { moduleId: 'east-walk', keyMask: 0, switchMask: 0, phase: 0 };
     expect(step(c, empty, 'E')).toBeNull();
     expect(doorPassable(c, 'return-door', empty)).toBe(false);
     const silver = c.keyBit.get('silver-key')!;
@@ -91,7 +91,7 @@ describe('gallery scenes (§12 showcase levels)', () => {
 
   it('Overpass needs the upper relay; sealing the lower shortcut leaves a real descent', () => {
     const c = compileLevel(overpassLevel);
-    const state = { moduleId: 'west-loft', keyMask: c.keyBit.get('pass-key')!, switchMask: 0 };
+    const state = { moduleId: 'west-loft', keyMask: c.keyBit.get('pass-key')!, switchMask: 0, phase: 0 };
     expect(doorPassable(c, 'relay-exit', state)).toBe(false);
     expect(doorPassable(c, 'vault-shortcut', state)).toBe(false);
     const activated = { ...state, switchMask: c.switchBit.get('bridge-relay')! };
@@ -108,7 +108,7 @@ describe('gallery scenes (§12 showcase levels)', () => {
 
   it('Gauntlet requires both preparations, then seals behind the player without trapping them', () => {
     const c = compileLevel(gauntletLevel);
-    const base = { moduleId: 'vault-approach', keyMask: 0, switchMask: 0 };
+    const base = { moduleId: 'vault-approach', keyMask: 0, switchMask: 0, phase: 0 };
     const keyMask = c.keyBit.get('brass-key')!;
     const switchMask = c.switchBit.get('gate-primer')!;
     expect(step(c, { ...base, keyMask }, 'N')).toBeNull();
