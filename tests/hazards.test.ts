@@ -307,3 +307,44 @@ describe('cornered by a guard', () => {
     expect(engineFindings(level, report).join(' ')).toMatch(/Cornered: at alcove the guard "sentry"/);
   });
 });
+
+describe('guards and timed gates are part of the level', () => {
+  const withoutGuards = (): Level => {
+    const copy = structuredClone(sentryLevel);
+    delete copy.patrols;
+    return copy;
+  };
+  const withoutTimer = (): Level => {
+    const copy = structuredClone(sentryLevel);
+    copy.doors = copy.doors.map((door) => (door.id === 'drawbridge' ? { id: door.id, a: door.a, b: door.b } : door));
+    return copy;
+  };
+
+  it('count in its revision identity (and hazard-free levels keep theirs)', async () => {
+    const { revisionId } = await import('../src/core/serialize');
+    const ids = new Set([revisionId(sentryLevel), revisionId(withoutGuards()), revisionId(withoutTimer())]);
+    expect(ids.size).toBe(3);
+    const rerouted = structuredClone(sentryLevel);
+    rerouted.patrols = [{ id: 'sentry', route: ['well', 'yard-mid'] }];
+    expect(revisionId(rerouted)).not.toBe(revisionId(sentryLevel));
+  });
+
+  it('survive a share link', async () => {
+    const { decodeLevelShare, encodeLevelShare, revisionId } = await import('../src/core/serialize');
+    const decoded = decodeLevelShare(encodeLevelShare(sentryLevel));
+    expect(decoded?.patrols).toEqual(sentryLevel.patrols);
+    expect(decoded?.doors.find((door) => door.id === 'drawbridge')?.conditions?.cycle).toEqual({ period: 4, openTicks: 2 });
+    expect(revisionId(decoded!)).toBe(revisionId(sentryLevel));
+  });
+
+  it('survive a save and reload', async () => {
+    const { persistSavedScenes, readSavedScenes } = await import('../src/state/persistence');
+    let stored: string | null = null;
+    const storage = { getItem: () => stored, setItem: (_key: string, value: string) => { stored = value; } };
+    const record = { recordKey: 'sentry', id: 'sentry', name: 'Sentry', savedAt: 1, theme: null, promptHistory: [], status: 'accepted' as const, level: sentryLevel };
+    expect(persistSavedScenes(storage, [record]).ok).toBe(true);
+    const [loaded] = readSavedScenes(storage);
+    expect(loaded?.status).toBe('accepted');
+    expect(loaded?.status === 'accepted' ? loaded.level.patrols : null).toEqual(sentryLevel.patrols);
+  });
+});

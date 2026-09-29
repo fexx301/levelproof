@@ -48,6 +48,14 @@ function canonicalScenery(level: Level) {
   };
 }
 
+/** Guards appear only when present, so levels without hazards keep the
+ * exact revision identity they had before guards existed. A route's order
+ * is its beat, so it is kept as written. */
+function canonicalPatrols(level: Level) {
+  const patrols = [...(level.patrols ?? [])].sort(byId).map((p) => ({ id: p.id, route: [...p.route] }));
+  return patrols.length > 0 ? { patrols } : {};
+}
+
 export function canonicalJson(level: Level): string {
   const modules = [...level.modules].sort(byId).map(canonicalModule);
   const keys = [...level.keys].sort(byId).map(canonicalKey);
@@ -67,6 +75,7 @@ export function canonicalJson(level: Level): string {
     goal: level.goal,
     doors,
     requirements,
+    ...canonicalPatrols(level),
     ...canonicalScenery(level),
   });
 }
@@ -118,6 +127,7 @@ export function encodeLevelShare(level: Level): string {
     requirements: [...level.requirements]
       .sort((a, b) => (requirementId(a) < requirementId(b) ? -1 : requirementId(a) > requirementId(b) ? 1 : 0))
       .map(canonicalRequirement),
+    ...canonicalPatrols(level),
     ...canonicalScenery(level),
   });
   const b64 =
