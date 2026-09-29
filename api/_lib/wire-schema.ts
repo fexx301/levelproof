@@ -5,7 +5,7 @@
  * strict mode requires every property in `required`.
  */
 
-import { BOUNDS, ENVIRONMENTS, KEY_LOOKS, LIGHTINGS, PROP_KINDS, THEME_KEYS } from '../../shared/schema.js';
+import { BOUNDS, DOOR_CYCLE_PERIODS, ENVIRONMENTS, KEY_LOOKS, LIGHTINGS, PROP_KINDS, THEME_KEYS } from '../../shared/schema.js';
 
 const idJson = { type: 'string', pattern: '^[a-z][a-z0-9-]{1,31}$' } as const;
 const cellJson = { type: 'integer', minimum: 0, maximum: 15 } as const;
@@ -32,7 +32,7 @@ const moduleJson = {
 const conditionsJson = {
   type: 'object',
   additionalProperties: false,
-  required: ['requiresKey', 'requiresKeys', 'requiresSwitch', 'closesAfterSwitch'],
+  required: ['requiresKey', 'requiresKeys', 'requiresSwitch', 'closesAfterSwitch', 'cycle'],
   properties: {
     requiresKey: { type: ['string', 'null'], pattern: '^[a-z][a-z0-9-]{1,31}$' },
     requiresKeys: {
@@ -42,6 +42,21 @@ const conditionsJson = {
     },
     requiresSwitch: { type: ['string', 'null'], pattern: '^[a-z][a-z0-9-]{1,31}$' },
     closesAfterSwitch: { type: ['string', 'null'], pattern: '^[a-z][a-z0-9-]{1,31}$' },
+    // A timed gate (turn-based): open while (turn mod period) < openTicks.
+    cycle: {
+      anyOf: [
+        { type: 'null' },
+        {
+          type: 'object',
+          additionalProperties: false,
+          required: ['period', 'openTicks'],
+          properties: {
+            period: { type: 'integer', enum: [...DOOR_CYCLE_PERIODS] },
+            openTicks: { type: 'integer', minimum: 1, maximum: 5 },
+          },
+        },
+      ],
+    },
   },
 } as const;
 
@@ -189,6 +204,26 @@ const operationJson = {
       additionalProperties: false,
       required: ['kind', 'id'],
       properties: { kind: { type: 'string', enum: ['removeDoor'] }, id: idJson },
+    },
+    {
+      type: 'object',
+      additionalProperties: false,
+      required: ['kind', 'patrol'],
+      properties: {
+        kind: { type: 'string', enum: ['addPatrol'] },
+        patrol: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['id', 'route'],
+          properties: { id: idJson, route: { type: 'array', items: idJson, minItems: 2, maxItems: 4 } },
+        },
+      },
+    },
+    {
+      type: 'object',
+      additionalProperties: false,
+      required: ['kind', 'id'],
+      properties: { kind: { type: 'string', enum: ['removePatrol'] }, id: idJson },
     },
     {
       type: 'object',

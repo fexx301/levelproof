@@ -90,6 +90,7 @@ export function operationLabel(operation: unknown): string {
   const kind = field(operation, 'kind');
   const module = operation !== null && typeof operation === 'object' ? (operation as Record<string, unknown>).module : undefined;
   const door = operation !== null && typeof operation === 'object' ? (operation as Record<string, unknown>).door : undefined;
+  const patrol = operation !== null && typeof operation === 'object' ? (operation as Record<string, unknown>).patrol : undefined;
   switch (kind) {
     case 'addModule':
       return `+ ${field(module, 'template') ?? 'platform'}: ${human(field(module, 'label') ?? field(module, 'id'))}`;
@@ -117,6 +118,10 @@ export function operationLabel(operation: unknown): string {
       return `→ rules of ${human(field(operation, 'id'))}`;
     case 'removeDoor':
       return `− door: ${human(field(operation, 'id'))}`;
+    case 'addPatrol':
+      return `+ guard: ${human(field(patrol, 'id'))}`;
+    case 'removePatrol':
+      return `− guard: ${human(field(operation, 'id'))}`;
     case 'setScenery':
       return `✦ scenery: ${[field(operation, 'environment'), field(operation, 'lighting'), field(operation, 'architecture')].filter(Boolean).join(', ')}`;
     case 'addProp':

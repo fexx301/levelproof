@@ -3,7 +3,7 @@ import type { Level, LevelModule } from '../../shared/schema.js';
 /** A location marker for a before/after edit preview. */
 export interface PreviewMarker {
   phase: 'old' | 'fresh';
-  kind: 'module' | 'item' | 'door' | 'spawn' | 'goal' | 'prop';
+  kind: 'module' | 'item' | 'door' | 'spawn' | 'goal' | 'prop' | 'guard';
   id: string;
   /** Host module; empty for props, which are placed by grid cell instead. */
   moduleId: string;
@@ -116,6 +116,19 @@ export function previewDiff(before: Level, after: Level): PreviewMarker[] {
   }
   for (const [id, prop] of afterProps) {
     if (!beforeProps.has(id)) markers.push({ phase: 'fresh', kind: 'prop', id, moduleId: '', cell: { x: prop.x, z: prop.z } });
+  }
+
+  // A guard is marked on every room of its beat, before and after.
+  const beforeGuards = new Map((before.patrols ?? []).map((patrol) => [patrol.id, patrol] as const));
+  const afterGuards = new Map((after.patrols ?? []).map((patrol) => [patrol.id, patrol] as const));
+  const sameBeat = (a: { route: string[] }, b: { route: string[] } | undefined) => b !== undefined && a.route.join('|') === b.route.join('|');
+  for (const [id, patrol] of beforeGuards) {
+    if (sameBeat(patrol, afterGuards.get(id))) continue;
+    for (const moduleId of patrol.route) markers.push({ phase: 'old', kind: 'guard', id, moduleId });
+  }
+  for (const [id, patrol] of afterGuards) {
+    if (sameBeat(patrol, beforeGuards.get(id))) continue;
+    for (const moduleId of patrol.route) markers.push({ phase: 'fresh', kind: 'guard', id, moduleId });
   }
 
   return markers;

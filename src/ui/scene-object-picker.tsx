@@ -4,7 +4,7 @@ import { useApp } from '../state/store.js';
 interface SceneEntity {
   id: string;
   label: string;
-  kind: 'floor' | 'bridge' | 'ramp' | 'key' | 'switch' | 'door';
+  kind: 'floor' | 'bridge' | 'ramp' | 'key' | 'switch' | 'door' | 'guard';
 }
 
 function entitiesIn(level: Level): SceneEntity[] {
@@ -17,6 +17,7 @@ function entitiesIn(level: Level): SceneEntity[] {
     ...level.keys.map((key) => ({ id: key.id, label: key.id, kind: 'key' as const })),
     ...level.switches.map((item) => ({ id: item.id, label: item.id, kind: 'switch' as const })),
     ...level.doors.map((door) => ({ id: door.id, label: door.id, kind: 'door' as const })),
+    ...(level.patrols ?? []).map((patrol) => ({ id: patrol.id, label: patrol.id, kind: 'guard' as const })),
   ];
   return entities.sort((a, b) => a.kind.localeCompare(b.kind) || a.label.localeCompare(b.label));
 }
@@ -30,7 +31,7 @@ export function SceneObjectPicker({ level }: { level: Level }) {
   return (
     <details className="scene-object-picker">
       <summary>Select an object by name</summary>
-      <p className="panel-note">Choose up to 8 floors, keys, switches, or doors for your next prompt.</p>
+      <p className="panel-note">Choose up to 8 floors, keys, switches, doors, or guards for your next prompt.</p>
       <div className="scene-object-list" role="group" aria-label="Scene objects">
         {entities.map((entity) => {
           const selected = selection.includes(entity.id);

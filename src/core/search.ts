@@ -255,14 +255,16 @@ function protectedFootprint(level: Level, id: string): string | null {
   const module = moduleById(id);
   if (module !== undefined) {
     // What the author sees at a kept module also includes the doors on its
-    // edges, the items in it, and whether it is the start or the goal — so an
-    // added door, item, or moved spawn/goal counts as changing it.
+    // edges, the items in it, the guards whose beat crosses it, and whether
+    // it is the start or the goal — so an added door, item, guard, or moved
+    // spawn/goal counts as changing it.
     const doors = level.doors
       .filter((door) => door.a === id || door.b === id)
       .map((door) => [door.id, [door.a, door.b].sort(), door.conditions ?? {}])
       .sort((x, y) => String(x[0]).localeCompare(String(y[0])));
     const items = [...level.keys, ...level.switches].filter((item) => item.moduleId === id).map((item) => item.id).sort();
-    return JSON.stringify(['module', place(id), [...module.ports].sort(), module.label ?? null, doors, items, level.spawn === id, level.goal === id]);
+    const guards = (level.patrols ?? []).filter((patrol) => patrol.route.includes(id)).map((patrol) => patrol.id).sort();
+    return JSON.stringify(['module', place(id), [...module.ports].sort(), module.label ?? null, doors, items, level.spawn === id, level.goal === id, guards]);
   }
   const key = level.keys.find((k) => k.id === id);
   if (key !== undefined) return JSON.stringify(['key', key.moduleId, place(key.moduleId), key.look ?? null]);
@@ -272,6 +274,8 @@ function protectedFootprint(level: Level, id: string): string | null {
   if (door !== undefined) return JSON.stringify(['door', door.a, door.b, door.conditions ?? {}, place(door.a), place(door.b)]);
   const prop = level.props?.find((p) => p.id === id);
   if (prop !== undefined) return JSON.stringify(['prop', prop.prop, prop.x, prop.z]);
+  const patrol = level.patrols?.find((p) => p.id === id);
+  if (patrol !== undefined) return JSON.stringify(['guard', patrol.route, patrol.route.map(place)]);
   return null;
 }
 
@@ -292,7 +296,7 @@ export function touchesProtected(operations: Operation[], protectedIds: Set<stri
     ) {
       if (protectedIds.has(op.id)) return true;
     }
-    if (op.kind === 'setDoorConditions' || op.kind === 'removeDoor') {
+    if (op.kind === 'setDoorConditions' || op.kind === 'removeDoor' || op.kind === 'removePatrol') {
       if (protectedIds.has(op.id)) return true;
     }
     if (op.kind === 'moveProp' || op.kind === 'removeProp' || op.kind === 'setKeyLook') {

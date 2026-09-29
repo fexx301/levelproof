@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Level, LevelModule } from '../shared/schema';
+import type { Level, LevelModule, Operation } from '../shared/schema';
 import { caughtBy, hasHazards, patrolPeriod, patrolPosition, worldCycle } from '../src/core/hazards';
 import { goalReachableStates, nextStep } from '../src/core/hint';
 import { applyOperations, validateLevel } from '../src/core/level';
@@ -226,5 +226,61 @@ describe('guards never hide a trap', () => {
 
   it('the Sentry stays accepted: nobody there depends on being caught', () => {
     expect(verify(sentryLevel).checks.recovery.status).toBe('pass');
+  });
+});
+
+describe('the AI can write hazards', () => {
+  it('accepts guards and timed gates through the wire format and labels them while streaming', async () => {
+    const { normalizeWirePayload, compileResultSchema } = await import('../shared/compile-result');
+    const { compileResultJsonSchema } = await import('../api/_lib/wire-schema');
+    const { operationLabel } = await import('../shared/stream-progress');
+    const raw = JSON.stringify({
+      type: 'patch',
+      rationale: 'A sentry walks the hall; the drawbridge opens every other turn.',
+      assumptions: [],
+      story: null,
+      operations: [
+        { kind: 'addPatrol', patrol: { id: 'sentry', route: ['hall-c', 'alcove'] } },
+        { kind: 'setDoorConditions', id: 'drawbridge', conditions: { requiresKey: null, requiresKeys: null, requiresSwitch: null, closesAfterSwitch: null, cycle: { period: 2, openTicks: 1 } } },
+        { kind: 'removePatrol', id: 'old-guard' },
+      ],
+    });
+    const parsed = compileResultSchema.safeParse(normalizeWirePayload(raw));
+    expect(parsed.success).toBe(true);
+    const wire = JSON.stringify(compileResultJsonSchema);
+    expect(wire).toContain('"addPatrol"');
+    expect(wire).toContain('"removePatrol"');
+    expect(wire).toContain('"openTicks"');
+    expect(operationLabel({ kind: 'addPatrol', patrol: { id: 'night-watch', route: [] } })).toBe('+ guard: night watch');
+  });
+
+  it('tells the model what hazards are, and that clocks and chasing are still out', async () => {
+    const { buildSystemPrompt, sceneSummary } = await import('../api/_lib/prompt');
+    const prompt = buildSystemPrompt(sentryLevel, 'rev');
+    expect(prompt).toContain('TURN-BASED HAZARDS');
+    expect(prompt).toContain('"kind":"addPatrol"');
+    expect(prompt).toContain('real-time clocks or countdowns');
+    expect(sceneSummary(sentryLevel)).toContain('"guards"');
+    expect(sceneSummary(baselineLevel)).not.toContain('"guards"');
+  });
+
+  it('keeps kept things: a kept guard, and a kept room a new guard would walk through', async () => {
+    const { touchesProtected } = await import('../src/core/search');
+    expect(touchesProtected([{ kind: 'removePatrol', id: 'sentry' }], new Set(['sentry']), sentryLevel)).toBe(true);
+    expect(touchesProtected([{ kind: 'setModuleLabel', id: 'treasury', label: 'vault' }], new Set(['sentry']), sentryLevel)).toBe(false);
+    const guard: Operation = { kind: 'addPatrol', patrol: { id: 'sentry', route: ['hall-c', 'alcove'] } };
+    expect(touchesProtected([guard], new Set(['alcove']), corridor())).toBe(true);
+    expect(touchesProtected([guard], new Set(['hall-e']), corridor())).toBe(false);
+  });
+
+  it('marks a new guard on every room of its beat in the preview', async () => {
+    const { previewDiff } = await import('../src/render/preview-diff');
+    const added = applyOperations(corridor(), [{ kind: 'addPatrol', patrol: { id: 'sentry', route: ['hall-c', 'alcove'] } }]);
+    expect(added.ok).toBe(true);
+    if (!added.ok) return;
+    expect(previewDiff(corridor(), added.level).filter((marker) => marker.kind === 'guard')).toEqual([
+      { phase: 'fresh', kind: 'guard', id: 'sentry', moduleId: 'hall-c' },
+      { phase: 'fresh', kind: 'guard', id: 'sentry', moduleId: 'alcove' },
+    ]);
   });
 });
