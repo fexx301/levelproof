@@ -123,7 +123,9 @@ On a failing draft you get two kinds of repair:
 
 The model never emits raw scene JSON. It composes typed operations against an
 authoritative scene summary — add/move/remove modules (including bridges
-directly over lower corridors), place keys and switches, set door conditions
+directly over lower corridors), lay out whole areas and corridors in one step
+(a 4 × 4 courtyard, an eight-room gallery — so “make the biggest level you can”
+comes back as a 70-room world in about 12 seconds, still fully checked), place keys and switches, set door conditions
 (`requiresKey`, `requiresKeys` — every listed key — `requiresSwitch`,
 `closesAfterSwitch`, and `cycle` for timed gates), add or remove guards with
 a patrol route, move the spawn or goal, rename places, set scenery,

@@ -141,6 +141,19 @@ today's production). Spend for this whole improvement pass, every live call
 including probes, recordings, and a local prewarm test: about $1.8 (OpenRouter
 reported costs).
 
+## Sep 29 — big worlds (prompt-15: areas and corridors)
+
+Four explicit big-world prompts (graded: accepted and 25+ rooms). With the
+operation limit raised to 64 and no layout operations: 23-25 rooms in
+12-21 s, and “an enormous jungle temple complex…” timed out twice. With
+`addArea` / `addCorridor` (limit 40): “make the biggest level you can” 37 rooms
+in 27 operations (18.6 s) and, in the build regression, 74 rooms in 12 s; a
+city district 23 rooms in 24 operations (10.9 s); the jungle temple 24
+operations and 12 s in a diagnostic run, one timeout in another. The 18
+ordinary build prompts on prompt-15: 13/14 pass before the run stopped on an
+unreported cost (the failure, a Minecraft mine, passed in the previous run).
+Spend for this work about $0.35 (two calls reported no cost; estimated).
+
 ## Sep 29 — hazards (prompt-13/14) and the judge battery on the new prompt
 
 The 40 original judge prompts on the hazard-aware prompt (cache off, same

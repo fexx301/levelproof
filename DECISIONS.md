@@ -2,6 +2,31 @@
 
 Build-window decisions and measured evidence, newest first. Dates are 2026.
 
+## Sep 29 (bigger worlds — areas and corridors)
+
+- **Where the limit really was.** Not the checker (256 rooms, 32,768 states,
+  ~140 ms) but the AI's operation limit: “make the biggest level you can”
+  stopped at 18 rooms and 32 operations; most builds were 7-11 rooms.
+- **Tried first, rejected on evidence:** raising the limit to 64. Big builds
+  then ran 12-21 s, and one prompt (“an enormous jungle temple…”) timed out
+  at 45 s repeatedly — the fallback then has seconds left, so a judge would
+  wait 52 s for an error. Production's prompt answered the same request in
+  14 s, so the long outputs were the cause.
+- **Chosen: fewer, bigger operations.** `addArea` lays out a width × depth
+  block of connected rooms (named id-col-row); `addCorridor` runs a straight
+  line of rooms from an existing room, opening it and joining whatever it
+  reaches. Laid-out rooms open onto neighbours that open toward them,
+  independent of operation order. The limit is 40. Measured: the biggest
+  level 37 and 74 rooms (27 operations, 12-19 s), a city district 23 rooms
+  in 11 s, all accepted; the jungle temple built in 12 s with three areas
+  once and timed out once (intermittent). Ordinary builds unchanged in size
+  (4-17 rooms) and 13/14 passed.
+- **Scope:** only explicit big/huge/“biggest” requests are steered to 25-40
+  rooms; default builds stay 8-14 and adventure chapters are unchanged.
+- **Rendering:** a hand-built 72-room world (20 operations) frames fully in
+  the overview; under software GL it renders at 3.7 fps against the vault's
+  4.8 (about 700 more draw calls) — real-device measurement is week 4's job.
+
 ## Sep 29 (moving hazards — guards and timed gates, still exhaustive)
 
 - **Engine**: the state gains `phase`, the turn within the world's cycle;

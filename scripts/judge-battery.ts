@@ -191,10 +191,8 @@ try {
     const { outcome, costs, rounds } = await compileWithRevision(process.env, { level: base, prompt: testCase.prompt }, () =>
       budget.ensureCanCall(testCase.prompt.slice(0, 30)),
     );
-    // Say what happened before recording cost: an unknown cost stops the run.
+    // Report the case before recording its cost: an unknown cost stops the run.
     const attempts = outcome.attempts.map((attempt) => `${attempt.model.split('/').at(-1)}:${attempt.outcome}`).join(', ');
-    if (costs.some((cost) => cost === null)) console.log(`        attempts: ${attempts} · ${Math.round(performance.now() - started)} ms · error ${outcome.error ?? '-'}`);
-    for (const cost of costs) budget.record(cost, testCase.prompt.slice(0, 30));
     const revised = rounds > 0 ? ` (revised ×${rounds})` : '';
     const after = outcome.result === null ? `failed: ${outcome.error} ${outcome.providerError ?? ''}` : applyResult(base, outcome.result);
     const ms = Math.round(performance.now() - started);
@@ -202,6 +200,8 @@ try {
     const { verdict, note } = grade(testCase, base, outcome.result, after);
     tally[verdict] += 1;
     console.log(`${verdict.padEnd(6)} ${String(ms).padStart(6)} ms [${testCase.base}/${testCase.expect}] ${testCase.prompt.slice(0, 60)}${revised}\n        ${note}\n        “${said(outcome.result)}”`);
+    if (costs.some((cost) => cost === null)) console.log(`        attempts: ${attempts} · cost not reported for one call`);
+    for (const cost of costs) budget.record(cost, testCase.prompt.slice(0, 30));
   }
   latencies.sort((a, b) => a - b);
   console.log(`\nPASS ${tally.PASS} · FAIL ${tally.FAIL} · REVIEW ${tally.REVIEW} · median ${latencies[Math.floor(latencies.length / 2)]} ms · max ${latencies.at(-1)} ms`);
