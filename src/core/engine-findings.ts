@@ -40,6 +40,18 @@ function reachableStates(level: Level): Map<string, GameState[]> {
   return byModule;
 }
 
+/** When guards alone make the goal unreachable, say so and how to fix it. */
+function guardFindings(level: Level): string[] {
+  const patrols = level.patrols ?? [];
+  if (patrols.length === 0) return [];
+  const withoutGuards: Level = { ...level };
+  delete withoutGuards.patrols;
+  if (!reachableStates(withoutGuards).has(level.goal)) return [];
+  return [
+    `Without the guards (${patrols.map((patrol) => quote(patrol.id)).join(', ')}) the goal can be reached, so a guard blocks the only way through. A guard cannot be passed in a one-wide passage: add a side room OFF its beat, next to a room on the beat, where the player can wait while it goes by — or move the beat off the only path.`,
+  ];
+}
+
 function unreachableFindings(level: Level): string[] {
   const compiled = compileLevel(level);
   const reachable = reachableStates(level);
@@ -103,6 +115,7 @@ export function engineFindings(level: Level, report: Report): string[] {
   const findings: string[] = [];
   if (report.checks.solution.status === 'fail') {
     findings.push(`The level cannot be won: ${report.checks.solution.explanation.replace(/^No winning route:\s*/, '')}`);
+    findings.push(...guardFindings(level));
     findings.push(...unreachableFindings(level));
   }
   if (report.checks.requirements.status === 'fail') {

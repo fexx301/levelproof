@@ -113,9 +113,15 @@ describe('guards', () => {
     expect(hint.kind === 'move' ? hint.move.action : null).toBe('wait');
   });
 
-  it('a guard in a one-wide corridor cannot be passed — the engine says so', () => {
+  it('a guard in a one-wide corridor cannot be passed — the engine says so, and why', () => {
     const blocked = corridor({ patrols: [{ id: 'sentry', route: ['hall-c', 'hall-d'] }] });
-    expect(verify(blocked).checks.solution.status).toBe('fail');
+    const report = verify(blocked);
+    expect(report.checks.solution.status).toBe('fail');
+    expect(engineFindings(blocked, report).join(' ')).toMatch(/Without the guards \("sentry"\) the goal can be reached/);
+    // A level that is unwinnable for other reasons is not blamed on its guard.
+    const walled = corridor({ patrols: [{ id: 'sentry', route: ['hall-c', 'alcove'] }] });
+    walled.modules = walled.modules.map((m) => (m.id === 'hall-e' ? { ...m, ports: [] } : m));
+    expect(engineFindings(walled, verify(walled)).join(' ')).not.toMatch(/Without the guards/);
   });
 
   it('is added and removed by operations', () => {
