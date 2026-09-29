@@ -37,7 +37,30 @@ All conditions are judged against the pre-move state.
 
 ## State and movement
 
-A state is `(moduleId, keyMask, switchMask)` — bounded at 32,768 states.
+A state is `(moduleId, keyMask, switchMask, phase)` — bounded at 32,768
+states. `phase` is the turn within the world's cycle and is always 0 in a
+level without hazards (so those levels behave exactly as before; a golden
+test records every fixture's engine output to prove it).
+
+### Turn-based hazards
+
+- Every move, and the **wait** action (offered only when the cycle is longer
+  than one turn), is one turn: `phase' = (phase + 1) mod cycle`.
+- A **timed gate** is a door condition `cycle { period ∈ {2,3,4,6},
+  openTicks }`: open while `phase mod period < openTicks`, judged on the
+  pre-move phase like every other condition.
+- A **guard** walks its route (2–4 connected, distinct rooms, never the spawn
+  or goal) back and forth, one room per turn: period `2 × (length − 1)`. Its
+  position depends only on the phase, never on the player.
+- **Capture**: ending a turn in the guard's room, or trading places with it.
+  The move's result is the initial state (the level restarts) and the move
+  records `caught`.
+- The **cycle** is the least common multiple of all gate and guard periods
+  (at most 12); validation rejects a level whose worst case — rooms × key
+  sets × switch sets × cycle — exceeds 32,768, so the check stays exhaustive.
+- **Recovery ignores capture edges**: a restart is never a way out. A state
+  from which every action gets the player caught is reported as *cornered*.
+  Hints search for a capture-free route first.
 One move: validate adjacency and door conditions against the pre-move
 state, cross, arrive, collect a key or activate a switch, then recognize
 the goal. Moves are catalog-owned polylines (center → shared port →

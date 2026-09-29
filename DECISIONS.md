@@ -2,6 +2,43 @@
 
 Build-window decisions and measured evidence, newest first. Dates are 2026.
 
+## Sep 29 (moving hazards — guards and timed gates, still exhaustive)
+
+- **Engine**: the state gains `phase`, the turn within the world's cycle;
+  a wait action exists only in levels with hazards. Timed gates open on a
+  fixed schedule and guards walk fixed beats, both functions of the phase
+  alone, so the state space stays finite and the three checks stay
+  exhaustive. Validation bounds the worst case (rooms × key sets × switch
+  sets × cycle ≤ 32,768; cycle ≤ 12). An engine-lock golden test recorded
+  every fixture's full engine output before the change; it is unchanged.
+- **Capture restarts the level** (the move's result is the initial state).
+  Recovery leaves capture edges out: otherwise any guard that can reach a
+  sealed room would make a trap look safe. Consequence, accepted
+  deliberately: a spot where a guard catches the player whatever they do
+  (cornered) is a dead end, so in an accepted world every capture was
+  avoidable. The checker names it ("cornered") and the revision findings say
+  how to fix it.
+- **The Sentry** (hand-built, not AI): a key on a watchtower, a sentry
+  between the yard and the well, a drawbridge down two turns in four. The
+  yard is a tree, so no walk changes the turn parity: the shortest win must
+  wait once. It gives the demo a hazard level that does not depend on the
+  model.
+- **On screen**: guards are the adventurer in crimson livery, walking in
+  step with each move (the world is told when a turn starts, not only when
+  it lands); red rings mark next-turn positions; gates are amber with a pip
+  per turn. Wait is a whole turn (button or Space). A capture holds a beat,
+  then resets. Guards are pickable, keepable, and shown in previews.
+- **AI**: prompt-13 describes guards (`addPatrol`, `removePatrol`) and timed
+  gates (door `cycle`), with the passing rule (a side room off the beat) and
+  the no-cornering rule; real-time clocks and chasing enemies stay
+  unsupported, and a monster that only stands watch is still scenery.
+  adventure-3 counts waits in the band and offers guards and drawbridges as
+  twists. Measured (six new hazard prompts, production model): first run
+  4/6, both failures instructive (a clarification about a door that did not
+  exist; a guard routed into a reachable dead end — the prompt had suggested
+  it); after fixing the prompt and findings, 5/5 builds accepted plus the
+  same reasonable clarification.
+
 ## Sep 29 (first screen and visual leap)
 
 - **Welcome**: fresh visitors land on "Describe a world" over a slowly

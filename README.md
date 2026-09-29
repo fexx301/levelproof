@@ -53,6 +53,17 @@ the next move of a shortest winning route from exactly where you stand, and
 the moment you walk into a dead end the panel says so — even while moves
 remain — because every continuation has already been explored.
 
+**Guards and timed gates — still proven.** Worlds can have guards who pace a
+fixed beat, one room per turn, and gates that open on a schedule (the
+drawbridge is down two turns in four). Every move is a turn, and **Wait a
+turn** (Space) lets you let a guard go by. A red ring marks where each guard
+steps next; pips on a gate's lintel show its schedule. Walk into a guard (or
+trade places with one) and you are caught: back to the start, empty-handed.
+The checker explores every position *at every turn of the cycle*, so the same
+three answers still hold — and it is stricter: a spot where a guard would
+catch you whatever you did counts as getting stuck, so in an accepted world
+**every capture was avoidable**. Try **The Sentry** in the scene list.
+
 **An endless adventure the engine keeps honest.** Win a level and press
 **Continue the adventure** (*Surprise me*, *Harder*, *Easier*, or say where
 next). The AI writes the next chapter — a new world that follows the story so
@@ -114,14 +125,15 @@ The model never emits raw scene JSON. It composes typed operations against an
 authoritative scene summary — add/move/remove modules (including bridges
 directly over lower corridors), place keys and switches, set door conditions
 (`requiresKey`, `requiresKeys` — every listed key — `requiresSwitch`,
-`closesAfterSwitch`), move the spawn or goal, rename places, set scenery,
+`closesAfterSwitch`, and `cycle` for timed gates), add or remove guards with
+a patrol route, move the spawn or goal, rename places, set scenery,
 place landmark props, and propose `collectBeforeGoal`, `passThrough`, and
 `switchNecessary` design requirements (which you approve — the model cannot
 weaken your rules). Ambiguous requests come back as one clarifying question;
 mechanics the kit cannot simulate come back as an honest `unsupported` card
 with alternatives.
 
-Click anything in the scene — a floor, key, switch, door, or landmark — and
+Click anything in the scene — a floor, key, switch, door, guard, or landmark — and
 describe the change relative to it (“move this behind that door”). Select
 something you care about and press **Keep these**: proposals and repairs that
 would change it are refused.
@@ -138,7 +150,11 @@ would change it are refused.
 
 Exploration is exhaustive. The kit's limits (256 modules × 3 keys × 4
 switches) cap the state space at 32,768 states, and the verifier's bound is
-exactly that, so every check explores every state; the *check incomplete*
+exactly that, so every check explores every state. Guards and timed gates
+add the turn within the world's cycle to the state (the cycle is at most 12
+turns), and a level is only valid if rooms × key sets × switch sets × cycle
+still fits the same bound — so hazard worlds are exhaustive too. Being
+caught restarts the level, and a restart never counts as a way out; the *check incomplete*
 outcome exists only as a safeguard if the limits ever grow. Player, ghost, verifier, and repair search all call the same core
 `step()` over the same catalog polylines; a witness only plays back if it
 replays through that engine from the real initial state.

@@ -168,7 +168,10 @@ try {
   console.log(`judge battery on ${process.env.LLM_MODEL} (fallback ${process.env.LLM_FALLBACK_MODEL})`);
   const tally = { PASS: 0, FAIL: 0, REVIEW: 0 };
   const latencies: number[] = [];
-  for (const testCase of JUDGE_BATTERY.filter((c) => (only === '' || c.prompt.includes(only)) && (expected === '' || c.expect === expected))) {
+  // --expect hazard runs one kind; --expect '!hazard' runs every other kind.
+  const kindMatches = (kind: Expect): boolean =>
+    expected === '' || (expected.startsWith('!') ? kind !== expected.slice(1) : kind === expected);
+  for (const testCase of JUDGE_BATTERY.filter((c) => (only === '' || c.prompt.includes(only)) && kindMatches(c.expect))) {
     const base = testCase.base === 'blank' ? blankCanvasLevel : vaultEmptyLevel;
     resetCache();
     const started = performance.now();
