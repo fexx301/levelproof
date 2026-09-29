@@ -141,6 +141,23 @@ today's production). Spend for this whole improvement pass, every live call
 including probes, recordings, and a local prewarm test: about $1.8 (OpenRouter
 reported costs).
 
+## Sep 29 — hazards (prompt-13/14) and the judge battery on the new prompt
+
+The 40 original judge prompts on the hazard-aware prompt (cache off, same
+revision loop, `google/gemini-3.8-flash`): **25/26 must-pass** (22 builds and
+edits, 4 declines) — the one failure an unwinnable “zelda style dungeon” after
+two revisions, the kind of one-off the Sep 26 run had with “an escape room”.
+All 14 judgement calls reasonable; “add an enemy that chases you” is now
+declined with a turn-based guard offered instead, and the 30-second timer is
+still declined. Median 7.9 s. Spend $0.31.
+
+Six new hazard prompts (guards and timed gates, graded on a real hazard the
+engine accepts and, for new worlds, 8+ rooms), four runs while iterating on
+the prompt and the engine's findings: 12 of 16 builds accepted. A timed
+“vault door” on a scene with no door drew a clarifying question every time
+(reasonable). Hazard spend across the runs about $0.33 (one run ended at
+$0.109 against a $0.10 cap — a single request crossed it).
+
 ## Sep 26 update — judge-prompt battery (unseen prompts)
 
 `scripts/judge-battery.ts`: 40 prompts the prompt was never tuned on, run

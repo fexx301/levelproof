@@ -59,3 +59,32 @@ describe('adventure refusals', () => {
     expect(state.acceptedLevel).toBe(before);
   });
 });
+
+describe('adventure fallbacks', () => {
+  it('dismisses a guard that alone makes a chapter unfair, rather than failing the chapter', async () => {
+    const blockedCorridor = {
+      type: 'patch',
+      rationale: 'a guarded hall',
+      assumptions: [],
+      operations: [
+        { kind: 'addModule', module: { id: 'mid-hall', template: 'flat', x: 7, z: 5, h: 0, ports: ['S', 'N'] } },
+        { kind: 'addModule', module: { id: 'end-hall', template: 'flat', x: 7, z: 4, h: 0, ports: ['S'] } },
+        { kind: 'setModulePorts', id: 'goal-pad', ports: ['S', 'N'] },
+        { kind: 'moveGoal', moduleId: 'end-hall' },
+        // A guard pacing the only corridor: nobody can pass it.
+        { kind: 'addPatrol', patrol: { id: 'sentry', route: ['start-walk', 'goal-pad'] } },
+      ],
+      story: { title: 'The Guarded Hall', narration: 'A long hall.' },
+    };
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as { level: Level };
+      return Response.json({ result: blockedCorridor, baseRevision: revisionId(body.level), cached: false, attempts: [], totalCostUsd: 0.001, generationCostUsd: 0.001 });
+    }));
+    await continueAdventure('Surprise me.', 'steady');
+    const state = useApp.getState();
+    expect(state.adventure.error).toBeNull();
+    expect(state.adventure.chapters.at(-1)!.title).toBe('The Guarded Hall');
+    expect(state.acceptedLevel.goal).toBe('end-hall');
+    expect(state.acceptedLevel.patrols).toBeUndefined();
+  });
+});

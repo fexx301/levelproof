@@ -198,6 +198,22 @@ async function writeChapter(prompt: string, adventure: AdventureContext, chapter
       if (repaired.ok) chosen = { level: repaired.level, story: best.story, measure: measureChapter(repaired.level) };
     }
   }
+  // Last resort, chapters only (the editor shows the failure instead): a
+  // guard that alone makes the chapter unfair — blocking the only way, or
+  // cornering the player — is dismissed, one guard first, then all of them.
+  if (chosen === null && best !== null && (best.level.patrols?.length ?? 0) > 0) {
+    const patrols = best.level.patrols ?? [];
+    const dismissals = [...patrols.map((patrol) => [patrol.id]), ...(patrols.length > 1 ? [patrols.map((patrol) => patrol.id)] : [])];
+    for (const ids of dismissals) {
+      const dismissed = applyOperations(best.level, ids.map((id) => ({ kind: 'removePatrol' as const, id })));
+      if (!dismissed.ok) continue;
+      const measure = measureChapter(dismissed.level);
+      if (measure.accepted) {
+        chosen = { level: dismissed.level, story: best.story, measure };
+        break;
+      }
+    }
+  }
   if (chosen === null || !chosen.measure.accepted) {
     stop('The AI could not build a fair chapter this time — nothing was changed. Try again, or pick another direction.');
     return;

@@ -38,6 +38,29 @@ Build-window decisions and measured evidence, newest first. Dates are 2026.
   exist; a guard routed into a reachable dead end — the prompt had suggested
   it); after fixing the prompt and findings, 5/5 builds accepted plus the
   same reasonable clarification.
+- **Found after the first deploy — guards were not part of a level's
+  identity.** `canonicalJson` and share links listed fields explicitly and
+  left patrols out: a shared Sentry lost its guard, and adding a guard did
+  not change the revision id. Fixed (written only when present, so every
+  hazard-free level keeps its identity — the engine lock holds) and pinned
+  by identity, share, and save round-trip tests.
+- **The Sentry** gains a herb garden joining the well to the east yard, so
+  the showcase shows no dimmed unreachable floor; every loop stays even, so
+  the win still needs one wait (64 states).
+- **prompt-14**: hazards do not shrink the world (8-14 rooms; the bound only
+  binds with many keys and switches) — hazard builds grew from 5-6 rooms to
+  8-10. When an unwinnable level has guards, the engine re-checks it without
+  them and, if that wins, the findings name the blocking guard and the fix.
+- **Chapters only**: if a guard alone makes a chapter unfair after the
+  revisions and the repair search, the guard is dismissed (one first, then
+  all) rather than failing the chapter. The editor never does this — there
+  the failure is shown and replayed.
+- **Measured reliability** (production model, six hazard prompts, four runs
+  while iterating): 12 of 16 hazard builds accepted; failures were an
+  unavoidable capture (cornered), a guard blocking the only corridor, and one
+  undersized world. The non-hazard judge battery on the new prompt: 25/26
+  must-pass (same as the Sep 26 baseline, different one-off failure),
+  14 reasonable judgement calls, $0.31.
 
 ## Sep 29 (first screen and visual leap)
 
