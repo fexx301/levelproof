@@ -11,6 +11,7 @@ import { GEOMETRY, centerPoint, dirDelta, portPoint, type Vec3 } from '../core/c
 import { doorPassable, initialState } from '../core/movement.js';
 import { craftedBox, rampGeometry, sceneBounds, framingPoints, fitOverview } from './craft.js';
 import { createMechanisms, type WorldVisuals } from './mechanisms.js';
+import { GuardView } from './guards.js';
 import { buildKeyLook } from './props.js';
 import { preloadCharacter } from './character.js';
 import { atmosphere, buildScenery, FOUNDATION_TOP_Y, GROUND_Y } from './scenery.js';
@@ -70,6 +71,8 @@ const WALL_HEIGHT_CM = 88;
 const RAIL_HEIGHT_CM = 60;
 const WALL_THICKNESS_CM = 24;
 const DOOR_POST_HEIGHT_CM = 200;
+/** Timed gates (§6.4) share one amber identity. */
+const TIMED_DOOR_COLOR = 0xd08a2e;
 
 interface Mats {
   trim: THREE.MeshStandardMaterial;
@@ -322,6 +325,11 @@ function addDoorFrames(
       material.color.setHex(switchSignature(compiled, door.conditions.requiresSwitch).color);
       material.emissive.copy(material.color);
       material.emissiveIntensity = 0.12;
+    } else if (door.conditions?.cycle !== undefined) {
+      // Timed gates read amber: they open and close on their own clock.
+      material.color.setHex(TIMED_DOOR_COLOR);
+      material.emissive.copy(material.color);
+      material.emissiveIntensity = 0.14;
     }
     const doorStart = world.children.length;
     for (const dir of CARDINALS) {
@@ -416,7 +424,26 @@ function addDoorFrames(
           openY: p.y + slabHeight,
           closedY: p.y,
           targetOpen: startsOpen,
+          ...(conditions.cycle !== undefined ? { timed: true } : {}),
         });
+        if (conditions.cycle !== undefined) {
+          // The schedule on the lintel: one pip per turn, green while open,
+          // red while shut; the current turn's pip is lit and larger.
+          const pips: THREE.Mesh[] = [];
+          const count = conditions.cycle.period;
+          for (let index = 0; index < count; index++) {
+            const pip = new THREE.Mesh(
+              new THREE.SphereGeometry(12, 12, 8),
+              new THREE.MeshBasicMaterial({ color: index < conditions.cycle.openTicks ? 0x4fbe82 : 0xd0453a, transparent: true, opacity: 0.4 }),
+            );
+            const along = (index - (count - 1) / 2) * 30;
+            pip.position.set(p.x + (alongX ? along : 0), p.y + DOOR_POST_HEIGHT_CM + 58, p.z + (alongX ? 0 : along));
+            world.add(pip);
+            pips.push(pip);
+          }
+          visuals.timers ??= new Map();
+          visuals.timers.set(door.id, { cycle: conditions.cycle, pips });
+        }
       }
       // Type telegraph: a keyhole gem on keyed doors, a warning bar on seals.
       const requiredKeys = conditions?.requiresKeys ?? (conditions?.requiresKey !== undefined ? [conditions.requiresKey] : []);
@@ -640,6 +667,17 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel, theme?: T
   addDoorFrames(world, mats, compiled, visuals, tag);
   const decorUpdates: DecorUpdate[] = [];
   addItems(world, mats, compiled, decorUpdates, visuals, tag, dark);
+  // Guards (§6.4): pickable figures; their floor markers are overlays.
+  const hazardOverlay = new THREE.Group();
+  scene.add(hazardOverlay);
+  for (const patrol of compiled.patrols) {
+    const guard = new GuardView(patrol, compiled, reducedMotion, (root) => tag(root, patrol.id));
+    world.add(guard.root);
+    hazardOverlay.add(guard.overlay);
+    tag(guard.root, patrol.id);
+    visuals.guards ??= new Map();
+    visuals.guards.set(patrol.id, guard);
+  }
   // Scenery: cosmetic world dressing the engine never reads. Landmarks join
   // the pickable world ("move this statue"); terrain and scatter do not.
   const cameraVector = new THREE.Vector3(...direction.camera);
@@ -1279,6 +1317,8 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel, theme?: T
     }
     const landmark = scenery.landmarks.find((entry) => entry.id === id);
     if (landmark) return { x: landmark.base.x, y: landmark.base.y, z: landmark.base.z };
+    const guard = visuals.guards?.get(id);
+    if (guard) return { x: guard.root.position.x, y: guard.root.position.y, z: guard.root.position.z };
     return null;
   };
   const raycaster = new THREE.Raycaster();
@@ -1458,7 +1498,8 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel, theme?: T
       const shared = new Set<THREE.Material>(Object.values(mats));
       const disposeAll = (root: THREE.Object3D): void => {
         root.traverse((obj) => {
-          if (obj instanceof THREE.Mesh) {
+          // Skinned character geometry is shared with the cached asset.
+          if (obj instanceof THREE.Mesh && !(obj instanceof THREE.SkinnedMesh)) {
             obj.geometry.dispose();
             const material = obj.material as THREE.Material | THREE.Material[];
             for (const m of Array.isArray(material) ? material : [material]) {
@@ -1467,6 +1508,7 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel, theme?: T
           }
         });
       };
+      for (const guard of visuals.guards?.values() ?? []) guard.dispose();
       disposeAll(world);
       disposeAll(stage);
       scenery.dispose();

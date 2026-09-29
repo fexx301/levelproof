@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef } from 'react';
 import type { Cardinal } from '../../shared/schema.js';
 import { actorBridge } from '../render/bridge.js';
-import { compileLevel } from '../core/topology.js';
+import { compileLevel, type CompiledLevel } from '../core/topology.js';
+import { cycleOpen } from '../core/hazards.js';
 import type { Report } from '../core/verifier.js';
 import type { Level } from '../../shared/schema.js';
 import { playSound } from '../render/sound.js';
@@ -49,6 +50,7 @@ export function PlayPanel({ level, report }: { level: Level; report: Report }) {
   const reproduced =
     deadEnd !== undefined &&
     play.at === deadEnd.moduleId &&
+    (play.phase ?? 0) === deadEnd.phase &&
     masksMatch(compiled.keyBit, deadEnd.keyMask, play.keys) &&
     masksMatch(compiled.switchBit, deadEnd.switchMask, play.switches);
   const placeName = (id: string): string => compiled.moduleById.get(id)?.label ?? id.replace(/-/g, ' ');
@@ -63,6 +65,9 @@ export function PlayPanel({ level, report }: { level: Level; report: Report }) {
   useEffect(() => () => useApp.setState({ playHint: null }), []);
   const hintIntent =
     playHint?.kind === 'move' || playHint?.kind === 'rule_blocked' ? INTENTS.find((intent) => relativeCardinal(facing, intent) === playHint.direction) : undefined;
+  const hazards = compiled.cycle > 1;
+  const waitHinted = (playHint?.kind === 'move' || playHint?.kind === 'rule_blocked') && playHint.direction === 'wait';
+  const guardName = (id: string): string => id.replace(/-/g, ' ');
 
   const moveButton = (intent: MoveIntent) => {
     const direction: Cardinal = relativeCardinal(facing, intent);
@@ -119,7 +124,7 @@ export function PlayPanel({ level, report }: { level: Level; report: Report }) {
         </button>
       </div>
       <p className="panel-note play-keys-note">
-        WASD or arrows move relative to the camera · drag to look around · H hint · R restarts · Esc exits
+        WASD or arrows move relative to the camera · drag to look around{hazards ? ' · Space waits a turn' : ''} · H hint · R restarts · Esc exits
       </p>
       <p className="panel-note play-touch-note">Hold an arrow to keep running · drag the world to look around</p>
       <div className="dpad">
@@ -133,6 +138,27 @@ export function PlayPanel({ level, report }: { level: Level; report: Report }) {
         {moveButton('back')}
         <span />
       </div>
+      {hazards && (
+        <div className="play-turn">
+          <button
+            type="button"
+            className={waitHinted ? 'play-wait dpad-hint' : 'play-wait'}
+            onClick={() => actorBridge.player()?.move('wait')}
+            aria-keyshortcuts="Space"
+            title="Stay where you are for one turn"
+          >
+            Wait a turn
+          </button>
+          <p className="play-turn-note" role="status" data-phase={play.phase ?? 0}>
+            {turnNote(compiled, play.phase ?? 0)}
+          </p>
+        </div>
+      )}
+      {play.caughtBy && (
+        <p className="banner banner--fail play-caught" role="status">
+          Caught by the {guardName(play.caughtBy)} — back to the start, empty-handed. Red rings mark where each guard steps next turn.
+        </p>
+      )}
       <div className="inventory">
         {play.keys.length === 0 && play.switches.length === 0 && (
           <span className="inventory-empty">Inventory: empty</span>
@@ -198,6 +224,21 @@ export function PlayPanel({ level, report }: { level: Level; report: Report }) {
       )}
     </section>
   );
+}
+
+/** What the clock means right now: each timed gate's state, and guard warnings. */
+function turnNote(compiled: CompiledLevel, phase: number): string {
+  const gates = compiled.level.doors.flatMap((door) => {
+    const cycle = door.conditions?.cycle;
+    if (cycle === undefined) return [];
+    const name = door.id.replace(/-/g, ' ');
+    const open = cycleOpen(cycle, phase);
+    let turns = 1;
+    while (turns < cycle.period && cycleOpen(cycle, phase + turns) === open) turns++;
+    return [open ? `${name} open now (${turns} turn${turns === 1 ? '' : 's'} left)` : `${name} opens in ${turns} turn${turns === 1 ? '' : 's'}`];
+  });
+  const guards = compiled.patrols.length > 0 ? ['red rings: where guards step next'] : [];
+  return [...gates.slice(0, 2), ...guards].join(' · ');
 }
 
 function masksMatch(bits: Map<string, number>, mask: number, held: string[]): boolean {

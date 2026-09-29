@@ -5,6 +5,7 @@ import { compileLevel } from './core/topology';
 import { actorBridge } from './render/bridge';
 import { mountScene, type SceneHandle } from './render/scene';
 import { SCENES, useApp } from './state/store';
+import { hasHazards } from './core/hazards';
 import { CheckStrip, RuleChips } from './ui/check-strip';
 import { useLevelIsBlank } from './ui/prompt-panel';
 import { PlayPanel, requestHint } from './ui/play-panel';
@@ -445,6 +446,7 @@ function Viewport({ level, mode, report, theme, previewing }: { level: Level; mo
       onState: (info) => useApp.setState({ play: info }),
       heldDirection,
     });
+    const hazards = hasHazards(level);
     actorBridge.setPlayer(actor);
     const onKey = (event: KeyboardEvent) => {
       // Typing a request to the AI must never steer the character.
@@ -456,6 +458,13 @@ function Viewport({ level, mode, report, theme, previewing }: { level: Level; mo
       }
       if ((event.key === 'h' || event.key === 'H') && !event.repeat) {
         requestHint();
+        return;
+      }
+      // Space waits a turn in worlds with guards or timed gates. It also
+      // stops a focused on-screen button from taking the press.
+      if (event.key === ' ' && hazards) {
+        event.preventDefault();
+        actor.move('wait', !event.repeat);
         return;
       }
       // Camera-relative: W / ↑ always walks away from the viewer.

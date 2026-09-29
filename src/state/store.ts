@@ -398,6 +398,9 @@ interface PlaySlice {
   moves?: number;
   hints?: number;
   doomed?: boolean;
+  phase?: number;
+  captures?: number;
+  caughtBy?: string | null;
 }
 
 interface RepairSlice {

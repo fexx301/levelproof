@@ -270,6 +270,13 @@ useApp.subscribe((state, previous) => {
     run.deadEnds += 1;
     changed = true;
   }
+  // Being caught by a guard is a setback, like walking into a dead end.
+  const capturesNow = now.captures ?? 0;
+  const capturesBefore = before.captures ?? 0;
+  if (capturesNow > capturesBefore) {
+    run.deadEnds += capturesNow - capturesBefore;
+    changed = true;
+  }
   const hintsNow = now.hints ?? 0;
   const hintsBefore = before.hints ?? 0;
   if (hintsNow > hintsBefore) {

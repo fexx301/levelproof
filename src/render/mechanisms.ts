@@ -1,12 +1,23 @@
 import type * as THREE from 'three';
+import type { DoorCycle } from '../../shared/schema.js';
+import { patrolPosition } from '../core/hazards.js';
 import { doorPassable, initialState, type GameState } from '../core/movement.js';
 import type { CompiledLevel } from '../core/topology.js';
+import { guardPath, type GuardView } from './guards.js';
 
 interface DoorVisual {
   group: THREE.Group;
   openY: number;
   closedY: number;
   targetOpen: boolean;
+  /** Timed doors open and close on a schedule, quietly (no clank every turn). */
+  timed?: boolean;
+}
+
+/** A timed door's schedule on its lintel: one pip per turn of its period. */
+export interface TimerVisual {
+  cycle: DoorCycle;
+  pips: THREE.Mesh[];
 }
 
 export interface WorldVisuals {
@@ -15,6 +26,8 @@ export interface WorldVisuals {
   doors: Map<string, DoorVisual>;
   /** The goal beacon; it lifts clear of the character standing on the goal. */
   goal?: THREE.Group;
+  timers?: Map<string, TimerVisual>;
+  guards?: Map<string, GuardView>;
 }
 
 /** How far the goal beacon rises while an actor stands on the goal (cm). */
@@ -45,7 +58,7 @@ export function createMechanisms(
     const cues = new Set<MechanismEvent>();
     for (const [id, door] of visuals.doors) {
       const open = doorPassable(compiled, id, state);
-      if (!snap && open !== door.targetOpen) cues.add(open ? 'doorOpen' : 'doorSeal');
+      if (!snap && open !== door.targetOpen && door.timed !== true) cues.add(open ? 'doorOpen' : 'doorSeal');
       door.targetOpen = open;
       if (snap || reduced()) door.group.position.y = door.targetOpen ? door.openY : door.closedY;
       retract(door);
@@ -70,10 +83,34 @@ export function createMechanisms(
       if (snap || reduced()) pad.plate.position.y = pad.plate.userData.targetY as number;
       (pad.rim.material as THREE.MeshStandardMaterial).emissiveIntensity = active ? 1.7 : 0.65;
     }
+    for (const timer of visuals.timers?.values() ?? []) {
+      const current = state.phase % timer.cycle.period;
+      timer.pips.forEach((pip, index) => {
+        pip.scale.setScalar(index === current ? 1.55 : 1);
+        (pip.material as THREE.MeshBasicMaterial).opacity = index === current ? 1 : 0.55;
+      });
+    }
+    // Guards stand where the turn puts them; a walk already heading there finishes.
+    for (const guard of visuals.guards?.values() ?? []) {
+      const here = patrolPosition(guard.patrol, state.phase);
+      const next = patrolPosition(guard.patrol, state.phase + 1);
+      if (snap || !guard.walking || guard.heading !== here) guard.snapTo(guardPath(compiled, here, here)[0]!, here);
+      guard.setNext(guardPath(compiled, next, next)[0] ?? null);
+    }
     for (const cue of cues) onEvent(cue);
   };
   const events = {
     updateState(next: GameState) { state = next; sync(false); },
+    /** A turn starts: guards walk to where the next turn puts them, in step with the mover. */
+    beginTurn(before: GameState, seconds: number) {
+      for (const guard of visuals.guards?.values() ?? []) {
+        const from = patrolPosition(guard.patrol, before.phase);
+        const to = patrolPosition(guard.patrol, before.phase + 1);
+        guard.walkPath(guardPath(compiled, from, to), reduced() ? 0 : seconds, to);
+      }
+    },
+    /** A guard caught the mover: it says so. */
+    caught(patrolId: string) { visuals.guards?.get(patrolId)?.gesture('No'); },
     // State, not event ordering, determines all visuals.
     collectKey() { /* handled by updateState */ },
     activateSwitch() { /* handled by updateState */ },
@@ -100,6 +137,7 @@ export function createMechanisms(
         const target = pad.plate.userData.targetY as number;
         pad.plate.position.y += (target - pad.plate.position.y) * (instant ? 1 : 1 - Math.exp(-dt * 18));
       }
+      for (const guard of visuals.guards?.values() ?? []) guard.update(dt);
       for (const [id, elapsed] of collections) {
         const key = visuals.keys.get(id)!;
         const progress = instant ? 1 : Math.min(1, elapsed + dt / 0.28);

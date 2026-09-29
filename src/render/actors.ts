@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { Cardinal } from '../../shared/schema.js';
 import { centerPoint } from '../core/catalog.js';
-import { goalRequirementViolated, initialState, stateKey, step, transitions, type GameState, type MoveRecord } from '../core/movement.js';
+import { goalRequirementViolated, initialState, stateKey, step, transitions, type GameState, type MoveAction, type MoveRecord } from '../core/movement.js';
 import { goalReachableStates, nextStep, type Hint } from '../core/hint.js';
 import { playSound } from './sound.js';
 import type { CompiledLevel } from '../core/topology.js';
@@ -21,6 +21,11 @@ const ACTOR_RADIUS_CM = 25;
 const ACTOR_BODY_CM = 110;
 const ACTOR_CENTER_OFFSET_CM = ACTOR_BODY_CM / 2 + ACTOR_RADIUS_CM;
 const FINISH_SETTLE_SECONDS = 0.72;
+/** A wait is a whole turn: long enough to watch the guards and gates move. */
+const WAIT_SECONDS = 0.6;
+const WAIT_CM = WAIT_SECONDS * WALK_SPEED_CM_S;
+/** The beat after a guard catches the player, before the restart at spawn. */
+const CAPTURE_SECONDS = 0.95;
 /** Contract floor (§12): reduced motion means a stepped ghost, no pulse. Read live so mid-session preference changes are honored. */
 export function reducedMotion(): boolean {
   return typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -61,6 +66,12 @@ export interface PlayerStateInfo {
   hints: number;
   /** Moves remain, but none of them can still win (checked exhaustively). */
   doomed: boolean;
+  /** Turn within the world's cycle (always 0 without hazards). */
+  phase: number;
+  /** Times a guard caught the player since spawn or restart. */
+  captures: number;
+  /** The guard that just caught the player, until the next move. */
+  caughtBy: string | null;
 }
 
 export interface PlayerCallbacks {
@@ -74,6 +85,10 @@ export interface PlayerCallbacks {
  * depress, keys that vanish. The actors report; the engine's state decides. */
 export interface WorldEvents {
   updateState(state: GameState): void;
+  /** A turn starts (hazard levels): guards walk alongside the mover for `seconds`. */
+  beginTurn?(before: GameState, seconds: number): void;
+  /** A guard caught the mover. */
+  caught?(patrolId: string): void;
   collectKey(keyId: string): void;
   activateSwitch(switchId: string): void;
   resetWorld(): void;
@@ -117,6 +132,8 @@ function pathSteps(route: MoveRecord[]): PathStep[] {
     for (let i = 1; i < points.length; i++) {
       length += points[i]!.distanceTo(points[i - 1]!);
     }
+    // Standing still still takes a turn.
+    if (move.action === 'wait') length = Math.max(length, WAIT_CM);
     return { move, points, length };
   });
 }
@@ -212,11 +229,14 @@ function buildTrail(steps: PathStep[], kind: GhostFinishInfo['kind'] | 'hint'): 
   if (points.length >= 2) {
     const lifted = points.map((p) => new THREE.Vector3(p.x, p.y + 12, p.z));
     const total = new PolylineCurve(lifted).getLength();
-    const tube = new THREE.Mesh(
-      new THREE.TubeGeometry(new PolylineCurve(lifted), Math.max(8, Math.ceil(total / 24)), 10, 6),
-      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.8 }),
-    );
-    group.add(tube);
+    // A route that stays put (a wait) is only its end ring and beam.
+    if (total >= 1) {
+      const tube = new THREE.Mesh(
+        new THREE.TubeGeometry(new PolylineCurve(lifted), Math.max(8, Math.ceil(total / 24)), 10, 6),
+        new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.8 }),
+      );
+      group.add(tube);
+    }
     const end = lifted[lifted.length - 1]!;
     // A faint vertical beam at the destination reads through walls: the
     // viewer sees where the route ends before the ghost gets there.
@@ -275,6 +295,8 @@ export class GhostActor {
   private switches: string[] = [];
   private endState: GameState;
   private disposed = false;
+  /** The route step whose turn the world has been told about. */
+  private turnStarted = -1;
 
   constructor(
     ctx: ActorContext,
@@ -365,6 +387,7 @@ export class GhostActor {
     this.finishVisualClock = 0;
     this.keys = [];
     this.switches = [];
+    this.turnStarted = -1;
     this.ctx.world.resetWorld();
     this.ctx.world.updateState(initialState(this.ctx.compiled));
     if (this.steps.length > 0) {
@@ -424,6 +447,12 @@ export class GhostActor {
       this.visualMotion.turning = 0;
       this.visual.update(0, elapsed, this.visualMotion);
       return;
+    }
+    if (this.ctx.compiled.cycle > 1 && this.turnStarted !== this.index && this.index < this.steps.length) {
+      // Guards and gates keep time with the ghost, one turn per move.
+      this.turnStarted = this.index;
+      const current = this.steps[this.index]!;
+      this.ctx.world.beginTurn?.(current.move.before, reducedMotion() ? 0 : current.length / WALK_SPEED_CM_S);
     }
     if (reducedMotion()) {
       // Stepped ghost: one discrete move per interval, no interpolation.
@@ -486,6 +515,13 @@ export class GhostActor {
   }
 
   private arrive(move: MoveRecord): void {
+    if (move.events.caught !== undefined) {
+      // Caught: back to the start with empty hands, as the engine says.
+      this.keys = [];
+      this.switches = [];
+      this.ctx.world.caught?.(move.events.caught);
+      this.ctx.world.resetWorld();
+    }
     this.ctx.world.updateState(move.after);
     if (move.events.collectedKey) {
       this.keys = [...this.keys, move.events.collectedKey];
@@ -581,7 +617,11 @@ export class PlayerActor {
   private switches: string[] = [];
   private visitedModules: Set<string>;
   private animation: PlayerAnimation | null = null;
-  private queued: Cardinal | null = null;
+  private queued: MoveAction | null = null;
+  /** Seconds left in the capture beat (0 = none); input is ignored meanwhile. */
+  private captureLeft = 0;
+  private captures = 0;
+  private caughtBy: string | null = null;
   /** A standing turn (toward the viewer for a cheer), applied between moves. */
   private turnTarget: number | null = null;
 
@@ -646,7 +686,8 @@ export class PlayerActor {
    * continuously. Key auto-repeat passes `buffer: false` so releasing a held
    * key never adds a move.
    */
-  move(dir: Cardinal, buffer = true): void {
+  move(dir: MoveAction, buffer = true): void {
+    if (this.captureLeft > 0) return;
     if (this.animation || this.waitingForCharacter()) {
       if (buffer) this.queued = dir;
       return;
@@ -655,6 +696,17 @@ export class PlayerActor {
     const move = step(this.ctx.compiled, this.state, dir);
     if (!move) return;
     this.clearHint();
+    this.caughtBy = null;
+    const points = move.segments.map((p) => new THREE.Vector3(p.x, p.y, p.z));
+    let length = 0;
+    for (let i = 1; i < points.length; i++) length += points[i]!.distanceTo(points[i - 1]!);
+    // Standing still still takes a turn.
+    if (move.action === 'wait') length = Math.max(length, WAIT_CM);
+    if (this.ctx.compiled.cycle > 1) this.ctx.world.beginTurn?.(this.state, reducedMotion() ? 0 : length / WALK_SPEED_CM_S);
+    if (reducedMotion() && move.events.caught !== undefined) {
+      this.caught(move, true);
+      return;
+    }
     if (reducedMotion()) {
       // Reduced motion: instant transition, no interpolation.
       this.state = move.after;
@@ -681,12 +733,41 @@ export class PlayerActor {
       this.maybeCelebrate();
       return;
     }
-    const points = move.segments.map((p) => new THREE.Vector3(p.x, p.y, p.z));
-    let length = 0;
-    for (let i = 1; i < points.length; i++) length += points[i]!.distanceTo(points[i - 1]!);
     this.turnTarget = null;
-    this.clearHint();
     this.animation = { points, length, distance: 0, move };
+  }
+
+  /**
+   * A guard caught the player (§6.4). The engine has already sent them back
+   * to the start with nothing in hand; the scene holds the moment — the
+   * guard shakes its head, the player flinches — then resets the world.
+   */
+  private caught(move: MoveRecord, instant: boolean): void {
+    const endpoint = move.segments[move.segments.length - 1]!;
+    this.mesh.position.set(endpoint.x, endpoint.y + ACTOR_CENTER_OFFSET_CM, endpoint.z);
+    this.figure.position.y = 0;
+    this.animation = null;
+    this.queued = null;
+    this.moves += 1;
+    this.captures += 1;
+    this.caughtBy = move.events.caught ?? null;
+    this.state = move.after;
+    this.keys = [];
+    this.switches = [];
+    this.visitedModules = new Set([this.state.moduleId]);
+    this.ctx.world.caught?.(this.caughtBy ?? '');
+    playSound('caught');
+    this.rig?.perform('HitReact');
+    this.emit();
+    if (instant) this.returnToStart();
+    else this.captureLeft = CAPTURE_SECONDS;
+  }
+
+  private returnToStart(): void {
+    this.captureLeft = 0;
+    this.ctx.world.resetWorld();
+    this.ctx.world.updateState(this.state);
+    this.placeAtSpawn();
   }
 
   /**
@@ -695,6 +776,8 @@ export class PlayerActor {
    * move. The player still makes the move.
    */
   hint(): Hint {
+    // During a capture beat the engine state is already back at the start,
+    // so the hint answers from there.
     const result = nextStep(this.ctx.compiled, this.animation?.move.after ?? this.state, this.visitedModules);
     this.clearHint();
     if (result.kind === 'move' || result.kind === 'rule_blocked') {
@@ -723,6 +806,9 @@ export class PlayerActor {
 
   restart(): void {
     this.clearHint();
+    this.captureLeft = 0;
+    this.captures = 0;
+    this.caughtBy = null;
     this.hints = 0;
     this.hintedAt = null;
     this.failCued = false;
@@ -909,8 +995,13 @@ export class PlayerActor {
       if (queued !== null) this.move(queued);
     }
     if (this.rig !== null) {
-      this.rig.setLocomotion(this.animation !== null ? WALK_SPEED_CM_S : 0);
+      this.rig.setLocomotion(this.animation !== null && this.animation.move.action !== 'wait' ? WALK_SPEED_CM_S : 0);
       this.rig.update(reducedMotion() ? 0 : dt);
+    }
+    if (this.captureLeft > 0) {
+      this.captureLeft -= Math.max(dt, 0);
+      if (this.captureLeft <= 0) this.returnToStart();
+      return;
     }
     if (!this.animation) {
       if (this.turnTarget !== null) this.turnTo(this.turnTarget, reducedMotion() ? 1 : 1 - Math.exp(-dt * 8));
@@ -921,6 +1012,10 @@ export class PlayerActor {
     if (this.rig === null) this.figure.position.y = Math.abs(Math.sin(this.animation.distance * 0.045)) * 5;
     if (this.animation.distance >= this.animation.length) {
       const move = this.animation.move;
+      if (move.events.caught !== undefined) {
+        this.caught(move, false);
+        return;
+      }
       const endpoint = move.segments[move.segments.length - 1]!;
       this.mesh.position.set(endpoint.x, endpoint.y + ACTOR_CENTER_OFFSET_CM, endpoint.z);
       this.figure.position.y = 0;
@@ -988,6 +1083,9 @@ export class PlayerActor {
       moves: this.moves,
       hints: this.hints,
       doomed,
+      phase: this.state.phase,
+      captures: this.captures,
+      caughtBy: this.caughtBy,
     });
   }
 }

@@ -14,7 +14,8 @@ export type SoundCue =
   | 'doorSeal'
   | 'win'
   | 'fail'
-  | 'hint';
+  | 'hint'
+  | 'caught';
 
 const MUTE_KEY = 'levelproof:sound-muted';
 const MASTER_VOLUME = 0.5;
@@ -167,6 +168,12 @@ export function playSound(cue: SoundCue): void {
     case 'fail':
       tone(ctx, out, now, { type: 'triangle', from: 392, to: 370, duration: 0.3, peak: 0.14 });
       tone(ctx, out, now + 0.26, { type: 'triangle', from: 311, to: 277, duration: 0.55, peak: 0.14 });
+      break;
+    case 'caught':
+      // A guard's two-note whistle over a dull thud.
+      tone(ctx, out, now, { type: 'square', from: 1760, to: 1500, duration: 0.12, peak: 0.045 });
+      tone(ctx, out, now + 0.15, { type: 'square', from: 1760, to: 1500, duration: 0.2, peak: 0.045 });
+      burst(ctx, out, now + 0.02, { filter: 'lowpass', frequency: 700, sweepTo: 140, duration: 0.3, peak: 0.22 });
       break;
     case 'hint':
       tone(ctx, out, now, { from: 1175, duration: 0.3, peak: 0.08 });

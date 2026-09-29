@@ -20,7 +20,7 @@ const MOVING_CM_S = 20;
 /** How long the character must stand still before settling into idle. */
 const STOP_GRACE_S = 0.14;
 
-export type CharacterClip = 'Idle' | 'Run' | 'Walk' | 'Jump' | 'Wave' | 'Yes' | 'No';
+export type CharacterClip = 'Idle' | 'Run' | 'Walk' | 'Jump' | 'Wave' | 'Yes' | 'No' | 'HitReact';
 
 export interface CharacterAsset {
   scene: THREE.Object3D;
@@ -62,6 +62,8 @@ export function characterIfLoaded(): CharacterAsset | null {
 export interface CharacterStyle {
   /** Translucent tint for replay ghosts; omitted for the player. */
   ghost?: { color: number; opacity: number };
+  /** Opaque livery for world characters (guards): body color and edge light. */
+  tint?: { color: number; rim: number };
   /** Called at each footfall of the run cycle (for footstep sounds). */
   onFootstep?: () => void;
 }
@@ -134,6 +136,11 @@ export class CharacterRig {
           copy.emissiveIntensity = 0.45;
           copy.color.lerp(new THREE.Color(style.ghost.color), 0.5);
           addRim(copy, new THREE.Color(style.ghost.color).lerp(new THREE.Color(0xffffff), 0.55).getHex(), 2.2, true);
+        } else if (style.tint !== undefined) {
+          copy.color.lerp(new THREE.Color(style.tint.color), 0.6);
+          copy.emissive = new THREE.Color(style.tint.color);
+          copy.emissiveIntensity = 0.22;
+          addRim(copy, style.tint.rim, 0.9, false);
         } else {
           addRim(copy, 0xfff1d6, 0.28, false);
         }

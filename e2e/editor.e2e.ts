@@ -484,3 +484,46 @@ test('the welcome steps aside for the editor', async ({ page }) => {
   await expect(page.getByRole('dialog', { name: /Describe a world/ })).toHaveCount(0);
   await expect(page.getByRole('textbox', { name: 'Describe a change' })).toBeVisible();
 });
+
+test('the Sentry: Space waits a turn, and walking into the guard restarts empty-handed', async ({ page }) => {
+  // Every move animates under software WebGL: allow for slow runners.
+  test.setTimeout(180_000);
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  page.on('console', (message) => {
+    if (message.type() === 'error') errors.push(message.text());
+  });
+  await page.goto('/');
+  await page.getByRole('combobox', { name: 'Scene' }).selectOption('sentry');
+  await page.getByRole('button', { name: 'Play it yourself' }).click();
+  const playPanel = page.getByRole('region', { name: 'Play' });
+  const location = playPanel.locator('.dpad-center');
+  const turn = playPanel.locator('.play-turn-note');
+  await expect(location).toHaveAttribute('data-module', 'gatehouse');
+  await expect(turn).toHaveAttribute('data-phase', '0');
+  await expect(turn).toContainText('drawbridge open now (2 turns left)');
+  const move = async (direction: string, destination: string, phase: number) => {
+    await playPanel.getByRole('button', { name: `Move ${direction}` }).click();
+    await expect(location).toHaveAttribute('data-module', destination, { timeout: 20_000 });
+    await expect(turn).toHaveAttribute('data-phase', String(phase), { timeout: 20_000 });
+  };
+  await move('east', 'yard-west', 1);
+  // The arrow button still has focus: Space must wait, not repeat the move.
+  await page.keyboard.press('Space');
+  await expect(turn).toHaveAttribute('data-phase', '2', { timeout: 20_000 });
+  await expect(location).toHaveAttribute('data-module', 'yard-west');
+  await move('north', 'tower-stair', 3);
+  await move('north', 'tower-top', 0);
+  await expect(page.locator('.inventory')).toContainText('tower-key');
+  await move('south', 'tower-stair', 1);
+  await move('south', 'yard-west', 2);
+  await playPanel.getByRole('button', { name: 'Wait a turn' }).click();
+  await expect(turn).toHaveAttribute('data-phase', '3', { timeout: 20_000 });
+  // The sentry steps back into the yard as the player does.
+  await playPanel.getByRole('button', { name: 'Move east' }).click();
+  await expect(playPanel.getByText(/Caught by the sentry/)).toBeVisible({ timeout: 20_000 });
+  await expect(location).toHaveAttribute('data-module', 'gatehouse');
+  await expect(turn).toHaveAttribute('data-phase', '0');
+  await expect(page.locator('.inventory')).toContainText('Inventory: empty');
+  expect(errors).toEqual([]);
+});
