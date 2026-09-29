@@ -126,13 +126,30 @@ export function PlayPanel({ level, report }: { level: Level; report: Report }) {
       <p className="panel-note play-keys-note">
         WASD or arrows move relative to the camera · drag to look around{hazards ? ' · Space waits a turn' : ''} · H hint · R restarts · Esc exits
       </p>
-      <p className="panel-note play-touch-note">Hold an arrow to keep running · drag the world to look around</p>
+      <p className="panel-note play-touch-note">Hold an arrow to keep running{hazards ? ' · tap the middle to wait a turn' : ''} · drag the world to look around</p>
       <div className="dpad">
         <span />
         {moveButton('forward')}
         <span />
         {moveButton('left')}
-        <span className="dpad-center" role="status" data-module={play.at}>{play.at ? placeName(play.at) : '—'}</span>
+        {hazards ? (
+          // With guards or timed gates, the centre of the pad waits a turn
+          // (always within thumb reach) and still names where you stand.
+          <button
+            type="button"
+            className={waitHinted ? 'dpad-center dpad-wait dpad-hint' : 'dpad-center dpad-wait'}
+            data-module={play.at}
+            onClick={() => actorBridge.player()?.move('wait')}
+            aria-keyshortcuts="Space"
+            aria-label={`Wait a turn${play.at ? ` at ${placeName(play.at)}` : ''}`}
+            title="Stay where you are for one turn (Space)"
+          >
+            <span>{play.at ? placeName(play.at) : '—'}</span>
+            <span className="dpad-wait-label">wait</span>
+          </button>
+        ) : (
+          <span className="dpad-center" role="status" data-module={play.at}>{play.at ? placeName(play.at) : '—'}</span>
+        )}
         {moveButton('right')}
         <span />
         {moveButton('back')}
@@ -140,15 +157,6 @@ export function PlayPanel({ level, report }: { level: Level; report: Report }) {
       </div>
       {hazards && (
         <div className="play-turn">
-          <button
-            type="button"
-            className={waitHinted ? 'play-wait dpad-hint' : 'play-wait'}
-            onClick={() => actorBridge.player()?.move('wait')}
-            aria-keyshortcuts="Space"
-            title="Stay where you are for one turn"
-          >
-            Wait a turn
-          </button>
           <p className="play-turn-note" role="status" data-phase={play.phase ?? 0}>
             {turnNote(compiled, play.phase ?? 0)}
           </p>
