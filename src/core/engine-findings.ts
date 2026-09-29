@@ -1,7 +1,7 @@
 import type { Level } from '../../shared/schema.js';
 import { buildFailureEvidence } from './failure-evidence.js';
 import { requirementText } from './level.js';
-import { doorPassable, initialState, stateKey, transitions, type GameState } from './movement.js';
+import { corneredBy, doorPassable, initialState, stateKey, transitions, type GameState } from './movement.js';
 import { compileLevel } from './topology.js';
 import type { Report } from './verifier.js';
 
@@ -116,6 +116,13 @@ export function engineFindings(level: Level, report: Report): string[] {
     findings.push(`A player can get stuck: ${evidence?.fact ?? report.checks.recovery.explanation}`);
     const route = routeText(report, 'recovery');
     if (route !== null) findings.push(`Route that strands the player: ${route}.`);
+    const end = report.checks.recovery.witness?.endState;
+    const guard = end === undefined ? null : corneredBy(compileLevel(level), end);
+    if (guard !== null) {
+      findings.push(
+        `Cornered: at ${end!.moduleId} the guard ${quote(guard)} catches the player whatever they do, and being caught is a restart, not a way out. Never end a guard's beat in a dead-end room the player can enter, and give every room on the beat a way off it.`,
+      );
+    }
   }
   if (!report.complete) findings.push(`Check incomplete: ${report.completionExplanation}`);
   return findings.slice(0, MAX_FINDINGS);

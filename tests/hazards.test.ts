@@ -3,6 +3,7 @@ import type { Level, LevelModule, Operation } from '../shared/schema';
 import { caughtBy, hasHazards, patrolPeriod, patrolPosition, worldCycle } from '../src/core/hazards';
 import { goalReachableStates, nextStep } from '../src/core/hint';
 import { applyOperations, validateLevel } from '../src/core/level';
+import { engineFindings } from '../src/core/engine-findings';
 import { initialState, stateKey, step, transitions } from '../src/core/movement';
 import { validateRoute } from '../src/core/replay';
 import { compileLevel } from '../src/core/topology';
@@ -282,5 +283,27 @@ describe('the AI can write hazards', () => {
       { phase: 'fresh', kind: 'guard', id: 'sentry', moduleId: 'hall-c' },
       { phase: 'fresh', kind: 'guard', id: 'sentry', moduleId: 'alcove' },
     ]);
+  });
+});
+
+describe('cornered by a guard', () => {
+  it('a beat ending in a dead-end room is a dead end, and the checker and the findings say "cornered"', () => {
+    // hall-c → passage → alcove: step into the alcove behind the guard and
+    // it turns back into you. (The nook off the passage keeps it winnable.)
+    const level = corridor({
+      modules: [
+        ...corridor().modules.filter((m) => m.id !== 'alcove'),
+        flat('passage', 3, 4, ['S', 'N', 'W']),
+        flat('alcove', 3, 3, ['S']),
+        flat('nook', 2, 4, ['E']),
+      ],
+      patrols: [{ id: 'sentry', route: ['hall-c', 'passage', 'alcove'] }],
+    });
+    expect(validateLevel(level)).toEqual([]);
+    const report = verify(level);
+    expect(report.checks.solution.status).toBe('pass');
+    expect(report.checks.recovery.status).toBe('fail');
+    expect(report.checks.recovery.explanation).toMatch(/cornered at “alcove”/);
+    expect(engineFindings(level, report).join(' ')).toMatch(/Cornered: at alcove the guard "sentry"/);
   });
 });

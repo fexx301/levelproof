@@ -164,6 +164,17 @@ export function transitions(compiled: CompiledLevel, state: GameState): MoveReco
   return moves;
 }
 
+/**
+ * Cornered (§6.4): every action from here — each move and the wait — gets
+ * the player caught. Returns the guard that catches them first, else null.
+ * Never true without guards.
+ */
+export function corneredBy(compiled: CompiledLevel, state: GameState): string | null {
+  const moves = transitions(compiled, state);
+  if (moves.length === 0 || moves.some((move) => move.events.caught === undefined)) return null;
+  return moves[0]!.events.caught ?? null;
+}
+
 /** Validate one action against the state's legal transitions (§6). */
 export function step(compiled: CompiledLevel, state: GameState, action: MoveAction): MoveRecord | null {
   return transitions(compiled, state).find((m) => m.action === action) ?? null;

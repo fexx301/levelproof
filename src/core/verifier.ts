@@ -2,7 +2,7 @@ import { EXPLORATION_BOUND } from '../../shared/schema.js';
 import type { Level, Requirement } from '../../shared/schema.js';
 import { CATALOG_VERSION } from './catalog.js';
 import { validateLevel } from './level.js';
-import { initialState, stateKey, step, transitions, type GameState, type MoveRecord } from './movement.js';
+import { corneredBy, initialState, stateKey, step, transitions, type GameState, type MoveRecord } from './movement.js';
 import { compileLevel, type CompiledLevel } from './topology.js';
 import { revisionId } from './serialize.js';
 
@@ -390,7 +390,10 @@ export function verify(level: Level, config: VerifierConfig = {}): Report {
       .filter((v) => v.state.moduleId !== compiled.goal && !canWinSet.has(stateKey(v.state)))
       .sort((a, b) => a.order - b.order);
     if (dead.length > 0) {
-      const first = dead[0]!;
+      // With guards, the clearest witness is a spot where the player is
+      // cornered: whatever they do next, they are caught (never without guards).
+      const corner = compiled.patrols.length > 0 ? dead.find((v) => corneredBy(compiled, v.state) !== null) : undefined;
+      const first = corner ?? dead[0]!;
       const heldKeys = [...compiled.keyBit]
         .filter(([, bit]) => (first.state.keyMask & bit) !== 0)
         .map(([id]) => id);
@@ -403,9 +406,13 @@ export function verify(level: Level, config: VerifierConfig = {}): Report {
           : ' holding no keys';
       const switches =
         activeSwitches.length > 0 ? `, with the ${activeSwitches.join(' and the ')} active` : '';
+      const guard = corner !== undefined ? corneredBy(compiled, corner.state) : null;
       recoveryCheck = {
         status: 'fail',
-        explanation: `A player can be stranded at “${first.state.moduleId}”${holding}${switches} — no winning route remains.`,
+        explanation:
+          guard !== null
+            ? `A player can be cornered at “${first.state.moduleId}”${holding}${switches} — whatever they do next, even waiting, the guard “${guard}” catches them, and being caught restarts the level.`
+            : `A player can be stranded at “${first.state.moduleId}”${holding}${switches} — no winning route remains.`,
         witness: { kind: 'dead_end', route: routeTo(first), endState: first.state },
       };
     } else {
