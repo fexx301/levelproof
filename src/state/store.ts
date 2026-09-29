@@ -468,6 +468,8 @@ interface AppState {
   repair: RepairSlice;
   explain: ExplainSlice;
   adventure: AdventureSlice;
+  /** The first-visit welcome over the 3D view ("Describe a world"). */
+  landing: boolean;
   /** Temporary, verifier-owned evidence shown by the failure replay. */
   evidence: FailureEvidence | null;
   /** Manual play: the camera chases the player (true) or holds the overview. */
@@ -672,6 +674,28 @@ export function upgradeGalleryLevel(sceneId: string, level: Level): Level {
 }
 
 const initialWindow = initialWindowState();
+
+export const LANDING_SEEN_KEY = 'levelproof:landing:seen';
+
+/** Fresh visitors see the welcome; a shared link or a returning author does not. */
+function initialLanding(): boolean {
+  if (typeof window === 'undefined' || initialWindow.viaShare) return false;
+  try {
+    return window.localStorage.getItem(LANDING_SEEN_KEY) !== '1';
+  } catch {
+    return true;
+  }
+}
+
+/** Close the welcome for good in this browser. */
+export function dismissLanding(): void {
+  try {
+    window.localStorage.setItem(LANDING_SEEN_KEY, '1');
+  } catch {
+    // Storage blocked: the welcome stays closed for this page.
+  }
+  useApp.setState({ landing: false });
+}
 const initialStorage = safeBrowserStorage();
 const initialSavedScenes = readSavedScenes(initialStorage);
 const initialRecoveryRead = initialStorage === undefined
@@ -856,6 +880,7 @@ export const useApp = create<AppState>()((set, get) => ({
   repair: REPAIR_INITIAL,
   explain: EXPLAIN_INITIAL,
   adventure: ADVENTURE_INITIAL,
+  landing: initialLanding(),
   evidence: null,
   followCamera: true,
   playHint: null,

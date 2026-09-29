@@ -10,6 +10,18 @@ const addBalconyKey: CompileResult = {
   operations: [{ kind: 'addItem', itemType: 'key', id: 'brass-key', moduleId: 'key-balcony' }],
 };
 
+// These journeys exercise the editor; the first-visit welcome has its own test.
+test.beforeEach(async ({ page }, testInfo) => {
+  if (testInfo.title.includes('welcome')) return;
+  await page.addInitScript(() => {
+    try {
+      window.localStorage.setItem('levelproof:landing:seen', '1');
+    } catch {
+      // Storage blocked: the welcome would show; the journey will say so.
+    }
+  });
+});
+
 async function fixtureCompile(page: Page, result: CompileResult): Promise<void> {
   await page.route('**/api/compile', async (route) => {
     const request = route.request().postDataJSON() as { level: Level };
@@ -336,6 +348,8 @@ test('keyboard workflow and essential controls remain usable at a narrow viewpor
 });
 
 test('changes the level from inside play, with the engine pre-check and the player respawned', async ({ page }) => {
+  // Winning by hints animates every move under software WebGL: allow for slow runners.
+  test.setTimeout(180_000);
   const harder: CompileResult = {
     type: 'patch',
     rationale: 'Lock the vault behind a brass key on the balcony.',
@@ -377,6 +391,7 @@ test('changes the level from inside play, with the engine pre-check and the play
 });
 
 test('continues into an AI-written chapter that the engine proves fair, with a title card', async ({ page }) => {
+  test.setTimeout(180_000);
   const chapter: CompileResult = {
     type: 'patch',
     rationale: 'A small moonlit crypt.',
@@ -423,4 +438,49 @@ test('continues into an AI-written chapter that the engine proves fair, with a t
   await expect(page.locator('.dpad-center')).toHaveAttribute('data-module', 'entry-pad');
   await card.click();
   await expect(card).toBeHidden();
+});
+
+test('the welcome starts an adventure: one sentence becomes chapter 1, proven fair', async ({ page }) => {
+  const chapterOne: CompileResult = {
+    type: 'patch',
+    rationale: 'A lighthouse on a rock.',
+    assumptions: [],
+    operations: [
+      { kind: 'setModuleLabel', id: 'entry-pad', label: 'storm dock' },
+      { kind: 'setModuleLabel', id: 'goal-pad', label: 'lamp room' },
+      { kind: 'setScenery', environment: 'sea', lighting: 'night', architecture: 'limestone' },
+    ],
+    story: { title: 'The Storm Light', narration: 'You land at the storm dock beneath the lamp room.' },
+  };
+  await page.route('**/api/compile', async (route) => {
+    const request = route.request().postDataJSON() as { level: Level; adventure?: { chapter: number; story: unknown[] } };
+    expect(request.adventure?.chapter).toBe(1);
+    expect(request.adventure?.story).toEqual([]);
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ result: chapterOne, baseRevision: revisionId(request.level), cached: false, attempts: [], totalCostUsd: null, generationCostUsd: null }),
+    });
+  });
+  await page.goto('/');
+  const welcome = page.getByRole('dialog', { name: /Describe a world/ });
+  await expect(welcome).toBeVisible();
+  await welcome.getByRole('textbox', { name: 'Describe a world' }).fill('A lighthouse on a stormy island');
+  await welcome.getByRole('button', { name: 'Start the adventure' }).click();
+  const card = page.getByRole('button', { name: /Chapter 1: The Storm Light/ });
+  await expect(card).toBeVisible({ timeout: 30_000 });
+  await expect(card).toContainText('Verified solvable');
+  await expect(welcome).toBeHidden();
+  await expect(page.getByRole('region', { name: 'Play' })).toBeVisible();
+  await expect(page.locator('.adventure-strip')).toContainText('Chapter 1');
+  // The welcome does not return on reload; the editor is one click away for first visits.
+  await page.reload();
+  await expect(page.getByRole('dialog', { name: /Describe a world/ })).toHaveCount(0);
+});
+
+test('the welcome steps aside for the editor', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Explore the editor instead →' }).click();
+  await expect(page.getByRole('dialog', { name: /Describe a world/ })).toHaveCount(0);
+  await expect(page.getByRole('textbox', { name: 'Describe a change' })).toBeVisible();
 });

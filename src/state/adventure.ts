@@ -5,6 +5,7 @@ import {
   chapterPlayable,
   measureChapter,
   nextDifficultyBand,
+  openingAdventureContext,
   type AdventureIntent,
   type ChapterMeasure,
   type ChapterStats,
@@ -21,6 +22,7 @@ import {
   claimCompileContext,
   compileContextIsCurrent,
   CompileStalledError,
+  dismissLanding,
   postCompile,
   progressStart,
   SCENES,
@@ -99,7 +101,22 @@ export async function continueAdventure(words: string, intent: AdventureIntent):
     intent,
     lastStats: stats,
   };
-  const prompt = words.trim().length > 0 ? words.trim().slice(0, 500) : 'Continue the adventure.';
+  await writeChapter(words.trim().length > 0 ? words.trim().slice(0, 500) : 'Continue the adventure.', adventure, chapters);
+}
+
+/**
+ * Start a fresh adventure from one sentence: chapter 1 is written on the
+ * blank canvas with the opening band. Its request is identical for identical
+ * words, so the welcome's example worlds are prewarmed (scripts/prewarm.ts).
+ */
+export async function startAdventure(words: string): Promise<void> {
+  if (useApp.getState().busy || words.trim().length === 0) return;
+  await writeChapter(words.trim().slice(0, 500), openingAdventureContext(), []);
+}
+
+
+async function writeChapter(prompt: string, adventure: AdventureContext, chapters: AdventureChapter[]): Promise<void> {
+  const band = adventure.band;
   const { generation, controller } = claimCompileContext();
   useApp.setState({
     busy: true,
@@ -218,6 +235,7 @@ function enterChapter(chosen: Candidate, number: number, band: DifficultyBand, c
     compileProgress: null,
     adventure: { chapters: [...chapters, chapter], writing: false, error: null, intro: chapter, run: { ...ADVENTURE_INITIAL.run } },
   });
+  if (useApp.getState().landing) dismissLanding();
   useApp.getState().startPlay();
   // Entering the chapter resets play; the new chapter's tally starts at zero.
   useApp.setState({ adventure: { ...useApp.getState().adventure, run: { ...ADVENTURE_INITIAL.run } } });

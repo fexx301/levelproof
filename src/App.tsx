@@ -10,6 +10,7 @@ import { useLevelIsBlank } from './ui/prompt-panel';
 import { PlayPanel, requestHint } from './ui/play-panel';
 import { SoundToggle } from './ui/sound-toggle';
 import { ChapterCard } from './ui/adventure-panel';
+import { Landing } from './ui/landing';
 import { heldPadIntent } from './ui/held-input';
 import { PlaytesterPanel, witnessOptions } from './ui/playtester';
 import { PromptPanel } from './ui/prompt-panel';
@@ -258,6 +259,7 @@ export function App() {
           {mode === 'playing' && <PlayPanel level={level} report={report} />}
         </aside>
       </main>
+      <Landing />
     </div>
   );
 }
@@ -495,6 +497,17 @@ function Viewport({ level, mode, report, theme, previewing }: { level: Level; mo
   useEffect(() => {
     sceneRef.current?.setFollow(followCamera);
   }, [followCamera, mode, level, theme]);
+  // Behind the first-visit welcome the world turns slowly.
+  const landing = useApp((st) => st.landing);
+  useEffect(() => {
+    sceneRef.current?.setIdleOrbit(landing && mode === 'authoring');
+  }, [landing, mode, level, theme]);
+  // A new chapter opens with a flyover (after the player has spawned above).
+  const introChapter = useApp((st) => st.adventure.intro?.revision ?? null);
+  useEffect(() => {
+    if (mode !== 'playing' || introChapter === null) return;
+    sceneRef.current?.playIntro();
+  }, [introChapter, mode, level, theme]);
 
   const viewportLabel =
     mode === 'playing'

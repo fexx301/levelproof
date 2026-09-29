@@ -73,6 +73,7 @@ async function freshPage(options = {}) {
         sessionStorage.setItem('lp-journey', '1');
       }
       localStorage.setItem('levelproof:getting-started:dismissed', '1');
+      localStorage.setItem('levelproof:landing:seen', '1');
     } catch {
       // Storage unavailable: the app still runs, just without the dismissal.
     }

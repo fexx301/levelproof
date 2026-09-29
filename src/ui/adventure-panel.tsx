@@ -90,7 +90,9 @@ export function AdventureStrip() {
   useApp((s) => s.adventure.chapters);
   useApp((s) => s.acceptedLevel);
   const chapter = currentChapter();
-  if (chapter === null || chapter.number === 1) return null;
+  // An ordinary level becomes "chapter 1" silently; an adventure started from
+  // a sentence names its first chapter too.
+  if (chapter === null || (chapter.number === 1 && chapter.band === undefined)) return null;
   return (
     <p className="adventure-strip">
       <span>Chapter {chapter.number}</span> · {chapter.title}

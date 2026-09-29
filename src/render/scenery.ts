@@ -214,6 +214,81 @@ function skyDome(top: number, horizon: number, radius: number): THREE.Mesh {
   return dome;
 }
 
+/**
+ * A ring of distant silhouettes — mountains, sea stacks, or a skyline — just
+ * inside the fog, so every world reads as a place that continues past the
+ * diorama. One merged, flat-shaded mesh (a single draw call), no shadows.
+ */
+function horizonRing(
+  environment: Environment,
+  horizon: number,
+  ground: number | null,
+  center: THREE.Vector3,
+  footprintRadius: number,
+  random: () => number,
+): THREE.Mesh | null {
+  if (environment === 'void' || environment === 'space' || environment === 'cavern') return null;
+  const pieces: THREE.BufferGeometry[] = [];
+  const count = environment === 'city' ? 46 : 26;
+  const inner = footprintRadius + 7200;
+  for (let i = 0; i < count; i++) {
+    const angle = (i / count) * Math.PI * 2 + (random() - 0.5) * 0.18;
+    const distance = inner + random() * 3600;
+    let piece: THREE.BufferGeometry;
+    if (environment === 'city') {
+      const width = 500 + random() * 700;
+      const height = 1400 + random() * 3600;
+      piece = new THREE.BoxGeometry(width, height, width * (0.7 + random() * 0.6));
+      piece.translate(0, height / 2 + GROUND_Y, 0);
+    } else if (environment === 'sea') {
+      const height = 700 + random() * 1800;
+      piece = new THREE.ConeGeometry(500 + random() * 900, height, 5 + Math.floor(random() * 3), 1);
+      piece.translate(0, height / 2 - 120, 0);
+    } else {
+      // Mountains: broad low-poly cones; taller behind, lower in front.
+      const height = 2200 + random() * (environment === 'desert' ? 1600 : 4200);
+      piece = new THREE.ConeGeometry(1800 + random() * 2400, height, 6 + Math.floor(random() * 3), 1);
+      piece.translate(0, height / 2 + GROUND_Y - 200, 0);
+    }
+    piece.rotateY(random() * Math.PI);
+    piece.translate(center.x + Math.cos(angle) * distance, 0, center.z + Math.sin(angle) * distance);
+    pieces.push(piece.index === null ? piece : piece.toNonIndexed());
+  }
+  const merged = mergeGeometries(pieces);
+  for (const piece of pieces) piece.dispose();
+  if (merged === null) return null;
+  // Between the land's color and the haze: close enough to belong, faded
+  // enough to read as far away (the scene fog finishes the job). Far and
+  // fogged, the ring needs no live lighting: each face's shade is baked once
+  // from a fixed sun direction and drawn unlit — the cheapest material there
+  // is, which matters for its large screen area on weak GPUs.
+  const base = new THREE.Color(ground ?? horizon).lerp(new THREE.Color(horizon), environment === 'snow' ? 0.35 : 0.55);
+  const sunward = new THREE.Vector3(-0.6, 0.7, 0.35).normalize();
+  const position = merged.getAttribute('position');
+  const colors = new Float32Array(position.count * 3);
+  const a = new THREE.Vector3();
+  const b = new THREE.Vector3();
+  const c = new THREE.Vector3();
+  const normal = new THREE.Vector3();
+  const shaded = new THREE.Color();
+  for (let i = 0; i + 2 < position.count; i += 3) {
+    a.fromBufferAttribute(position, i);
+    b.fromBufferAttribute(position, i + 1);
+    c.fromBufferAttribute(position, i + 2);
+    normal.subVectors(c, b).cross(b.clone().sub(a)).normalize();
+    const light = 0.62 + 0.38 * Math.max(0, normal.dot(sunward));
+    shaded.copy(base).multiplyScalar(light);
+    for (let k = 0; k < 3; k++) colors.set([shaded.r, shaded.g, shaded.b], (i + k) * 3);
+  }
+  merged.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  const material = new THREE.MeshBasicMaterial({ vertexColors: true });
+  const ring = new THREE.Mesh(merged, material);
+  ring.name = 'horizon';
+  ring.castShadow = false;
+  ring.receiveShadow = false;
+  return ring;
+}
+
 function starfield(radius: number, count: number, random: () => number): THREE.Points {
   const positions: number[] = [];
   for (let i = 0; i < count; i++) {
@@ -527,6 +602,13 @@ export function buildScenery(level: Level, options: SceneryOptions): SceneryBuil
     ringMesh.rotation.set(Math.PI / 2.3, 0.3, 0);
     environmentRoot.add(planet, ringMesh);
     disposables.push(planet.geometry, planet.material as THREE.Material, ringMesh.geometry, ringMesh.material as THREE.Material);
+  }
+
+  // ---- Horizon: the world goes on past the diorama ----
+  const skyline = horizonRing(environment, air.horizon, groundColor, center, footprintRadius, random);
+  if (skyline !== null) {
+    environmentRoot.add(skyline);
+    disposables.push(skyline.geometry, skyline.material as THREE.Material);
   }
 
   // ---- Landmark props (author placed) ----

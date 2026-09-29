@@ -1,3 +1,4 @@
+import type { AdventureContext } from '../../shared/api.js';
 import type { Level } from '../../shared/schema.js';
 import { engineFindings } from './engine-findings.js';
 import { verify, type Report } from './verifier.js';
@@ -121,4 +122,12 @@ export function chapterFindings(level: Level, band: DifficultyBand): string[] {
     ];
   }
   return [];
+}
+
+/**
+ * The chapter-1 request context. Deterministic, so identical opening words
+ * share one cache key — the welcome's example worlds are prewarmed with it.
+ */
+export function openingAdventureContext(): AdventureContext {
+  return { chapter: 1, story: [], band: { ...FIRST_CHAPTER_BAND }, intent: 'steady' };
 }

@@ -1,4 +1,8 @@
 import * as THREE from 'three';
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { playSound } from './sound.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import type { MoveRecord } from '../core/movement.js';
@@ -147,6 +151,10 @@ export interface SceneHandle {
   setKeyboardOrbit(enabled: boolean): void;
   /** Manual play: chase the player (true) or hold the overview (false). */
   setFollow(enabled: boolean): void;
+  /** A slow showcase orbit (the first-visit welcome); off under reduced motion. */
+  setIdleOrbit(enabled: boolean): void;
+  /** Open a chapter: sweep from above the world into the chase view. */
+  playIntro(): void;
   /** The world direction the camera faces, for camera-relative controls. */
   onFacing(handler: ((facing: Cardinal) => void) | null): void;
   /** Overlay the engine's per-module recovery analysis on the floors. */
@@ -573,6 +581,18 @@ function addItems(
   }
 }
 
+/** True for CPU rasterizers (SwiftShader, llvmpipe, Microsoft Basic Render). */
+function softwareRenderer(renderer: THREE.WebGLRenderer): boolean {
+  try {
+    const gl = renderer.getContext();
+    const info = gl.getExtension('WEBGL_debug_renderer_info');
+    const name = String(info !== null ? gl.getParameter(info.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER));
+    return /swiftshader|llvmpipe|software|basic render/i.test(name);
+  } catch {
+    return false;
+  }
+}
+
 export function mountScene(host: HTMLElement, compiled: CompiledLevel, theme?: ThemeKey): SceneHandle {
   // Start the character download early so play and replays have it ready.
   void preloadCharacter().catch(() => undefined);
@@ -673,6 +693,10 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel, theme?: T
   sun.shadow.blurSamples = 12;
   scene.add(sun);
   scene.add(sun.target);
+  // The player's lantern in dark worlds: present (and dark) from the start so
+  // the light count never changes when play begins.
+  const lantern = dark ? new THREE.PointLight(0xffc98a, 0, 950, 1.1) : null;
+  if (lantern !== null) scene.add(lantern);
   const fill = new THREE.DirectionalLight(lighting === 'day' ? COLORS.fillLight : air.fillColor, air.fillIntensity);
   fill.position.set(center.x + 2500, 1400, center.z - 1800);
   fill.target.position.set(center.x, center.y, center.z);
@@ -787,8 +811,38 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel, theme?: T
       camera.position.copy(chaseTo.position);
     }
   };
+  // ---- Chapter flyover ----
+  // A chapter opens with a sweep from high above the world down into the
+  // chase view behind the player (3.4 s; skipped under reduced motion).
+  const INTRO_SECONDS = 3.4;
+  let intro: { t: number } | null = null;
+  const updateIntro = (dt: number): boolean => {
+    if (intro === null || followTarget === null) return false;
+    intro.t = Math.min(1, intro.t + dt / INTRO_SECONDS);
+    const e = intro.t * intro.t * (3 - 2 * intro.t);
+    const focus = followTarget.position;
+    const { distance, elevation } = chaseFraming();
+    const endAzimuth = Math.atan2(viewDir.x, viewDir.z);
+    const azimuth = endAzimuth + (1 - e) * 2.3;
+    const radius = THREE.MathUtils.lerp(fitDistance() * 1.25, distance, e);
+    const pitch = THREE.MathUtils.lerp(THREE.MathUtils.degToRad(64), elevation, e);
+    controls.target.lerpVectors(homeTarget, focus, e);
+    camera.position.set(
+      controls.target.x + Math.cos(pitch) * Math.sin(azimuth) * radius,
+      controls.target.y + Math.sin(pitch) * radius,
+      controls.target.z + Math.cos(pitch) * Math.cos(azimuth) * radius,
+    );
+    if (intro.t >= 1) {
+      intro = null;
+      controls.enabled = true;
+      followLast.copy(focus);
+      chaseProgress = 1;
+    }
+    return true;
+  };
   const updateFollow = (dt: number): void => {
     if (followTarget === null || !followEnabled) return;
+    if (updateIntro(dt)) return;
     const focus = followTarget.position;
     if (chaseProgress < 1) {
       chaseProgress = Math.min(1, chaseProgress + dt / 0.8);
@@ -814,15 +868,26 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel, theme?: T
   let facing: Cardinal = computeFacing();
   let facingHandler: ((facing: Cardinal) => void) | null = null;
 
-  // Adaptive quality: after warm-up, sustained slow frames first lower the
-  // render resolution, then drop terrain shadows and particles. Gameplay,
-  // the diorama, and every overlay are unaffected.
-  let qualityLevel = 0;
+  // Adaptive quality: after warm-up, sustained slow frames step down one rung
+  // at a time — first the bloom glow, then render resolution, then terrain
+  // shadows and particles. Gameplay, the diorama, and overlays never change.
+  let qualityDone = false;
   let warmupFrames = 40;
   let sampledFrames = 0;
   let slowFrames = 0;
+  const stepDownQuality = (): void => {
+    if (composer !== null) {
+      dropBloom();
+    } else if (renderer.getPixelRatio() > 1) {
+      renderer.setPixelRatio(1);
+      renderer.setSize(host.clientWidth || 800, host.clientHeight || 600);
+    } else {
+      scenery.reduceDetail();
+      qualityDone = true;
+    }
+  };
   const adaptQuality = (frameMs: number): void => {
-    if (qualityLevel >= 2) return;
+    if (qualityDone) return;
     if (warmupFrames > 0) {
       warmupFrames -= 1;
       return;
@@ -831,19 +896,39 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel, theme?: T
     if (frameMs > 34) slowFrames += 1;
     if (sampledFrames < 45) return;
     if (slowFrames > 30) {
-      qualityLevel += 1;
-      if (qualityLevel === 1 && renderer.getPixelRatio() > 1) {
-        renderer.setPixelRatio(1);
-        renderer.setSize(host.clientWidth || 800, host.clientHeight || 600);
-      } else {
-        qualityLevel = 2;
-        scenery.reduceDetail();
-      }
+      stepDownQuality();
       warmupFrames = 20;
     }
     sampledFrames = 0;
     slowFrames = 0;
   };
+  // ---- Bloom: bright things (torches, lava, the goal, crystals) glow ----
+  // Rendered through a multisampled half-float target so edges stay smooth;
+  // the output pass applies the same tone mapping as the plain renderer.
+  // Tuned so torches and lava glow without crystals blooming into glare.
+  // Software rasterizers (no GPU) cannot afford post-processing at all.
+  const bloomStrength = dark ? 0.42 : lighting === 'dusk' ? 0.34 : environment === 'volcanic' ? 0.4 : 0.18;
+  let composer: EffectComposer | null = null;
+  let bloom: UnrealBloomPass | null = null;
+  try {
+    if (softwareRenderer(renderer)) throw new Error('software renderer');
+    const size = renderer.getDrawingBufferSize(new THREE.Vector2());
+    const target = new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType, samples: 4 });
+    composer = new EffectComposer(renderer, target);
+    composer.addPass(new RenderPass(scene, camera));
+    bloom = new UnrealBloomPass(new THREE.Vector2(size.x / 2, size.y / 2), bloomStrength, 0.32, 0.9);
+    composer.addPass(bloom);
+    composer.addPass(new OutputPass());
+  } catch {
+    composer = null; // No float targets: the plain renderer still draws everything.
+  }
+  const dropBloom = (): void => {
+    composer?.dispose();
+    bloom?.dispose();
+    composer = null;
+    bloom = null;
+  };
+
   const tick = () => {
     const now = performance.now();
     adaptQuality(now - lastTime);
@@ -858,7 +943,8 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel, theme?: T
       facing = nextFacing;
       facingHandler?.(facing);
     }
-    renderer.render(scene, camera);
+    if (composer !== null) composer.render(dt);
+    else renderer.render(scene, camera);
     frame = requestAnimationFrame(tick);
   };
   frame = requestAnimationFrame(tick);
@@ -871,6 +957,10 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel, theme?: T
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
     renderer.setSize(w, h);
+    if (composer !== null) {
+      composer.setPixelRatio(renderer.getPixelRatio());
+      composer.setSize(w, h);
+    }
     cachedFit = computeFit();
     scenery.setFogRange(cachedFit);
     if (followTarget === null || !followEnabled) frameHome();
@@ -1251,6 +1341,7 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel, theme?: T
     world: mechanisms.events,
     viewer: () => camera.position,
     characterWaitMs: 1500,
+    ...(lantern !== null ? { lantern } : {}),
   };
 
   return {
@@ -1324,6 +1415,15 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel, theme?: T
     spawnPlayer(callbacks) {
       return new PlayerActor(actorContext, callbacks);
     },
+    playIntro() {
+      if (reducedMotion() || followTarget === null || !followEnabled) return;
+      intro = { t: 0 };
+      controls.enabled = false;
+    },
+    setIdleOrbit(enabled) {
+      controls.autoRotate = enabled && !reducedMotion();
+      controls.autoRotateSpeed = 0.6;
+    },
     setFollow(enabled) {
       if (followEnabled === enabled) return;
       followEnabled = enabled;
@@ -1393,6 +1493,7 @@ export function mountScene(host: HTMLElement, compiled: CompiledLevel, theme?: T
       renderer.domElement.removeEventListener('webglcontextlost', onContextLost);
       renderer.domElement.removeEventListener('webglcontextrestored', onContextRestored);
       for (const material of shared) material.dispose();
+      dropBloom();
       renderer.dispose();
       // Release the GL context now: a session remounts the scene on every
       // preview and theme change, and browsers cap live contexts (~16).

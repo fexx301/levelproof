@@ -2178,3 +2178,163 @@ details.inspector summary,
   font-size: var(--text-xs);
   line-height: 1.5;
 }
+
+/* ---- First-visit welcome ---- */
+.landing {
+  align-items: center;
+  background:
+    radial-gradient(ellipse at 50% 38%, color-mix(in oklab, var(--color-bg, #0f1115) 30%, transparent) 0%, color-mix(in oklab, var(--color-bg, #0f1115) 82%, transparent) 70%),
+    linear-gradient(180deg, color-mix(in oklab, var(--color-bg, #0f1115) 55%, transparent), color-mix(in oklab, var(--color-bg, #0f1115) 88%, transparent));
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  overflow-y: auto;
+  padding: 24px 16px;
+  position: fixed;
+  z-index: 50;
+}
+
+.landing-card {
+  background: color-mix(in oklab, var(--color-panel) 88%, transparent);
+  border: 1px solid color-mix(in oklab, var(--color-accent) 30%, var(--color-line));
+  border-radius: calc(var(--radius-md) * 1.5);
+  box-shadow: 0 30px 90px rgb(0 0 0 / 45%);
+  display: grid;
+  gap: 14px;
+  max-width: 640px;
+  padding: 32px 32px 24px;
+  width: 100%;
+  backdrop-filter: blur(8px);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .landing-card {
+    animation: landing-card-in 800ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+}
+
+/* Vertical only: the flex container centers the card. */
+@keyframes landing-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.landing-brand {
+  color: var(--color-accent);
+  font-family: var(--font-data);
+  font-size: var(--text-xs);
+  letter-spacing: 0.14em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.landing-title {
+  font-size: clamp(26px, 4.2vw, 38px);
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  line-height: 1.12;
+  margin: 0;
+}
+
+.landing-lede {
+  color: color-mix(in oklab, var(--color-text) 78%, var(--color-muted));
+  font-size: 15px;
+  line-height: 1.55;
+  margin: 0;
+}
+
+.landing-form {
+  display: flex;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.landing-input {
+  flex: 1;
+  font-size: 15px;
+  min-width: 0;
+  padding: 12px 14px;
+}
+
+.landing-start {
+  font-size: 15px;
+  padding: 0 18px;
+  white-space: nowrap;
+}
+
+.landing-examples {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.landing-steps {
+  border-top: 1px solid var(--color-line);
+  color: var(--color-muted);
+  display: grid;
+  font-size: var(--text-sm);
+  gap: 6px;
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 14px 0 0;
+}
+
+.landing-steps strong {
+  color: var(--color-text);
+  display: inline-block;
+  margin-right: 8px;
+  min-width: 88px;
+}
+
+.landing-editor {
+  background: none;
+  border: none;
+  color: var(--color-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--text-sm);
+  justify-self: start;
+  padding: 4px 0;
+}
+
+.landing-editor:hover,
+.landing-editor:focus-visible {
+  color: var(--color-text);
+  text-decoration: underline;
+}
+
+.landing-writing {
+  display: grid;
+  gap: 10px;
+}
+
+.landing-writing-title {
+  color: var(--color-accent);
+  font-weight: 600;
+  margin: 0;
+}
+
+@media (max-width: 560px) {
+  .landing-card {
+    padding: 22px 18px 18px;
+  }
+
+  .landing-form {
+    flex-direction: column;
+  }
+
+  .landing-start {
+    min-height: 46px;
+  }
+
+  .landing-steps strong {
+    display: block;
+  }
+}

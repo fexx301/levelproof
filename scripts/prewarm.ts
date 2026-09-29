@@ -18,6 +18,7 @@ import { vaultEmptyLevel } from '../src/core/fixtures/vault-empty';
 import { applyOperations, applyRuleProposal } from '../src/core/level';
 import { MAX_AUTO_REVISIONS, shouldAutoRevise } from '../src/core/revision-policy';
 import { reportScore } from '../src/core/report-score';
+import { chapterPlayable, measureChapter, openingAdventureContext } from '../src/core/adventure';
 import { verify } from '../src/core/verifier';
 import { BUILD_PROMPTS, EXAMPLE_PROMPTS, MAKEOVER_PROMPT, TWIST_PROMPT, WINTER_PROMPT } from '../src/ui/example-prompts';
 import { PLAY_REACTIONS } from '../src/ui/play-react';
@@ -118,6 +119,23 @@ try {
   };
 
   console.log(`Prewarming ${JOBS.length} chips on ${origin}`);
+  // The welcome's example worlds start adventures: chapter 1 on the blank
+  // canvas with the opening context, revised exactly as the client does
+  // (while the engine says the chapter is unfair or off its band).
+  const warmChapterOne = async (label: string, prompt: string): Promise<void> => {
+    const adventure = openingAdventureContext();
+    const body = { level: blankCanvasLevel, prompt, adventure };
+    let revision: { operations: unknown[] } | undefined;
+    for (let round = 0; round <= MAX_AUTO_REVISIONS; round++) {
+      const answer = await post(`${label}${round > 0 ? ` (revision ${round})` : ''}`, { ...body, ...(revision !== undefined ? { revision } : {}) });
+      if (answer === null || answer.result.type !== 'patch') return;
+      const applied = applyOperations(blankCanvasLevel, answer.result.operations);
+      if (!applied.ok || chapterPlayable(measureChapter(applied.level), adventure.band)) return;
+      revision = { operations: answer.result.operations };
+    }
+  };
+  for (const build of BUILD_PROMPTS) await warmChapterOne(`welcome: ${build.label}`, build.prompt);
+
   for (const job of JOBS) {
     const label = `${job.scene}: ${job.prompt.slice(0, 48)}`;
     const next = await warm(label, job.level, job.prompt, [], job.selection ?? []);

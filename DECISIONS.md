@@ -2,6 +2,32 @@
 
 Build-window decisions and measured evidence, newest first. Dates are 2026.
 
+## Sep 29 (first screen and visual leap)
+
+- **Welcome**: fresh visitors land on "Describe a world" over a slowly
+  orbiting world. One sentence (or an example) starts an adventure; chapter 1
+  arrives with its title card and proof line within seconds. "Explore the
+  editor instead" closes it for good in that browser; shared links and
+  returning authors never see it. The example worlds' chapter-1 requests are
+  deterministic and prewarmed.
+- **Chapter flyover**: each chapter opens with a 3.4 s sweep from high above
+  the world into the chase view (skipped under reduced motion).
+- **Bloom** for genuinely bright things (torches, lava, the goal, crystals),
+  stronger at night, through a multisampled half-float target; it is the
+  first rung the adaptive-quality ladder drops, and software rasterizers
+  never get it.
+- **Lantern**: in dark worlds the player carries a warm light. The scene
+  owns it from mount (switched off) so the light count never changes —
+  adding a light mid-session recompiles every material.
+- **Horizon**: a merged ring of distant mountains (a skyline in cities, sea
+  stacks at sea) inside the fog; shading baked into vertex colors and drawn
+  unlit, so its large screen area costs almost nothing.
+- **Performance budget fix**: the startup long-task budget now judges the
+  median sample. Measured on the last commit on the same machine: the old
+  "worst task anywhere" check failed there too (the first cold browser
+  context pays one-off costs), and replay fps matched this build (3.16 vs
+  3.12 under load) — no regression from these changes.
+
 ## Sep 29 (endless verified adventure — the AI as game master)
 
 - **Decision**: evolve LevelProof for the Nov 11 deadline rather than pivot

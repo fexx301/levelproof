@@ -90,6 +90,10 @@ export interface ActorContext {
   /** How long a new actor holds still, hidden, for the character model
    * before starting with the procedural stand-in (ms; default 0). */
   characterWaitMs?: number;
+  /** Dark worlds (night, cavern, space): the player carries this warm light.
+   * The scene owns it from the start (switched off) so the number of lights
+   * never changes mid-session — adding one would recompile every material. */
+  lantern?: THREE.PointLight;
 }
 
 /** Horizontal direction from an actor to the camera (null without one). */
@@ -620,6 +624,13 @@ export class PlayerActor {
       });
     }
     this.placeAtSpawn();
+    if (ctx.lantern !== undefined) {
+      // A warm lantern above the character: the player never reads as a
+      // silhouette in a night world, and the light moves with them.
+      ctx.lantern.intensity = 520;
+      ctx.lantern.position.set(0, 95, 25);
+      this.mesh.add(ctx.lantern);
+    }
     ctx.scene.add(this.mesh);
     ctx.world.resetWorld();
     ctx.world.updateState(this.state);
@@ -748,6 +759,11 @@ export class PlayerActor {
     this.rig = null;
     this.ctx.follow(null);
     this.ctx.world.resetWorld();
+    if (this.ctx.lantern !== undefined) {
+      // Hand the lantern back to the scene, dark: the light count stays fixed.
+      this.ctx.lantern.intensity = 0;
+      this.ctx.scene.add(this.ctx.lantern);
+    }
     this.ctx.scene.remove(this.mesh);
     this.mesh.traverse((child) => {
       // Skinned character geometry is shared with the cached asset.
