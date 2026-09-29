@@ -162,14 +162,29 @@ try {
           repaired = true;
         }
       }
+      // Mirror the client's last resort: dismiss a guard that alone makes the chapter unfair.
+      let dismissed = 0;
+      if (!measureChapter(best.level).accepted && (best.level.patrols?.length ?? 0) > 0) {
+        const patrols = best.level.patrols ?? [];
+        for (const ids of [...patrols.map((patrol) => [patrol.id]), ...(patrols.length > 1 ? [patrols.map((patrol) => patrol.id)] : [])]) {
+          const without = applyOperations(best.level, ids.map((id) => ({ kind: 'removePatrol' as const, id })));
+          if (without.ok && measureChapter(without.level).accepted) {
+            best = { ...best, level: without.level };
+            dismissed = ids.length;
+            break;
+          }
+        }
+      }
       const measure = measureChapter(best.level);
+      const guards = best.level.patrols?.length ?? 0;
+      const timedGates = best.level.doors.filter((door) => door.conditions?.cycle !== undefined).length;
       // The client enters any fair chapter; the band is best-effort.
       const ok = measure.accepted;
       if (ok) playable += 1;
       if (chapterPlayable(measure, band)) inBand += 1;
       if (firstPlayable) firstTry += 1;
       console.log(
-        `${ok ? 'PASS' : 'FAIL'}  ch${chapter} ${String(ms).padStart(6)} ms | "${prompt.slice(0, 26)}" band ${band.minMoves}-${band.maxMoves} → shortest ${measure.shortest ?? '-'} gates ${measure.gatesOnRoute} accepted=${measure.accepted}${repaired ? ' (repair search)' : ''} rounds=${rounds} env=${best.level.scenery?.environment ?? '-'}/${best.level.scenery?.lighting ?? '-'} $${spent.toFixed(4)}\n        ${best.story ? `“${best.story.title}” — ${best.story.narration}` : '(no story)'}`,
+        `${ok ? 'PASS' : 'FAIL'}  ch${chapter} ${String(ms).padStart(6)} ms | "${prompt.slice(0, 26)}" band ${band.minMoves}-${band.maxMoves} → shortest ${measure.shortest ?? '-'} gates ${measure.gatesOnRoute} accepted=${measure.accepted}${repaired ? ' (repair search)' : ''}${dismissed > 0 ? ` (dismissed ${dismissed} guard${dismissed === 1 ? '' : 's'})` : ''} guards=${guards} timedGates=${timedGates} rounds=${rounds} env=${best.level.scenery?.environment ?? '-'}/${best.level.scenery?.lighting ?? '-'} $${spent.toFixed(4)}\n        ${best.story ? `“${best.story.title}” — ${best.story.narration}` : '(no story)'}`,
       );
       if (!ok) break;
       story.push(best.story ?? { title: `Chapter ${chapter}`, narration: 'The adventure continues.' });

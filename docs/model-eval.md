@@ -158,6 +158,13 @@ the prompt and the engine's findings: 12 of 16 builds accepted. A timed
 (reasonable). Hazard spend across the runs about $0.33 (one run ended at
 $0.109 against a $0.10 cap — a single request crossed it).
 
+Adventure battery on adventure-3 / prompt-14 (stopped by its $0.10 cap after
+6 chapters, $0.104): **6/6 fair and in band** — 4 on the first try, 2 after
+one or two engine-guided revisions. The "Harder, with more traps" chapter
+added a timed gate on its own (shortest 14 in band 13-17); no guard had to
+be dismissed. First-try chapters took 9-18 s and about $0.008; revised ones
+28-34 s and $0.02-0.03.
+
 ## Sep 26 update — judge-prompt battery (unseen prompts)
 
 `scripts/judge-battery.ts`: 40 prompts the prompt was never tuned on, run
