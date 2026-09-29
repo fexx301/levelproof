@@ -5,7 +5,7 @@ import { goalRequirementViolated, initialState, stateKey, step } from '../src/co
 import { compileLevel } from '../src/core/topology';
 import { verify } from '../src/core/verifier';
 import { baselineLevel } from '../src/core/fixtures/baseline';
-import { gauntletLevel, overpassLevel, twinKeysLevel } from '../src/core/fixtures/gallery';
+import { gauntletLevel, overpassLevel, sentryLevel, twinKeysLevel } from '../src/core/fixtures/gallery';
 import { trapLevel } from '../src/core/fixtures/trap';
 import { trapRepairedLevel } from '../src/core/fixtures/trap-repaired';
 import { unfamiliarLevel } from '../src/core/fixtures/unfamiliar';
@@ -36,6 +36,7 @@ describe('play hints', () => {
     ['twin keys', twinKeysLevel],
     ['overpass', overpassLevel],
     ['gauntlet', gauntletLevel],
+    ['sentry', sentryLevel],
     ['trap repaired', trapRepairedLevel],
     ['unfamiliar', unfamiliarLevel],
   ];

@@ -8,6 +8,7 @@ import { validateRoute } from '../src/core/replay';
 import { compileLevel } from '../src/core/topology';
 import { verify } from '../src/core/verifier';
 import { baselineLevel } from '../src/core/fixtures/baseline';
+import { sentryLevel } from '../src/core/fixtures/gallery';
 
 /** Turn-based hazards (§6.4): timed doors and guards on a turn clock. */
 
@@ -158,5 +159,31 @@ describe('hazard validation', () => {
       requirements: [],
     };
     expect(validateLevel(level).join(' ')).toMatch(/could reach 98304 situations, over the checker's 32768/);
+  });
+});
+
+describe('The Sentry (hazard showcase)', () => {
+  it('is accepted; its shortest win times the sentry and the drawbridge', () => {
+    expect(validateLevel(sentryLevel)).toEqual([]);
+    const compiled = compileLevel(sentryLevel);
+    expect(compiled.cycle).toBe(4); // lcm(sentry 2, drawbridge 4)
+    const report = verify(sentryLevel);
+    expect(report.accepted).toBe(true);
+    const route = report.checks.solution.witness!.route;
+    expect(route.some((move) => move.action === 'wait')).toBe(true);
+    expect(route.some((move) => move.events.caught !== undefined)).toBe(false);
+    expect(route.at(-1)!.destination).toBe('treasury');
+    expect(validateRoute(sentryLevel, route).ok).toBe(true);
+  });
+
+  it('walking straight into the yard after the key gets the player caught', () => {
+    const compiled = compileLevel(sentryLevel);
+    let state = initialState(compiled);
+    for (const action of ['E', 'N', 'N', 'S', 'S'] as const) state = step(compiled, state, action)!.after;
+    expect(state.moduleId).toBe('yard-west');
+    expect(state.keyMask).not.toBe(0);
+    const rushed = step(compiled, state, 'E')!;
+    expect(rushed.events.caught).toBe('sentry');
+    expect(rushed.after).toEqual(initialState(compiled));
   });
 });

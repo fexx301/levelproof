@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { blankCanvasLevel } from '../src/core/fixtures/blank-canvas';
-import { gauntletLevel, overpassLevel, twinKeysLevel } from '../src/core/fixtures/gallery';
+import { gauntletLevel, overpassLevel, sentryLevel, twinKeysLevel } from '../src/core/fixtures/gallery';
 import { vaultEmptyLevel } from '../src/core/fixtures/vault-empty';
 import { applyOperations, validateLevel } from '../src/core/level';
 import { canonicalJson, decodeLevelShare, encodeLevelShare, revisionId } from '../src/core/serialize';
@@ -71,6 +71,7 @@ describe('scenery never changes the verdict', () => {
     ['twin keys', twinKeysLevel],
     ['overpass', overpassLevel],
     ['gauntlet', gauntletLevel],
+    ['sentry', sentryLevel],
   ] as const) {
     it(`${name}: identical checks with and without its scenery`, () => {
       expect(level.scenery).toBeDefined();

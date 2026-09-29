@@ -1,10 +1,11 @@
 import type { Level } from '../../../shared/schema';
 
 /**
- * Gallery scenes (§12): three hand-authored showcase levels, each verified
+ * Gallery scenes (§12): four hand-authored showcase levels, each verified
  * green by the same engine as everything else. Distinct identities: the
  * Twin Keys (ordered keys and a powered return loop), the Overpass (a
- * two-elevation relay circuit), and the Gauntlet (prepare, arm, commit).
+ * two-elevation relay circuit), the Gauntlet (prepare, arm, commit), and
+ * the Sentry (a patrolling guard and a timed drawbridge).
  * Every reachable state remains recoverable, not just the intended route.
  */
 
@@ -137,5 +138,46 @@ export const gauntletLevel: Level = {
     { id: 'moat-west-2', prop: 'lava', x: 6, z: 7 },
     { id: 'moat-east', prop: 'lava', x: 8, z: 6 },
     { id: 'moat-east-2', prop: 'lava', x: 8, z: 7 },
+  ],
+};
+
+/**
+ * The Sentry (§6.4): the hazard showcase. A castle yard at night: the key
+ * waits atop the watchtower, a sentry paces between the middle of the yard
+ * and the well alcove, and the drawbridge over the moat is down two turns
+ * in every four. Time your crossing behind the sentry, then time the bridge.
+ * Every reachable situation — position, key, and turn — was checked.
+ */
+export const sentryLevel: Level = {
+  modules: [
+    { id: 'gatehouse', template: 'flat', x: 2, z: 8, h: 0, label: 'gatehouse', ports: ['E'] },
+    { id: 'yard-west', template: 'flat', x: 3, z: 8, h: 0, label: 'west yard', ports: ['E', 'W', 'N'] },
+    { id: 'tower-stair', template: 'ramp', x: 3, z: 7, h: 0, orientation: 'N', ports: ['S', 'N'] },
+    { id: 'tower-top', template: 'flat', x: 3, z: 6, h: 1, label: 'watchtower', ports: ['S'] },
+    { id: 'yard-mid', template: 'flat', x: 4, z: 8, h: 0, label: 'yard', ports: ['E', 'W', 'N'] },
+    { id: 'well', template: 'flat', x: 4, z: 7, h: 0, label: 'well alcove', ports: ['S'] },
+    { id: 'yard-east', template: 'flat', x: 5, z: 8, h: 0, label: 'east yard', ports: ['E', 'W'] },
+    { id: 'bridge-landing', template: 'flat', x: 6, z: 8, h: 0, label: 'drawbridge', ports: ['E', 'W'] },
+    { id: 'treasury', template: 'flat', x: 7, z: 8, h: 0, label: 'treasury', ports: ['W'] },
+  ],
+  keys: [{ id: 'tower-key', moduleId: 'tower-top', look: 'key' }],
+  switches: [],
+  spawn: 'gatehouse',
+  goal: 'treasury',
+  doors: [
+    { id: 'drawbridge', a: 'yard-east', b: 'bridge-landing', conditions: { cycle: { period: 4, openTicks: 2 } } },
+    { id: 'treasury-door', a: 'bridge-landing', b: 'treasury', conditions: { requiresKey: 'tower-key' } },
+  ],
+  requirements: [],
+  patrols: [{ id: 'sentry', route: ['yard-mid', 'well'] }],
+  scenery: { environment: 'meadow', lighting: 'night', architecture: 'limestone' },
+  props: [
+    { id: 'gate-brazier', prop: 'brazier', x: 2, z: 9 },
+    { id: 'tower-banner', prop: 'banner', x: 2, z: 6 },
+    { id: 'yard-statue', prop: 'statue', x: 5, z: 9 },
+    { id: 'moat-north', prop: 'water', x: 6, z: 7 },
+    { id: 'moat-south', prop: 'water', x: 6, z: 9 },
+    { id: 'treasure-chest', prop: 'chest', x: 8, z: 8 },
+    { id: 'treasury-torch', prop: 'torch', x: 7, z: 9 },
   ],
 };

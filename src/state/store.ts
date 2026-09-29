@@ -11,7 +11,7 @@ import {
 import { levelSchema, type Cardinal, type Level, type Operation } from '../../shared/schema.js';
 import { unfamiliarLevel } from '../core/fixtures/unfamiliar.js';
 import { vaultEmptyLevel } from '../core/fixtures/vault-empty.js';
-import { twinKeysLevel, overpassLevel, gauntletLevel } from '../core/fixtures/gallery.js';
+import { twinKeysLevel, overpassLevel, gauntletLevel, sentryLevel } from '../core/fixtures/gallery.js';
 import { blankCanvasLevel } from '../core/fixtures/blank-canvas.js';
 import { applyOperations, applyRuleProposal, requirementText } from '../core/level.js';
 import { findRepairs, touchesProtected, type RepairCandidate } from '../core/search.js';
@@ -47,6 +47,7 @@ export const SCENES = [
   { id: 'twin-keys', label: 'The Twin Keys', level: twinKeysLevel },
   { id: 'overpass', label: 'The Overpass', level: overpassLevel },
   { id: 'gauntlet', label: 'The Gauntlet', level: gauntletLevel },
+  { id: 'sentry', label: 'The Sentry', level: sentryLevel },
 ] as const;
 
 export type SceneId = (typeof SCENES)[number]['id'];
