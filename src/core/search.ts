@@ -273,7 +273,15 @@ function protectedFootprint(level: Level, id: string): string | null {
   const door = level.doors.find((d) => d.id === id);
   if (door !== undefined) return JSON.stringify(['door', door.a, door.b, door.conditions ?? {}, place(door.a), place(door.b)]);
   const prop = level.props?.find((p) => p.id === id);
-  if (prop !== undefined) return JSON.stringify(['prop', prop.prop, prop.x, prop.z]);
+  if (prop !== undefined) {
+    // A landmark stands on the highest module in its cell: a floor added or
+    // moved beneath it moves it too.
+    const beneath = level.modules
+      .filter((m) => m.x === prop.x && m.z === prop.z)
+      .map((m) => [m.h, m.template, m.orientation ?? null])
+      .sort((a, b) => Number(b[0]) - Number(a[0]))[0] ?? null;
+    return JSON.stringify(['prop', prop.prop, prop.x, prop.z, beneath]);
+  }
   const patrol = level.patrols?.find((p) => p.id === id);
   if (patrol !== undefined) return JSON.stringify(['guard', patrol.route, patrol.route.map(place)]);
   return null;
@@ -287,7 +295,14 @@ function protectedFootprint(level: Level, id: string): string | null {
  * applied and every protected footprint compared; without it, only direct
  * references are caught.
  */
-export function touchesProtected(operations: Operation[], protectedIds: Set<string>, base?: Level): boolean {
+export function touchesProtected(
+  operations: Operation[],
+  protectedIds: Set<string>,
+  base?: Level,
+  /** The actual result when it is not `base` + `operations` alone — a rule
+   * proposal applies its operations under the new rules. */
+  candidate?: Level,
+): boolean {
   for (const op of operations) {
     if (
       op.kind === 'moveItem' || op.kind === 'removeItem' ||
@@ -306,10 +321,14 @@ export function touchesProtected(operations: Operation[], protectedIds: Set<stri
     }
   }
   if (base === undefined || protectedIds.size === 0) return false;
-  const applied = applyOperations(base, operations);
-  if (!applied.ok) return false; // rejected elsewhere; nothing would change
+  let after = candidate;
+  if (after === undefined) {
+    const applied = applyOperations(base, operations);
+    if (!applied.ok) return false; // rejected elsewhere; nothing would change
+    after = applied.level;
+  }
   for (const id of protectedIds) {
-    if (protectedFootprint(base, id) !== protectedFootprint(applied.level, id)) return true;
+    if (protectedFootprint(base, id) !== protectedFootprint(after, id)) return true;
   }
   return false;
 }

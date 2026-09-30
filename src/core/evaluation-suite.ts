@@ -632,7 +632,7 @@ export function evaluateFixedCase(testCase: FixedEvaluationCase): FixedEvaluatio
 
   let protectionPreserved = true;
   if (candidate !== null && testCase.protectedIds !== undefined && (result.type === 'patch' || result.type === 'rule_proposal')) {
-    protectionPreserved = !touchesProtected(result.operations, new Set(testCase.protectedIds), testCase.base);
+    protectionPreserved = !touchesProtected(result.operations, new Set(testCase.protectedIds), testCase.base, candidate);
     if (!protectionPreserved) errors.push('candidate touches a protected entity');
   }
 

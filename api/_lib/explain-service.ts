@@ -80,7 +80,7 @@ const CHECK_NAMES: Record<ExplainCheck, string> = {
 
 /**
  * Grounding check: every hyphenated id-like token in the text must be a real
- * scene id (module, key, switch, or door). Plain English words pass; invented
+ * scene id (module, key, switch, door, guard, or landmark). Plain English words pass; invented
  * compound ids like "secret-passage" do not.
  */
 export function groundingViolation(text: string, level: Level): string | null {
@@ -94,6 +94,9 @@ export function groundingViolation(text: string, level: Level): string | null {
   for (const k of level.keys) known.add(k.id);
   for (const s of level.switches) known.add(s.id);
   for (const d of level.doors) known.add(d.id);
+  // Guards and landmarks are scene entities too ("night-watch", "old-oak").
+  for (const p of level.patrols ?? []) known.add(p.id);
+  for (const p of level.props ?? []) known.add(p.id);
   const tokens = text.toLowerCase().match(/[a-z][a-z0-9-]*[a-z0-9]/g) ?? [];
   for (const token of tokens) {
     if (token.includes('-') && !known.has(token)) return token;

@@ -1052,7 +1052,9 @@ export const useApp = create<AppState>()((set, get) => ({
       }
       const proposedOperations = result.type === 'patch' || result.type === 'rule_proposal' ? result.operations : [];
       const keptAtResponse = get().protectedIds;
-      if (keptAtResponse.length > 0 && touchesProtected(proposedOperations, new Set(keptAtResponse), base)) {
+      // A rule proposal's operations apply under its new rules: judge that result.
+      const ruleCandidate = result.type === 'rule_proposal' ? applyRuleProposal(base, result) : null;
+      if (keptAtResponse.length > 0 && touchesProtected(proposedOperations, new Set(keptAtResponse), base, ruleCandidate?.ok ? ruleCandidate.level : undefined)) {
         fail('The proposal changes an object marked Keep these. Nothing changed. Remove that object from Keep these or revise the request.', { lastPrompt: prompt });
         return;
       }
@@ -1288,7 +1290,8 @@ export const useApp = create<AppState>()((set, get) => ({
     const { pendingRule } = get();
     if (!pendingRule || pendingRule.kind !== 'rule') return;
     const kept = get().protectedIds;
-    if (kept.length > 0 && touchesProtected(pendingRule.proposal.operations, new Set(kept), pendingRule.base)) {
+    const ruleCandidate = applyRuleProposal(pendingRule.base, pendingRule.proposal);
+    if (kept.length > 0 && touchesProtected(pendingRule.proposal.operations, new Set(kept), pendingRule.base, ruleCandidate.ok ? ruleCandidate.level : undefined)) {
       set({ error: 'This preview changes an object marked Keep these. Remove it from Keep these or revise the proposal before approving.' });
       return;
     }

@@ -70,6 +70,21 @@ describe('addCorridor', () => {
     }
   });
 
+  it('never reopens an exit the patch closed explicitly', () => {
+    const closed = apply([
+      { kind: 'addArea', area: { id: 'hall', x: 11, z: 6, h: 0, width: 2, depth: 3 } },
+      { kind: 'addCorridor', corridor: { id: 'east-walk', from: 'start-walk', direction: 'E', length: 3 } },
+      { kind: 'setModulePorts', id: 'east-walk-3', ports: ['W'] },
+    ]);
+    expect(connected(closed, 'east-walk-3', 'hall-1-2')).toBe(false);
+    const hallClosed = apply([
+      { kind: 'addCorridor', corridor: { id: 'east-walk', from: 'start-walk', direction: 'E', length: 3 } },
+      { kind: 'addModule', module: { id: 'vault', template: 'flat', x: 11, z: 7, h: 0, ports: [] } },
+      { kind: 'setModulePorts', id: 'vault', ports: [] },
+    ]);
+    expect(hallClosed.modules.find((m) => m.id === 'vault')!.ports).toEqual([]);
+  });
+
   it('can be a bridge, and never starts from a ramp', () => {
     const bridge = apply([{ kind: 'addCorridor', corridor: { id: 'span', from: 'goal-pad', direction: 'W', length: 2, template: 'bridge' } }]);
     expect(bridge.modules.filter((m) => m.id.startsWith('span-')).every((m) => m.template === 'bridge')).toBe(true);
@@ -127,5 +142,38 @@ describe('the AI can lay out areas and corridors', () => {
     const prompt = buildSystemPrompt(blankCanvasLevel, 'rev');
     expect(prompt).toContain('"kind":"addArea"');
     expect(prompt).toContain('"kind":"addCorridor"');
+  });
+});
+
+describe('kept landmarks', () => {
+  it('a floor built beneath a kept landmark changes it, so protection refuses', () => {
+    const withStatue = apply([{ kind: 'addProp', id: 'old-statue', prop: 'statue', x: 3, z: 3 }]);
+    const raise: Operation = { kind: 'addModule', module: { id: 'plinth', template: 'flat', x: 3, z: 3, h: 1, ports: [] } };
+    expect(touchesProtected([raise], new Set(['old-statue']), withStatue)).toBe(true);
+    const elsewhere: Operation = { kind: 'addModule', module: { id: 'plinth', template: 'flat', x: 4, z: 3, h: 1, ports: [] } };
+    expect(touchesProtected([elsewhere], new Set(['old-statue']), withStatue)).toBe(false);
+  });
+});
+
+describe('rule proposals and Keep these', () => {
+  it('judges a rule proposal by the level it would produce, not by the old rules', async () => {
+    const { applyRuleProposal } = await import('../src/core/level');
+    const { vaultEmptyLevel } = await import('../src/core/fixtures/vault-empty');
+    // A level whose rule requires a key; the proposal drops the rule, removes
+    // the key, and adds a switch on a kept floor.
+    const keyed = apply([{ kind: 'addItem', itemType: 'key', id: 'brass-key', moduleId: 'key-balcony' }], vaultEmptyLevel);
+    const base: Level = { ...keyed, requirements: [{ type: 'collectBeforeGoal', keyId: 'brass-key' }] };
+    const proposal = {
+      oldRequirements: base.requirements,
+      newRequirements: [],
+      operations: [
+        { kind: 'removeItem', id: 'brass-key' },
+        { kind: 'addItem', itemType: 'switch', id: 'floor-plate', moduleId: 'gallery' },
+      ] as Operation[],
+    };
+    const candidate = applyRuleProposal(base, proposal);
+    expect(candidate.ok).toBe(true);
+    expect(applyOperations(base, proposal.operations).ok).toBe(false); // why the old check missed it
+    expect(touchesProtected(proposal.operations, new Set(['gallery']), base, candidate.ok ? candidate.level : undefined)).toBe(true);
   });
 });

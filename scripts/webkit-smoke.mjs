@@ -1,3 +1,4 @@
+/* global console, process, document */
 // Safari-engine smoke test (WebKit via Playwright): desktop and iPhone emulation.
 // Usage: node webkit-smoke.mjs <baseURL> <outDir>
 import { webkit, devices } from '@playwright/test';

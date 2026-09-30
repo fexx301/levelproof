@@ -354,3 +354,12 @@ describe('guards and timed gates are part of the level', () => {
     expect(loaded?.status === 'accepted' ? loaded.level.patrols : null).toEqual(sentryLevel.patrols);
   });
 });
+
+describe('explanations may name guards', () => {
+  it('a guard id is a grounded scene fact, an invented one is not', async () => {
+    const { groundingViolation } = await import('../api/_lib/explain-service');
+    const level = { ...sentryLevel, patrols: [{ id: 'night-watch', route: ['yard-mid', 'well'] }] };
+    expect(groundingViolation('Wait for the night-watch to reach the well.', level)).toBeNull();
+    expect(groundingViolation('Wait for the day-watch to leave.', level)).toBe('day-watch');
+  });
+});

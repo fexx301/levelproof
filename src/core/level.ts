@@ -461,11 +461,12 @@ export function applyOperations(base: Level, operations: Operation[]): ApplyResu
   // level — whichever order the patch built them in.
   for (const { id, direction } of farEnds) {
     const last = findModule(id);
-    if (last === undefined) continue;
+    // Exits the patch set explicitly win over the automatic join.
+    if (last === undefined || explicitPorts.has(id)) continue;
     const { dx, dz } = dirDelta(direction);
     const ahead = moduleAt(last.x + dx, last.z + dz, last.h);
     const back = opposite(direction);
-    if (ahead === undefined) continue;
+    if (ahead === undefined || explicitPorts.has(ahead.id)) continue;
     const joins = ahead.template === 'ramp' ? portElevation(ahead, back) === last.h : ahead.h === last.h;
     if (!joins) continue;
     openSide(last, direction);
