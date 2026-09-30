@@ -2,6 +2,18 @@
 
 Build-window decisions and measured evidence, newest first. Dates are 2026.
 
+## Sep 30 (week 4 — Safari engine, phone-class CPU, thumb reach)
+
+- **WebKit smoke** (desktop and iPhone emulation) passes end to end with no
+  errors; kept as `scripts/webkit-smoke.mjs`.
+- **CPU throttled ×10 on the real GPU**: every world holds 60 fps at a phone
+  viewport; frame submit peaks at 6.6 ms (The Sentry). Kept as
+  `scripts/throttle-measure.ts`. Phone GPUs are the remaining unknown.
+- **Hint and Restart moved into the pad's empty top corners.** On a phone
+  they were below the fold, so asking for a hint scrolled the pad away; now
+  every play control is in thumb reach and the lit arrow plus the trail in
+  the world carry the hint.
+
 ## Sep 29 (week 4 starts — draw calls)
 
 - **Measured before optimising**: 352 draw calls a frame on the vault, 425 on

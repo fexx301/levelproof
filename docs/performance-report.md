@@ -42,11 +42,34 @@ fps on the 72-room world, 4.2-4.8 on the vault); the win is CPU draw-call
 overhead, which is what dominates on phones. The replay performance test now
 fails above 220 draw calls (measured 114).
 
+## 2026-09-30 — Safari's engine and a phone-class CPU
+
+**WebKit** (`node scripts/webkit-smoke.mjs <url> <outDir>`; Playwright WebKit
+26.6, desktop 1280×800 and iPhone 13 emulation): the welcome renders a live
+3D world, the editor opens, The Sentry plays (wait a turn, move, the turn
+advances), and a hint lights a move — all steps pass on both, no page or
+console errors, 178 draw calls.
+
+**Throttled CPU on the real GPU** (`npx tsx scripts/throttle-measure.ts
+<url> <rate>`; ANGLE Metal on an M4 Pro, 390×844 phone viewport at DPR 3,
+the player walking by hints for six seconds):
+
+| World | CPU ×1 | CPU ×4 | CPU ×10 | Frame submit at ×10 |
+|---|---|---|---|---|
+| The Balcony Vault | 60 fps | 60 fps | 60 fps | 3.1 ms |
+| The Sentry | 60 fps | 60 fps | 60 fps | 6.6 ms |
+| 72-room world | 60 fps | 60 fps | 60 fps (1 frame > 33 ms) | 4.0 ms |
+
+CPU work is not the limit even at a tenth of this machine's speed. What this
+cannot show is a phone GPU's fill rate at DPR 2-3 with bloom; the adaptive
+quality ladder (bloom, then resolution, then scenery detail) is the
+safeguard, and real phones remain to be measured.
+
 ## Still to measure
 
 - [x] Five cold and five warm production-preview startup samples on local Chromium/SwiftShader; results below.
 - [ ] Repeat startup measurements against the deployed CDN/build on an ordinary GPU-backed desktop (frame submit cost measured on a real GPU on Sep 29, above).
-- [ ] Safari.
+- [x] Safari's engine (WebKit 26.6, desktop and iPhone emulation) — Sep 30, above. Real Safari on a device still open.
 - [ ] Real phone hardware.
 - [ ] Lower-powered laptop.
 - [ ] Repeated theme/replay cycles with memory/resource-growth inspection.

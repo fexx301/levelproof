@@ -128,9 +128,14 @@ export function PlayPanel({ level, report }: { level: Level; report: Report }) {
       </p>
       <p className="panel-note play-touch-note">Hold an arrow to keep running{hazards ? ' · tap the middle to wait a turn' : ''} · drag the world to look around</p>
       <div className="dpad">
-        <span />
+        {/* Hint and Restart sit in the pad's top corners: always in thumb reach. */}
+        <button type="button" className="dpad-aux" onClick={requestHint} disabled={won} aria-keyshortcuts="H">
+          Hint
+        </button>
         {moveButton('forward')}
-        <span />
+        <button type="button" className="dpad-aux" onClick={() => actorBridge.player()?.restart()} aria-keyshortcuts="R">
+          Restart
+        </button>
         {moveButton('left')}
         {hazards ? (
           // With guards or timed gates, the centre of the pad waits a turn
@@ -181,14 +186,6 @@ export function PlayPanel({ level, report }: { level: Level; report: Report }) {
             Switch on: {pad}
           </span>
         ))}
-      </div>
-      <div className="ghost-controls">
-        <button type="button" onClick={() => actorBridge.player()?.restart()}>
-          Restart
-        </button>
-        <button type="button" onClick={requestHint} disabled={won} aria-keyshortcuts="H">
-          Hint
-        </button>
       </div>
       {playHint && !won && (
         <p className="play-hint" role="status" aria-live="polite">
