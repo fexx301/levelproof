@@ -13,6 +13,26 @@ export const RECOVERY_VERSION = 1;
 const promptHistorySchema = z.array(z.string().min(1).max(2000)).max(6);
 const themeSchema = themeKeySchema.nullable();
 
+const count = z.number().int().nonnegative();
+/** An adventure chapter as the title card and the next band need it. */
+const chapterSchema = z.strictObject({
+  number: z.number().int().positive(),
+  title: z.string().max(120),
+  narration: z.string().max(600),
+  shortest: count,
+  gates: count,
+  explored: count,
+  band: z.strictObject({ minMoves: count, maxMoves: count }).optional(),
+  inBand: z.boolean(),
+  revision: z.string().max(80),
+});
+/** The adventure's story and how the player is doing: optional, so sessions
+ * saved before adventures existed still recover. */
+const adventureSchema = z.strictObject({
+  chapters: z.array(chapterSchema).max(50),
+  run: z.strictObject({ hints: count, deadEnds: count, restarts: count }),
+});
+
 const historyEntrySchema = z.strictObject({
   level: levelSchema,
   label: z.string().max(200),
@@ -68,6 +88,7 @@ const recoverySchema = z.strictObject({
     attempts: z.number().int().nonnegative(),
     model: z.string().max(200),
   }).nullable(),
+  adventure: adventureSchema.optional(),
 });
 
 export type RecoverySnapshot = z.infer<typeof recoverySchema>;

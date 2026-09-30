@@ -163,7 +163,14 @@ export function compileNeedsModel(input: CompileInput): boolean {
 export async function compile(
   env: NodeJS.ProcessEnv,
   input: CompileInput,
-  deps: { callModel?: CallModel; signal?: AbortSignal; onProgress?: (progress: CompileProgress) => void } = {},
+  deps: {
+    callModel?: CallModel;
+    signal?: AbortSignal;
+    onProgress?: (progress: CompileProgress) => void;
+    /** When the request arrived (performance.now()): the service deadline
+     * counts from there, not from after admission and cache work. */
+    startedAt?: number;
+  } = {},
 ): Promise<CompileOutcome> {
   const callModel = deps.callModel ?? chatCompletion;
   const signal = deps.signal;
@@ -234,7 +241,7 @@ export async function compile(
   ];
 
   const attempts: AttemptRecord[] = [];
-  const started = performance.now();
+  const started = deps.startedAt ?? performance.now();
   let totalCostUsd: number | null = 0;
   let lastProviderError: 'rate_limited' | 'timeout' | 'budget' | 'outage' | 'unknown' | undefined;
 

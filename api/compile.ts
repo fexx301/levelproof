@@ -67,6 +67,9 @@ export async function POST(request: Request): Promise<Response> {
 }
 
 async function handle(request: Request): Promise<Response> {
+  // One deadline for the whole request: admission, parsing, the cache, and
+  // every model attempt all count against the platform's 60 s limit.
+  const startedAt = performance.now();
   if (request.method !== 'POST') {
     return Response.json({ error: 'method_not_allowed' }, { status: 405 });
   }
@@ -127,7 +130,7 @@ async function handle(request: Request): Promise<Response> {
         // tell a slow model (bytes keep coming) from a stalled connection.
         const heartbeat = setInterval(() => send({ event: 'heartbeat' }), HEARTBEAT_MS);
         try {
-          const outcome = await compile(process.env, input, { signal: request.signal, onProgress });
+          const outcome = await compile(process.env, input, { signal: request.signal, onProgress, startedAt });
           const { status, body } = outcomeResponse(outcome);
           send({ event: 'result', status, body });
         } catch {
@@ -152,7 +155,7 @@ async function handle(request: Request): Promise<Response> {
     });
   }
 
-  const outcome = await compile(process.env, input, { signal: request.signal });
+  const outcome = await compile(process.env, input, { signal: request.signal, startedAt });
   const { status, body } = outcomeResponse(outcome);
   return Response.json(body, { status });
 }

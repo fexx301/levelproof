@@ -51,6 +51,26 @@ function snapshot(): RecoverySnapshot {
 }
 
 describe('local session recovery', () => {
+  it('keeps the adventure — its chapters and how the player is doing — across a reload', () => {
+    const storage = memoryStorage();
+    const adventure = {
+      chapters: [
+        { number: 1, title: 'The Keep', narration: 'You arrive.', shortest: 7, gates: 1, explored: 40, inBand: true, revision: 'rev-a' },
+        { number: 2, title: 'The Crypt', narration: 'You descend.', shortest: 11, gates: 1, explored: 88, band: { minMoves: 9, maxMoves: 13 }, inBand: true, revision: 'rev-b' },
+      ],
+      run: { hints: 2, deadEnds: 1, restarts: 0 },
+    };
+    expect(persistRecovery(storage, { ...snapshot(), adventure }).ok).toBe(true);
+    const restored = readRecovery(storage);
+    expect(restored.status === 'ready' ? restored.snapshot.adventure : null).toEqual(adventure);
+    // A session saved before adventures existed still recovers.
+    const older = memoryStorage();
+    expect(persistRecovery(older, snapshot()).ok).toBe(true);
+    const plain = readRecovery(older);
+    expect(plain.status).toBe('ready');
+    expect(plain.status === 'ready' ? plain.snapshot.adventure : 'x').toBeUndefined();
+  });
+
   it('round-trips the accepted checkpoint, editable draft, protections, and unapproved preview', () => {
     const storage = memoryStorage();
     const value = snapshot();

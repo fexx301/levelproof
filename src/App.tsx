@@ -313,6 +313,8 @@ function Viewport({ level, mode, report, theme, previewing }: { level: Level; mo
   const hostRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<SceneHandle | null>(null);
   const [sceneFailure, setSceneFailure] = useState<string | null>(null);
+  // "Retry 3D view" remounts the scene: every effect bound to the scene lists
+  // sceneAttempt so it rebinds to the new one.
   const [sceneAttempt, setSceneAttempt] = useState(0);
   const witnessKind = useApp((s) => s.ghost.witnessKind);
 
@@ -349,16 +351,16 @@ function Viewport({ level, mode, report, theme, previewing }: { level: Level; mo
   // while playing: it would spoil the trap.
   useEffect(() => {
     sceneRef.current?.setAnalysis(report.complete ? (report.recoveryMap ?? null) : null);
-  }, [report, level, theme]);
+  }, [report, level, theme, sceneAttempt]);
   useEffect(() => {
     sceneRef.current?.setAnalysisVisible(mode !== 'playing');
-  }, [mode, level, theme]);
+  }, [mode, level, theme, sceneAttempt]);
 
   // Repair preview markers follow the store (§9 before/after).
   const preview = useApp((st) => st.preview);
   useEffect(() => {
     sceneRef.current?.previewOperations(preview);
-  }, [preview, level, theme]);
+  }, [preview, level, theme, sceneAttempt]);
 
   // Click-to-select (§12): picked entities toggle store selection; empty
   // space clears it. Selection rings follow the store.
@@ -378,18 +380,18 @@ function Viewport({ level, mode, report, theme, previewing }: { level: Level; mo
       else toggleSelect(id);
     });
     return () => scene?.onPick(null);
-  }, [level, theme, mode, toggleSelect, clearSelection]);
+  }, [level, theme, mode, toggleSelect, clearSelection, sceneAttempt]);
   useEffect(() => {
     sceneRef.current?.setSelection(selection);
-  }, [selection, level, theme]);
+  }, [selection, level, theme, sceneAttempt]);
   const protectedIds = useApp((st) => st.protectedIds);
   useEffect(() => {
     sceneRef.current?.setProtected(protectedIds);
-  }, [protectedIds, level, theme]);
+  }, [protectedIds, level, theme, sceneAttempt]);
   const evidence = useApp((st) => st.evidence);
   useEffect(() => {
     sceneRef.current?.setEvidence(evidence?.implicatedIds ?? []);
-  }, [evidence, level, theme]);
+  }, [evidence, level, theme, sceneAttempt]);
 
   // Ghost: replays a verifier witness route — never a fabricated one.
   useEffect(() => {
@@ -428,7 +430,7 @@ function Viewport({ level, mode, report, theme, previewing }: { level: Level; mo
       actorBridge.setGhost(null);
       actor.dispose();
     };
-  }, [level, mode, witnessKind, report, theme]);
+  }, [level, mode, witnessKind, report, theme, sceneAttempt]);
 
   // Manual play: same core step as the checker; one move at a time.
   useEffect(() => {
@@ -499,24 +501,24 @@ function Viewport({ level, mode, report, theme, previewing }: { level: Level; mo
       actorBridge.setPlayer(null);
       actor.dispose();
     };
-  }, [level, mode, theme]);
+  }, [level, mode, theme, sceneAttempt]);
 
   // Manual play chases the player unless the author asked for the overview.
   const followCamera = useApp((st) => st.followCamera);
   useEffect(() => {
     sceneRef.current?.setFollow(followCamera);
-  }, [followCamera, mode, level, theme]);
+  }, [followCamera, mode, level, theme, sceneAttempt]);
   // Behind the first-visit welcome the world turns slowly.
   const landing = useApp((st) => st.landing);
   useEffect(() => {
     sceneRef.current?.setIdleOrbit(landing && mode === 'authoring');
-  }, [landing, mode, level, theme]);
+  }, [landing, mode, level, theme, sceneAttempt]);
   // A new chapter opens with a flyover (after the player has spawned above).
   const introChapter = useApp((st) => st.adventure.intro?.revision ?? null);
   useEffect(() => {
     if (mode !== 'playing' || introChapter === null) return;
     sceneRef.current?.playIntro();
-  }, [introChapter, mode, level, theme]);
+  }, [introChapter, mode, level, theme, sceneAttempt]);
 
   const viewportLabel =
     mode === 'playing'

@@ -720,7 +720,6 @@ let sessionBeforeShare: RecoverySnapshot | null = (() => {
 /** File the pre-share session's levels as saved puzzles; returns the note. */
 function archiveSessionBeforeShare(savedScenes: SavedScene[]): { next: SavedScene[]; note: string } | null {
   const prior = sessionBeforeShare;
-  sessionBeforeShare = null;
   if (prior === null) return null;
   const builtIn = SCENES.find((scene) => scene.id === prior.acceptedSceneId);
   const acceptedIsOwnWork = builtIn === undefined || revisionId(builtIn.level) !== revisionId(prior.acceptedLevel);
@@ -820,6 +819,11 @@ function makeRecoverySnapshot(state: AppState): RecoverySnapshot {
     lastPrompt: state.lastPrompt,
     changeSummary: state.changeSummary,
     lastCompileMeta: state.lastCompileMeta,
+    // The story so far and how the player is doing, so a reload continues the
+    // same adventure at the same difficulty.
+    ...(state.adventure.chapters.length > 0
+      ? { adventure: { chapters: state.adventure.chapters.slice(-50), run: state.adventure.run } }
+      : {}),
   };
 }
 
@@ -883,7 +887,9 @@ export const useApp = create<AppState>()((set, get) => ({
   play: PLAY_INITIAL,
   repair: REPAIR_INITIAL,
   explain: EXPLAIN_INITIAL,
-  adventure: ADVENTURE_INITIAL,
+  adventure: initialRecovery?.adventure !== undefined
+    ? { ...ADVENTURE_INITIAL, chapters: initialRecovery.adventure.chapters, run: initialRecovery.adventure.run }
+    : ADVENTURE_INITIAL,
   landing: initialLanding(),
   evidence: null,
   followCamera: true,
@@ -920,9 +926,11 @@ export const useApp = create<AppState>()((set, get) => ({
         signal: controller.signal,
       });
       const body: unknown = await response.json();
+      // Only this request's own answer may land: a cancel or a newer request
+      // replaced it as the active one.
+      if (generation !== contextGeneration || activeExplainController !== controller) return;
       // Stale results are ignored: the level moved on while we asked.
       const stillCurrent = revisionId(get().draft?.level ?? get().acceptedLevel) === boundRevision;
-      if (generation !== contextGeneration) return;
       if (!stillCurrent) {
         set({ explain: { ...get().explain, busy: false } });
         return;
@@ -946,7 +954,8 @@ export const useApp = create<AppState>()((set, get) => ({
         },
       });
     } catch {
-      if (generation === contextGeneration) {
+      // A cancelled request's abort must not touch a newer request's state.
+      if (generation === contextGeneration && activeExplainController === controller) {
         const error = timedOut
           ? 'The explanation took too long and was stopped — the engine verdict above stands. Try again.'
           : controller.signal.aborted
@@ -1936,6 +1945,7 @@ const RECOVERY_FIELDS: Array<keyof AppState> = [
   'changeSummary',
   'lastCompileMeta',
   'viaShare',
+  'adventure',
 ];
 
 useApp.subscribe((state, previous) => {
@@ -1943,13 +1953,24 @@ useApp.subscribe((state, previous) => {
   // author's earlier session before this tab's session overwrites it.
   if (previous.viaShare && !state.viaShare && sessionBeforeShare !== null) {
     const archived = archiveSessionBeforeShare(state.savedScenes);
-    if (archived !== null && persistSavedScenes(safeBrowserStorage(), archived.next).ok) {
+    if (archived === null) {
+      sessionBeforeShare = null; // nothing of the author's to keep
+    } else if (persistSavedScenes(safeBrowserStorage(), archived.next).ok) {
+      sessionBeforeShare = null;
       useApp.setState({ savedScenes: archived.next, headerNote: archived.note });
+    } else {
+      // Filing failed: leave the author's session exactly where it is and
+      // never write this tab's session over it.
+      useApp.setState({
+        headerNote: 'Your previous session could not be copied to My puzzles (browser storage is full or blocked), so it was left untouched — this remix will not be kept after a reload.',
+      });
     }
   }
   if (
-    // Viewing a shared link is not the author's session: never overwrite it.
+    // Viewing a shared link is not the author's session: never overwrite it
+    // — nor, after it, an earlier session that could not be filed away.
     state.viaShare ||
+    sessionBeforeShare !== null ||
     state.recoveryStatus === 'malformed' ||
     !RECOVERY_FIELDS.some((field) => state[field] !== previous[field])
   ) return;
@@ -1971,7 +1992,7 @@ function writeRecoveryNow(): void {
     recoveryTimer = null;
   }
   const state = useApp.getState();
-  if (state.viaShare || state.recoveryStatus === 'malformed') return;
+  if (state.viaShare || sessionBeforeShare !== null || state.recoveryStatus === 'malformed') return;
   const result = persistRecovery(safeBrowserStorage(), makeRecoverySnapshot(state));
   const nextStatus = result.ok ? 'ready' : 'unavailable';
   if (state.recoveryStatus !== nextStatus) useApp.setState({ recoveryStatus: nextStatus });

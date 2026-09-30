@@ -62,6 +62,16 @@ describe('compile prompt guardrails', () => {
   });
 });
 
+describe('one deadline for the whole request', () => {
+  it('counts time spent before compiling (admission, cache) against the service deadline', async () => {
+    const { calls, fn } = scriptedModel([ok(validPatch)]);
+    // 50 s already gone: less than one attempt's minimum budget remains.
+    const outcome = await compile(ENV, { level: vaultEmptyLevel, prompt: 'late request' }, { callModel: fn, startedAt: performance.now() - 50_000 });
+    expect(calls).toEqual([]);
+    expect(outcome.result).toBeNull();
+  });
+});
+
 describe('three-attempt bound (§10)', () => {
   it('returns the primary result on the first attempt', async () => {
     const { calls, fn } = scriptedModel([ok(validPatch)]);
