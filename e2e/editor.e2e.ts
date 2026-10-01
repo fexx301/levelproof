@@ -502,16 +502,24 @@ test('the Sentry: Space waits a turn, and walking into the guard restarts empty-
   await expect(location).toHaveAttribute('data-module', 'gatehouse');
   await expect(turn).toHaveAttribute('data-phase', '0');
   await expect(turn).toContainText('drawbridge open now (2 turns left)');
+  // Time passes on its own while standing still; pause it so each step is exact.
+  await playPanel.getByRole('button', { name: 'Pause guards' }).click();
   const move = async (direction: string, destination: string, phase: number) => {
     await playPanel.getByRole('button', { name: `Move ${direction}` }).click();
     await expect(location).toHaveAttribute('data-module', destination, { timeout: 20_000 });
     await expect(turn).toHaveAttribute('data-phase', String(phase), { timeout: 20_000 });
   };
   await move('east', 'yard-west', 1);
+  // The sentry steps into the yard next turn: the panel says so before the
+  // move, and the Wait button lights up as the way through.
+  await expect(playPanel.locator('.play-danger')).toContainText('steps into yard next turn');
+  await expect(playPanel.getByRole('button', { name: /Wait a turn/ })).toHaveClass(/dpad-hint/);
   // The arrow button still has focus: Space must wait, not repeat the move.
   await page.keyboard.press('Space');
   await expect(turn).toHaveAttribute('data-phase', '2', { timeout: 20_000 });
   await expect(location).toHaveAttribute('data-module', 'yard-west');
+  // The guard is now in the yard and steps out next turn: no warning.
+  await expect(playPanel.locator('.play-danger')).toHaveCount(0);
   await move('north', 'tower-stair', 3);
   await move('north', 'tower-top', 0);
   await expect(page.locator('.inventory')).toContainText('tower-key');

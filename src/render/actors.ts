@@ -79,6 +79,9 @@ export interface PlayerCallbacks {
   /** The direction of a movement key still held down, if any: a landing
    * carries straight on in it instead of waiting for the key to repeat. */
   heldDirection?: () => Cardinal | null;
+  /** Hazard levels: seconds of standing still before time passes by itself
+   * (one turn, exactly a Wait), or null to keep the world still. Read live. */
+  autoTurnSeconds?: () => number | null;
 }
 
 /** Engine-state hooks the scene implements: doors that seal, plates that
@@ -620,6 +623,10 @@ export class PlayerActor {
   private queued: MoveAction | null = null;
   /** Seconds left in the capture beat (0 = none); input is ignored meanwhile. */
   private captureLeft = 0;
+  /** Seconds the player has stood still (the idle clock). */
+  private idleSeconds = 0;
+  /** The move in progress was time passing on its own, not the player. */
+  private currentAuto = false;
   private captures = 0;
   private caughtBy: string | null = null;
   /** A standing turn (toward the viewer for a cheer), applied between moves. */
@@ -686,7 +693,7 @@ export class PlayerActor {
    * continuously. Key auto-repeat passes `buffer: false` so releasing a held
    * key never adds a move.
    */
-  move(dir: MoveAction, buffer = true): void {
+  move(dir: MoveAction, buffer = true, auto = false): void {
     if (this.captureLeft > 0) return;
     if (this.animation || this.waitingForCharacter()) {
       if (buffer) this.queued = dir;
@@ -695,6 +702,8 @@ export class PlayerActor {
     this.queued = null;
     const move = step(this.ctx.compiled, this.state, dir);
     if (!move) return;
+    this.currentAuto = auto;
+    this.idleSeconds = 0;
     this.clearHint();
     this.caughtBy = null;
     const points = move.segments.map((p) => new THREE.Vector3(p.x, p.y, p.z));
@@ -727,7 +736,7 @@ export class PlayerActor {
         destination.z,
       );
       this.faceToward(move.segments[0]!, destination, true);
-      this.moves += 1;
+      if (!this.currentAuto) this.moves += 1;
       this.emit();
       this.react(move);
       this.maybeCelebrate();
@@ -748,7 +757,7 @@ export class PlayerActor {
     this.figure.position.y = 0;
     this.animation = null;
     this.queued = null;
-    this.moves += 1;
+    if (!this.currentAuto) this.moves += 1;
     this.captures += 1;
     this.caughtBy = move.events.caught ?? null;
     this.state = move.after;
@@ -765,6 +774,7 @@ export class PlayerActor {
 
   private returnToStart(): void {
     this.captureLeft = 0;
+    this.idleSeconds = 0;
     this.ctx.world.resetWorld();
     this.ctx.world.updateState(this.state);
     this.placeAtSpawn();
@@ -807,6 +817,7 @@ export class PlayerActor {
   restart(): void {
     this.clearHint();
     this.captureLeft = 0;
+    this.idleSeconds = 0;
     this.captures = 0;
     this.caughtBy = null;
     this.hints = 0;
@@ -1005,6 +1016,16 @@ export class PlayerActor {
     }
     if (!this.animation) {
       if (this.turnTarget !== null) this.turnTo(this.turnTarget, reducedMotion() ? 1 : 1 - Math.exp(-dt * 8));
+      // Guards and gates keep time while the player stands still: after a
+      // pause, one turn passes by itself — the engine's own Wait, so every
+      // proof still holds. Never at the goal.
+      const autoTurn = this.ctx.compiled.cycle > 1 ? (this.callbacks.autoTurnSeconds?.() ?? null) : null;
+      if (autoTurn !== null && this.state.moduleId !== this.ctx.compiled.goal) {
+        this.idleSeconds += Math.max(dt, 0);
+        if (this.idleSeconds >= autoTurn) this.move('wait', false, true);
+      } else {
+        this.idleSeconds = 0;
+      }
       return;
     }
     this.animation.distance += WALK_SPEED_CM_S * dt;
@@ -1019,7 +1040,7 @@ export class PlayerActor {
       const endpoint = move.segments[move.segments.length - 1]!;
       this.mesh.position.set(endpoint.x, endpoint.y + ACTOR_CENTER_OFFSET_CM, endpoint.z);
       this.figure.position.y = 0;
-      this.moves += 1;
+      if (!this.currentAuto) this.moves += 1;
       this.state = move.after;
       this.visitedModules.add(move.after.moduleId);
       this.ctx.world.updateState(move.after);

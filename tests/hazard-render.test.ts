@@ -65,7 +65,7 @@ describe('guards on the turn clock', () => {
   });
 });
 
-function harness() {
+function harness(autoTurnSeconds?: () => number | null) {
   let tick: (dt: number, elapsed: number) => void = () => {};
   const turns: GameState[] = [];
   const caught: string[] = [];
@@ -88,7 +88,7 @@ function harness() {
     },
   };
   let latest: PlayerStateInfo | null = null;
-  const player = new PlayerActor(ctx, { onState: (info) => { latest = info; } });
+  const player = new PlayerActor(ctx, { onState: (info) => { latest = info; }, ...(autoTurnSeconds !== undefined ? { autoTurnSeconds } : {}) });
   const frames = (count: number) => {
     for (let i = 0; i < count; i++) tick(1 / 60, 0);
   };
@@ -102,6 +102,21 @@ function harness() {
 }
 
 describe('the player on a hazard level', () => {
+  it('standing still, time passes by itself: one turn per pause, not counted as a move', () => {
+    let seconds: number | null = 1.5;
+    const { frames, state } = harness(() => seconds);
+    frames(60); // one second: nothing yet
+    expect(state().phase).toBe(0);
+    frames(180); // the pause elapses and the wait plays out
+    expect(state().phase).toBeGreaterThanOrEqual(1);
+    expect(state().moves).toBe(0);
+    seconds = null; // paused: the world waits for the player
+    frames(60); // a turn already under way lands
+    const phase = state().phase;
+    frames(600);
+    expect(state().phase).toBe(phase);
+  });
+
   it('a wait is a whole turn, not a blink', () => {
     const { player, frames, state, turns } = harness();
     player.move('wait');

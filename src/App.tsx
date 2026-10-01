@@ -6,6 +6,9 @@ import { actorBridge } from './render/bridge';
 import { mountScene, type SceneHandle } from './render/scene';
 import { SCENES, useApp } from './state/store';
 import { hasHazards } from './core/hazards';
+
+/** Hazard levels: seconds standing still before one turn passes by itself. */
+const AUTO_TURN_SECONDS = 1.5;
 import { CheckStrip, RuleChips } from './ui/check-strip';
 import { useLevelIsBlank } from './ui/prompt-panel';
 import { PlayPanel, requestHint } from './ui/play-panel';
@@ -447,6 +450,8 @@ function Viewport({ level, mode, report, theme, previewing }: { level: Level; mo
     const actor = scene.spawnPlayer({
       onState: (info) => useApp.setState({ play: info }),
       heldDirection,
+      // Standing still lets time pass: one turn every 1.5 s, unless paused.
+      autoTurnSeconds: () => (useApp.getState().guardsPaused ? null : AUTO_TURN_SECONDS),
     });
     const hazards = hasHazards(level);
     actorBridge.setPlayer(actor);

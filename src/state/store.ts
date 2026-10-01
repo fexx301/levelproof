@@ -478,6 +478,8 @@ interface AppState {
   evidence: FailureEvidence | null;
   /** Manual play: the camera chases the player (true) or holds the overview. */
   followCamera: boolean;
+  /** Hazard levels: the idle clock is paused, so guards and gates wait for the player. */
+  guardsPaused: boolean;
   /** The world direction the camera faces; drives camera-relative controls. */
   facing: Cardinal;
   /** The last play-mode hint, cleared by the next move or leaving play. */
@@ -893,6 +895,7 @@ export const useApp = create<AppState>()((set, get) => ({
   landing: initialLanding(),
   evidence: null,
   followCamera: true,
+  guardsPaused: false,
   playHint: null,
   facing: 'N',
   recoveryStatus: initialRecoveryRead.status === 'malformed'

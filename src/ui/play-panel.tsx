@@ -3,6 +3,7 @@ import type { Cardinal } from '../../shared/schema.js';
 import { actorBridge } from '../render/bridge.js';
 import { compileLevel, type CompiledLevel } from '../core/topology.js';
 import { cycleOpen } from '../core/hazards.js';
+import { transitions } from '../core/movement.js';
 import type { Report } from '../core/verifier.js';
 import type { Level } from '../../shared/schema.js';
 import { playSound } from '../render/sound.js';
@@ -61,13 +62,29 @@ export function PlayPanel({ level, report }: { level: Level; report: Report }) {
   // A hint answers "from here": any move or restart retires it.
   useEffect(() => {
     useApp.setState({ playHint: null });
-  }, [play.moves, play.at]);
+  }, [play.moves, play.at, play.phase]);
   useEffect(() => () => useApp.setState({ playHint: null }), []);
   const hintIntent =
     playHint?.kind === 'move' || playHint?.kind === 'rule_blocked' ? INTENTS.find((intent) => relativeCardinal(facing, intent) === playHint.direction) : undefined;
   const hazards = compiled.cycle > 1;
-  const waitHinted = (playHint?.kind === 'move' || playHint?.kind === 'rule_blocked') && playHint.direction === 'wait';
   const guardName = (id: string): string => id.replace(/-/g, ' ');
+  const guardsPaused = useApp((s) => s.guardsPaused);
+  // Moves that would walk into a guard from exactly where the player stands:
+  // said before the move, with the way out (waiting lets the guard pass).
+  const danger = useMemo(() => {
+    if (!hazards || compiled.patrols.length === 0 || play.atGoal || !play.at) return null;
+    const mask = (bits: Map<string, number>, held: string[]): number => held.reduce((acc, id) => acc | (bits.get(id) ?? 0), 0);
+    const state = { moduleId: play.at, keyMask: mask(compiled.keyBit, play.keys), switchMask: mask(compiled.switchBit, play.switches), phase: play.phase ?? 0 };
+    const moves = transitions(compiled, state);
+    const stay = moves.find((move) => move.action === 'wait');
+    // Standing here gets the player caught: time passes on its own, so say it first.
+    if (stay?.events.caught !== undefined) return { guard: stay.events.caught, rooms: [], waitIsSafe: false, here: true };
+    const caught = moves.filter((move) => move.action !== 'wait' && move.events.caught !== undefined);
+    if (caught.length === 0) return null;
+    return { guard: caught[0]!.events.caught!, rooms: [...new Set(caught.map((move) => placeName(move.destination)))], waitIsSafe: stay !== undefined, here: false };
+  }, [compiled, hazards, play.at, play.keys, play.switches, play.phase, play.atGoal]);
+  const waitHinted =
+    ((playHint?.kind === 'move' || playHint?.kind === 'rule_blocked') && playHint.direction === 'wait') || danger?.waitIsSafe === true;
 
   const moveButton = (intent: MoveIntent) => {
     const direction: Cardinal = relativeCardinal(facing, intent);
@@ -163,13 +180,29 @@ export function PlayPanel({ level, report }: { level: Level; report: Report }) {
       {hazards && (
         <div className="play-turn">
           <p className="play-turn-note" role="status" data-phase={play.phase ?? 0}>
-            {turnNote(compiled, play.phase ?? 0)}
+            {turnNote(compiled, play.phase ?? 0, guardsPaused)}
           </p>
+          <button
+            type="button"
+            className="play-pause"
+            aria-pressed={guardsPaused}
+            onClick={() => useApp.setState({ guardsPaused: !guardsPaused })}
+            title="Standing still lets time pass; pause to take your time"
+          >
+            {guardsPaused ? 'Resume guards' : 'Pause guards'}
+          </button>
         </div>
       )}
       {play.caughtBy && (
         <p className="banner banner--fail play-caught" role="status">
-          Caught by the {guardName(play.caughtBy)} — back to the start, empty-handed. Red rings mark where each guard steps next turn.
+          Caught by the {guardName(play.caughtBy)} — back to the start, empty-handed. Red rings mark where each guard steps next turn: when one lies on your path, wait a turn and let the guard pass.
+        </p>
+      )}
+      {danger !== null && !play.caughtBy && (
+        <p className="play-danger" role="status">
+          {danger.here
+            ? `The ${guardName(danger.guard)} steps onto your square next turn — move out of its way.`
+            : `The ${guardName(danger.guard)} steps into ${danger.rooms.join(' and ')} next turn — going there now gets you caught.${danger.waitIsSafe ? ' Wait a turn (Space, tap the middle, or just stand still) and it will step aside.' : ' Step back and let it pass.'}`}
         </p>
       )}
       <div className="inventory">
@@ -232,7 +265,7 @@ export function PlayPanel({ level, report }: { level: Level; report: Report }) {
 }
 
 /** What the clock means right now: each timed gate's state, and guard warnings. */
-function turnNote(compiled: CompiledLevel, phase: number): string {
+function turnNote(compiled: CompiledLevel, phase: number, paused: boolean): string {
   const gates = compiled.level.doors.flatMap((door) => {
     const cycle = door.conditions?.cycle;
     if (cycle === undefined) return [];
@@ -243,7 +276,11 @@ function turnNote(compiled: CompiledLevel, phase: number): string {
     return [open ? `${name} open now (${turns} turn${turns === 1 ? '' : 's'} left)` : `${name} opens in ${turns} turn${turns === 1 ? '' : 's'}`];
   });
   const guards = compiled.patrols.length > 0 ? ['red rings: where guards step next'] : [];
-  return [...gates.slice(0, 2), ...guards].join(' · ');
+  // Turn-based: nothing moves on a clock, which is easy to mistake for a stuck guard.
+  const clock = paused
+    ? 'Paused: guards and gates move only when you move or wait'
+    : 'Guards and gates take one step per turn — every move, and every 1.5 s you stand still';
+  return [clock, ...gates.slice(0, 2), ...guards].join(' · ');
 }
 
 function masksMatch(bits: Map<string, number>, mask: number, held: string[]): boolean {

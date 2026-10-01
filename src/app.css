@@ -1889,6 +1889,20 @@ details.inspector summary,
   text-transform: uppercase;
 }
 
+.play-pause {
+  font-size: var(--text-xs);
+  min-height: 32px;
+  touch-action: manipulation;
+}
+
+.play-danger {
+  border-left: 3px solid var(--color-fail);
+  color: var(--color-text);
+  font-size: var(--text-sm);
+  margin: var(--space-2) 0 0;
+  padding-left: var(--space-2);
+}
+
 .play-turn-note {
   color: var(--color-muted);
   flex: 1 1 12rem;
