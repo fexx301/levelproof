@@ -18,6 +18,7 @@ shared/            Wire contracts shared by client, server, and tests
 api/               Serverless functions (Vercel)
   compile.ts       POST /api/compile
   explain.ts       POST /api/explain (grounded failure narration)
+  npc.ts           POST /api/npc (a character voices the engine's next step)
   _lib/            Provider adapter, system prompt, wire JSON schema, caches,
                    compile + explain services (attempt policy, self-repair)
 src/core/          The deterministic engine — zero DOM/renderer/React/network
@@ -28,6 +29,7 @@ src/core/          The deterministic engine — zero DOM/renderer/React/network
   verifier.ts      Bounded exhaustive exploration; the three checks; recovery map
   search.ts        Checked-repair templates; never weakens rules
   engine-findings.ts Concrete engine facts for the AI↔engine revision loop
+  npc.ts           Talking characters: the next objective from the hint search
   revision-policy.ts When a build is sent back to the model automatically
   serialize.ts     Canonical JSON + revision ids
 src/render/        Imperative Three.js diorama (scene, actors, overlays)

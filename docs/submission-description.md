@@ -1,7 +1,8 @@
 # LevelProof — submission description
 
-**Focus category:** Browser-native creative tools (use the exact wording from
-the submission form; AI-generated 3D scenes is the closest alternative).
+**Focus category:** Prompt-to-world systems (use the exact wording from the
+submission form; “AI 3D Scene Generation” or “AI-generated 3D scenes” is the
+closest alternative, then “Browser-native creative tools”).
 
 **What we built.** LevelProof turns one sentence into a playable 3D puzzle
 world — and then proves whether it works. Describe “a haunted forest keep
@@ -30,10 +31,13 @@ model narrates the engine’s facts (grounding-checked), and you choose between
 an AI fix judged by the engine and deterministic repairs that provably keep
 your rules. The AI stays in the loop while you play: react in words (“too easy”, “add a
 trap here”) and it changes the level you are standing in — engine-checked,
-then you respawn in the new version. Ambiguous requests get one clarifying question; mechanics the kit
+then you respawn in the new version. Characters you ask for — a merchant, a guide, a sage, a robot —
+stand in the world; talk to one and the AI voices the engine’s next step in character, checked on the
+server against the scene. Ambiguous requests get one clarifying question; mechanics the kit
 cannot simulate get an honest “unsupported” with alternatives. Every compile
 discloses fresh vs cached, model, cost, and attempts.
 
 **Built with:** Three.js (all 3D procedural except the animated character,
 Quaternius' CC0 “Characters Matt”; no AI-generated assets), React, Zustand,
-Zod, Vite, Vercel serverless, OpenRouter (`gemini-3.8-flash`).
+Zod, Vite, Vercel serverless, OpenRouter (`gemini-3.8-flash`). Much of the code was written with AI
+coding assistants, directed, reviewed, and tested by the author (see the README’s provenance section).

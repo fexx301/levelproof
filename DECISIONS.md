@@ -2,6 +2,40 @@
 
 Build-window decisions and measured evidence, newest first. Dates are 2026.
 
+## Oct 24 (characters who know the way; the story tells the truth)
+
+- **Why**: six judge-style prompts on production (gallery showroom, space
+  classroom, quest hub with a merchant, neon racing track, tea garden,
+  stormy lighthouse) all built accepted chapters in about 8 s of model time
+  (~$0.05 total), but the quest hub's story promised "the local merchant is
+  ready to sell you a sturdy iron sword" and no merchant existed. The brief
+  also names intelligent NPCs, which the kit did not have.
+- **Story rule** (`adventure-4`): the narration may mention only what the
+  world contains; a person it names must be a character prop placed in it,
+  and characters only talk — nobody sells, gives, trades, fights, or opens.
+- **Characters** (`prompt-16`, `npc-1`): four new props — merchant, guide,
+  sage, robot — drawn as the animated adventurer in a role's livery. Still
+  scenery: the engine never reads them, so engine output is unchanged (the
+  engine-lock golden test passes). From the character's room or the one
+  beside it, **Talk** (T) shows the engine's next objective at once in a
+  plain voice (the next key or switch and its room, or the goal), draws the
+  hint trail, and counts as a hint; `POST /api/npc` recomputes the same facts
+  from the submitted state and asks the model to say them in character. A
+  line must name the objective and pass the scene grounding check, else the
+  fallback model is tried, else the plain line stays, labeled. Cached per
+  level, character, and state; behind the same burst window and daily budget.
+- **Hint search** now returns the whole shortest winning route as well as
+  its first move (same search, same results).
+- **Evidence**: 362 unit tests (new: facts, plain lines, service refusals and
+  cache, handler); a fixture-voice browser journey (talk → voiced line → move
+  retires it); a local browser run with no provider key showed the plain
+  line and its "AI voice unavailable" label. **Not yet measured live**: the
+  prompt changes and the voice (no provider key in this workspace). The
+  version bumps empty the compile cache, so the chips need a fresh prewarm
+  after deploy.
+- **Docs**: README discloses AI-assisted code and that the first commit holds
+  Sep 11–25; test count corrected.
+
 ## Sep 30 (week 4 — Safari engine, phone-class CPU, thumb reach)
 
 - **WebKit smoke** (desktop and iPhone emulation) passes end to end with no

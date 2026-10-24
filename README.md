@@ -71,7 +71,17 @@ far and adapts to how you played (hints, dead ends, restarts) — and the engine
 must prove it fair before you step in: winnable, nobody can get stuck, rules
 hold, and its shortest route inside the difficulty band the engine chose. The
 title card shows the proof: *✓ Verified solvable · N states checked · shortest
-route M moves*.
+route M moves*. The chapter's story mentions only what the world contains:
+anyone it names is a character standing in it.
+
+**Characters who know the way.** Ask for a merchant, a guide, a wise elder,
+or a robot helper and they stand in the world. Walk up and press **Talk**
+(T): the engine works out your next objective from exactly where you stand —
+the same search as **Hint** — and the AI says it in the character's voice.
+The server recomputes those facts itself and refuses a line that skips the
+objective or names anything that is not in the scene; the engine's own plain
+words appear at once and stay if the AI cannot answer, labeled. Characters
+are scenery: they block, trade, give, and open nothing.
 
 **Talk to the world while you play it.** Found it too easy? Press **Too easy
 — make it harder**, **Add a trap here** (where you are standing), **Add a
@@ -129,7 +139,7 @@ comes back as a 70-room world in about 12 seconds, still fully checked), place k
 (`requiresKey`, `requiresKeys` — every listed key — `requiresSwitch`,
 `closesAfterSwitch`, and `cycle` for timed gates), add or remove guards with
 a patrol route, move the spawn or goal, rename places, set scenery,
-place landmark props, and propose `collectBeforeGoal`, `passThrough`, and
+place landmark props and talking characters, and propose `collectBeforeGoal`, `passThrough`, and
 `switchNecessary` design requirements (which you approve — the model cannot
 weaken your rules). Ambiguous requests come back as one clarifying question;
 mechanics the kit cannot simulate come back as an honest `unsupported` card
@@ -189,13 +199,18 @@ instance and, when Upstash is configured, in a shared store for 7 days
 **Cached result**, with model, cost, and attempts in **Generation details**.
 The example chips are prewarmed after each deploy (`scripts/prewarm.ts`).
 
+Talking characters and the story rule (added Oct 24: `prompt-16`,
+`adventure-4`, `npc-1`) are covered by unit tests and a browser journey with
+a fixture voice; their live-model measurements are pending and will be
+recorded in [`docs/model-eval.md`](docs/model-eval.md).
+
 ## Setup and tests
 
 ```bash
 npm install
 cp .env.example .env   # add your OpenRouter key (and optionally Upstash)
 npm run dev            # Vite dev server; also serves /api/compile and /api/explain
-npm run verify         # typecheck, lint, 298 unit tests, production build
+npm run verify         # typecheck, lint, 362 unit tests, production build
 npm run test:e2e       # Playwright browser journeys (fixture-backed, no model calls)
 ```
 
@@ -225,7 +240,19 @@ OFL 1.1, via Fontsource). The playable character is "Characters Matt" by
 [`public/models/LICENSE.md`](public/models/LICENSE.md)). Every other 3D asset
 — terrain, trees, the dragon, the props — is built procedurally from Three.js
 primitives. No AI-generated assets are used; the model only ever compiles
-typed operations at runtime. Pre-window planning notes are private and excluded from this
+typed operations at runtime. Runtime services: the OpenRouter API (Google
+Gemini models, see above), Upstash Redis for rate limits and the shared
+cache, and Vercel hosting. Pre-window planning notes are private and excluded
+from this repository.
+
+**AI-assisted code.** Much of this code was written with AI coding
+assistants (Anthropic's Claude and OpenAI models), directed, reviewed, and
+tested by the author, who ran and recorded every measurement in this
 repository.
+
+**Commit history.** The first commit (`ca78118`, Sep 25) holds the work from
+Sep 11 to Sep 25 in one piece; that period is recorded day by day, with its
+measurements, in [`DECISIONS.md`](DECISIONS.md). Every commit since is a
+single step.
 
 > Built for the [AI Builder Hackathon 2026](https://www.victoriavr.com/news/ai-builder-hackathon-2026-build-the-future-of-ai-native-3d-experiences-5915194b) (Victoria VR).
