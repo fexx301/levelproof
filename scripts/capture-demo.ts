@@ -19,8 +19,9 @@
  * Run it on a machine with a real GPU (the 3D view renders in software
  * otherwise and the footage stutters). Headed by default so the GPU is used.
  * Most requests hit the prewarmed cache; the welcome sentence, the character's
- * voice, and the refusal can be fresh model calls, so the run is opt-in and
- * budget-capped like every live script.
+ * voice, "Too easy", and the refusal can be fresh model calls, so the run is
+ * opt-in and budget-capped like every live script. A fresh call that reports
+ * no cost is counted at a conservative estimate instead of ending the take.
  *
  * Usage: npx tsx scripts/capture-demo.ts --confirm-live-ai --budget-usd 0.10
  *          [--url https://levelproof.vercel.app] [--out demo-footage]
@@ -34,6 +35,8 @@ import { LiveBudget, LiveEvaluationStop, requireLiveBudget } from './live-budget
 const DEFAULT_PROMPT = 'A medieval quest hub town with a merchant and a locked gate to the wild road.';
 const VIEWPORT = { width: 1440, height: 900 };
 const MAX_STEPS = 40;
+/** A fresh call that reports no cost is counted at this (above any measured call). */
+const UNKNOWN_COST_USD = 0.03;
 /** Upper bounds, not delays: generous enough for a slow GPU, free on a fast one. */
 const WAIT = { step: 30_000, model: 240_000, replay: 240_000 };
 
@@ -94,7 +97,13 @@ async function openTake(browser: Browser, name: string, out: string, url: string
   page.on('response', async (response) => {
     if (!/\/api\/(compile|npc|explain)/.test(response.url())) return;
     const body = await responseBody(response);
-    const cost = body?.cached === true ? 0 : typeof body?.totalCostUsd === 'number' ? body.totalCostUsd : null;
+    let cost = body?.cached === true ? 0 : typeof body?.totalCostUsd === 'number' ? body.totalCostUsd : null;
+    if (cost === null) {
+      // Occasionally a provider attempt reports no usage. Count a conservative
+      // estimate rather than abandoning the take; the ceiling still holds.
+      console.log(`  (no cost reported for ${new URL(response.url()).pathname}; counted as $${UNKNOWN_COST_USD})`);
+      cost = UNKNOWN_COST_USD;
+    }
     try {
       budget.record(cost, `${name} ${new URL(response.url()).pathname}`);
     } catch (error) {
@@ -143,7 +152,8 @@ async function takeAdventure(take: Take, prompt: string): Promise<void> {
   await typeInto(page.locator('.landing-input'), prompt, 35);
   await take.mark('prompt-typed', 600);
   await page.locator('.landing-start').click();
-  await page.getByText(/states checked/).first().waitFor({ timeout: WAIT.model });
+  // The chapter's own title card (the editor behind the welcome also says "states checked").
+  await page.locator('.chapter-card-proof').waitFor({ timeout: WAIT.model });
   await take.mark('title-card-proof', 3000);
 
   const talk = page.getByRole('button', { name: /^Talk to the / });
