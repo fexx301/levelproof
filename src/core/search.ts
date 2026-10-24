@@ -1,4 +1,5 @@
 import type { Level, Operation } from '../../shared/schema.js';
+import { reachableStates } from './engine-findings.js';
 import { applyOperations } from './level.js';
 import { compileLevel, edgeKey } from './topology.js';
 import { verify, type Report } from './verifier.js';
@@ -166,6 +167,43 @@ function keyRelocationCandidates(draft: Level, report: Report): DraftCandidate[]
       candidates.push({
         key: canonicalKey(operations),
         description: `Move key “${keyId}” onto the shortcut at “${moduleId}”`,
+        operations,
+        changedExisting: 0,
+        removals: 0,
+      });
+    }
+  }
+  return candidates;
+}
+
+/** Rooms tried per locked-in key: the farthest first, so the change stays a challenge. */
+const LOCKED_KEY_ROOMS = 8;
+
+/**
+ * Template 5: a key locked behind the door it opens. The level cannot be
+ * won and a key sits where the player never gets to — move it to a free
+ * room the player can reach, farthest from the spawn first. Keys are only
+ * moved, never granted or removed; full re-verification decides.
+ */
+function lockedKeyCandidates(draft: Level, report: Report): DraftCandidate[] {
+  if (report.checks.solution.status !== 'fail') return [];
+  const reachable = reachableStates(draft);
+  const occupied = new Set<string>([
+    ...draft.keys.map((k) => k.moduleId),
+    ...draft.switches.map((s) => s.moduleId),
+    draft.spawn,
+    draft.goal,
+  ]);
+  const flat = new Set(draft.modules.filter((m) => m.template === 'flat').map((m) => m.id));
+  const rooms = [...reachable.keys()].filter((id) => flat.has(id) && !occupied.has(id)).reverse().slice(0, LOCKED_KEY_ROOMS);
+  const candidates: DraftCandidate[] = [];
+  for (const key of draft.keys) {
+    if (reachable.has(key.moduleId)) continue;
+    for (const moduleId of rooms) {
+      const operations: Operation[] = [{ kind: 'moveItem', id: key.id, moduleId }];
+      candidates.push({
+        key: canonicalKey(operations),
+        description: `Move key “${key.id}” out from behind its door to “${moduleId}”`,
         operations,
         changedExisting: 0,
         removals: 0,
@@ -346,6 +384,7 @@ export function findRepairs(
   let outOfTime = false;
   const protectedSet = new Set(protectedIds);
   const pool = [
+    ...lockedKeyCandidates(draft, report),
     ...routeGatingCandidates(accepted, draft, report),
     ...switchRelocationCandidates(draft, report),
     ...trapRemovalCandidates(draft, report),
@@ -396,6 +435,9 @@ export function findRepairs(
     if (byChanged !== 0) return byChanged;
     const byOps = x.operations.length - y.operations.length;
     if (byOps !== 0) return byOps;
+    // Equally small fixes: keep more of the challenge.
+    const byRoute = routeLength(y) - routeLength(x);
+    if (byRoute !== 0) return byRoute;
     return x.key < y.key ? -1 : x.key > y.key ? 1 : 0;
   });
 
@@ -420,6 +462,10 @@ export function findRepairs(
   };
 }
 
+function routeLength(candidate: RepairCandidate): number {
+  return candidate.report.checks.solution.witness?.route.length ?? 0;
+}
+
 function removalCount(candidate: RepairCandidate): number {
   return candidate.operations.filter((op) => op.kind === 'removeItem' || op.kind === 'removeDoor').length;
 }
@@ -432,3 +478,4 @@ function countChanged(accepted: Level, candidate: RepairCandidate): number {
     return target !== null && acceptedIds.has(target);
   }).length;
 }
+

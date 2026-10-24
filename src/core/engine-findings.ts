@@ -18,8 +18,9 @@ function quote(id: string): string {
   return `"${id}"`;
 }
 
-/** Every module a player can stand on, with the states seen there. */
-function reachableStates(level: Level): Map<string, GameState[]> {
+/** Every module a player can stand on, with the states seen there (in
+ * breadth-first discovery order: nearest to the spawn first). */
+export function reachableStates(level: Level): Map<string, GameState[]> {
   const compiled = compileLevel(level);
   const start = initialState(compiled);
   const seen = new Set([stateKey(start)]);
