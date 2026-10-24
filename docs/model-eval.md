@@ -246,3 +246,27 @@ cache off, through the real services; budgets set per run.
 
 Two runs stopped by design when one provider call reported no cost. Spend for
 the series ≈ $0.60.
+
+## Oct 24 — `minimax/minimax-m3.1-flash` as the primary (not adopted)
+
+Tested because guard builds fell to 1/6 on Gemini and MiniMax costs a fifth
+to a seventh as much per token. Primary and fallback were both MiniMax, so
+no Gemini call could hide its failures; the bar was set before the run:
+guards 4/6 or better with no loss elsewhere and a median build under ~12 s.
+
+| Run | Result |
+|---|---|
+| Declines (4), strict JSON envelope (default) | 4/4, median 1.8 s, $0.002 |
+| Guards and timed gates (6), strict JSON envelope | **0/6**: three invalid outputs, one "build" with no operations, two needless clarifying questions about entities the scene names |
+| Guards and timed gates, Gemini's plain-JSON settings (temporary local change, reverted) | 1 pass (after a revision, 29 s), 1 clarification, 2 failures including a 45 s timeout; the run then stopped on an unreported cost |
+
+Gemini 3.8 Flash stays the primary and Gemini 2.5 Flash Lite the fallback;
+MiniMax's from-scratch failures rule it out as a fallback too. Spend ≈ $0.02.
+
+## Oct 24 — character voice `npc-2`
+
+Live lines on `npc-1` pinned the moves-to-goal count on the wrong place ("the
+brass key … eleven steps away", 11 being the moves to the goal; 2 of 8
+battery lines did the same). `npc-2` gives the model places only and forbids
+numbers and distances. Six live lines across three fixtures, at the spawn,
+mid-route, and with the key held: 6/6 voiced, none with a count, $0.006.
