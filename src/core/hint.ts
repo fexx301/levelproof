@@ -14,11 +14,12 @@ import { STATE_BOUND } from './verifier.js';
  */
 
 export type Hint =
-  | { kind: 'move'; move: MoveRecord; movesToGoal: number }
+  /** `route` is the whole shortest winning route; `move` is its first step. */
+  | { kind: 'move'; move: MoveRecord; movesToGoal: number; route: MoveRecord[] }
   /** The goal is still reachable, but only by breaking a design rule; the
    * move leads toward it. (The verifier's solution and recovery checks count
    * such routes; hints and the win card do not.) */
-  | { kind: 'rule_blocked'; move: MoveRecord; movesToGoal: number }
+  | { kind: 'rule_blocked'; move: MoveRecord; movesToGoal: number; route: MoveRecord[] }
   | { kind: 'at_goal' }
   | { kind: 'rule_broken' }
   | { kind: 'stranded' }
@@ -27,8 +28,15 @@ export type Hint =
 interface Node {
   state: GameState;
   passMask: number;
-  first: MoveRecord | null;
+  prev: Node | null;
+  move: MoveRecord | null;
   depth: number;
+}
+
+function routeTo(node: Node): MoveRecord[] {
+  const route: MoveRecord[] = [];
+  for (let at: Node | null = node; at !== null && at.move !== null; at = at.prev) route.push(at.move);
+  return route.reverse();
 }
 
 export function nextStep(
@@ -79,7 +87,7 @@ function search(
   };
 
   const key = (node: Pick<Node, 'state' | 'passMask'>): string => `${stateKey(node.state)}|${node.passMask}`;
-  const start: Node = { state, passMask: markVisit(seeded, state.moduleId), first: null, depth: 0 };
+  const start: Node = { state, passMask: markVisit(seeded, state.moduleId), prev: null, move: null, depth: 0 };
   const seen = new Set([key(start)]);
   const queue: Node[] = [start];
   let ruleBreaking: Node | null = null;
@@ -92,10 +100,14 @@ function search(
         state: move.after,
         // Caught restarts the level: rule tracking starts over at the spawn.
         passMask: move.events.caught !== undefined ? markVisit(0, move.after.moduleId) : markVisit(node.passMask, move.after.moduleId),
-        first: node.first ?? move,
+        prev: node,
+        move,
         depth: node.depth + 1,
       };
-      if (winning(next)) return { kind: 'move', move: next.first!, movesToGoal: next.depth };
+      if (winning(next)) {
+        const route = routeTo(next);
+        return { kind: 'move', move: route[0]!, movesToGoal: next.depth, route };
+      }
       if (ruleBreaking === null && next.state.moduleId === compiled.goal) ruleBreaking = next;
       const nextKey = key(next);
       if (seen.has(nextKey)) continue;
@@ -104,7 +116,10 @@ function search(
       queue.push(next);
     }
   }
-  if (ruleBreaking !== null) return { kind: 'rule_blocked', move: ruleBreaking.first!, movesToGoal: ruleBreaking.depth };
+  if (ruleBreaking !== null) {
+    const route = routeTo(ruleBreaking);
+    return { kind: 'rule_blocked', move: route[0]!, movesToGoal: ruleBreaking.depth, route };
+  }
   return { kind: 'stranded' };
 }
 
