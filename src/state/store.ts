@@ -14,7 +14,7 @@ import { vaultEmptyLevel } from '../core/fixtures/vault-empty.js';
 import { twinKeysLevel, overpassLevel, gauntletLevel, sentryLevel } from '../core/fixtures/gallery.js';
 import { blankCanvasLevel } from '../core/fixtures/blank-canvas.js';
 import { applyOperations, applyRuleProposal, requirementText } from '../core/level.js';
-import { findRepairs, touchesProtected, type RepairCandidate } from '../core/search.js';
+import { findRepairs, rescueAttempts, touchesProtected, type RepairCandidate } from '../core/search.js';
 import { verify, type Report } from '../core/verifier.js';
 import { buildFailureEvidence, type FailureEvidence } from '../core/failure-evidence.js';
 import { engineFindings } from '../core/engine-findings.js';
@@ -171,6 +171,8 @@ type PendingChange =
       revision?: { findings: string[]; outcome: 'fixed' | 'improved' | 'unresolved' };
       /** An AI proposal that repairs the current draft rather than a new request. */
       aiFix?: boolean;
+      /** Play mode: the AI's change could not be won, and this checked repair fixed it. */
+      engineRepair?: string;
     }
   | {
       kind: 'rule';
@@ -1096,6 +1098,7 @@ export const useApp = create<AppState>()((set, get) => ({
           return;
         }
         let chosen = { result, candidate: applied.level };
+        const attempts = [{ operations: result.operations, level: applied.level }];
         let revision: { findings: string[]; outcome: 'fixed' | 'improved' | 'unresolved' } | undefined;
         if (shouldAutoRevise(base, applied.level, result.operations)) {
           // The AI↔engine loop: the engine found the build unwinnable, so the
@@ -1118,6 +1121,7 @@ export const useApp = create<AppState>()((set, get) => ({
               const revisedApplied = applyOperations(base, revisedResult.operations);
               const kept = get().protectedIds;
               if (revisedApplied.ok && !(kept.length > 0 && touchesProtected(revisedResult.operations, new Set(kept), base))) {
+                attempts.push({ operations: revisedResult.operations, level: revisedApplied.level });
                 const revisedReport = verify(revisedApplied.level);
                 if (reportScore(revisedReport) < bestScore) {
                   bestScore = reportScore(revisedReport);
@@ -1144,28 +1148,44 @@ export const useApp = create<AppState>()((set, get) => ({
             return;
           }
         }
+        // While playing, a change nobody can win is no use to the player: if
+        // every AI attempt still fails, offer the best checked repair of one,
+        // disclosed. The editor keeps showing the failure (breaking can be
+        // the point there, and its repair panel is one click away).
+        let candidate = chosen.candidate;
+        let operations = chosen.result.operations;
+        let engineRepair: string | undefined;
+        if (get().mode === 'playing' && !verify(candidate).accepted) {
+          const rescued = rescueAttempts(base, attempts, get().protectedIds);
+          if (rescued !== null) {
+            candidate = rescued.level;
+            operations = rescued.operations;
+            engineRepair = rescued.description;
+          }
+        }
         set({
           lastResult: chosen.result,
           lastCompileMeta: meta,
           pendingRule: {
             kind: 'patch',
             base,
-            candidate: chosen.candidate,
-            operations: chosen.result.operations,
+            candidate,
+            operations,
             rationale: chosen.result.rationale,
             assumptions: chosen.result.assumptions,
             prompt,
             nextTheme,
             baseRevision: boundRevision,
             ...(revision !== undefined ? { revision } : {}),
+            ...(engineRepair !== undefined ? { engineRepair } : {}),
           },
           repairReplay: null,
           preview: {
             source: 'ai',
             baseRevision: boundRevision,
             before: base,
-            candidate: chosen.candidate,
-            operations: chosen.result.operations,
+            candidate,
+            operations,
           },
           selection: [],
           busy: false,

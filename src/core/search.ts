@@ -479,3 +479,31 @@ function countChanged(accepted: Level, candidate: RepairCandidate): number {
   }).length;
 }
 
+/**
+ * Play-mode rescue: when every AI attempt at a change still fails, try the
+ * checked repairs on each attempt and keep the accepted result whose winning
+ * route is longest (a reaction like "make it harder" should stay hard). The
+ * repair's operations are appended to the attempt's, so applying them to the
+ * base reproduces the level exactly. Null when nothing passes.
+ */
+export function rescueAttempts(
+  base: Level,
+  attempts: Array<{ operations: Operation[]; level: Level }>,
+  protectedIds: string[] = [],
+  timeBudgetMs = 1500,
+): { operations: Operation[]; level: Level; description: string; report: Report } | null {
+  let best: { operations: Operation[]; level: Level; description: string; report: Report } | null = null;
+  for (const attempt of [...attempts].reverse()) {
+    const report = verify(attempt.level);
+    if (report.accepted) continue;
+    const top = findRepairs(base, attempt.level, report, protectedIds, timeBudgetMs).candidates[0];
+    if (top === undefined) continue;
+    const operations = [...attempt.operations, ...top.operations];
+    const applied = applyOperations(base, operations);
+    if (!applied.ok || !top.report.accepted) continue;
+    if (best === null || routeLength(top) > (best.report.checks.solution.witness?.route.length ?? 0)) {
+      best = { operations, level: applied.level, description: top.description, report: top.report };
+    }
+  }
+  return best;
+}

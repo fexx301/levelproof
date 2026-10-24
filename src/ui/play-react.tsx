@@ -141,7 +141,9 @@ function PlayProposal() {
   return (
     <div className="play-proposal" role="group" aria-label="Proposed change">
       <p className="play-proposal-summary">{summary}</p>
-      {pending.kind === 'patch' && pending.revision !== undefined && pending.revision.outcome !== 'unresolved' && (
+      {pending.kind === 'patch' && pending.engineRepair !== undefined ? (
+        <p className="panel-note">The AI’s change could not be won, so the engine fixed it: {pending.engineRepair}.</p>
+      ) : pending.kind === 'patch' && pending.revision !== undefined && pending.revision.outcome !== 'unresolved' && (
         <p className="panel-note">The engine found a problem in the AI’s first attempt; the AI revised it.</p>
       )}
       <ul className="play-proposal-checks" aria-label="Engine pre-check">
