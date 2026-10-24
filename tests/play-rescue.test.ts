@@ -51,6 +51,7 @@ describe('a key locked behind its own door', () => {
 
   it('rescues the attempt whose repaired route is longest, and replays from the base', () => {
     const rescued = rescueAttempts(sentryLevel, ROUNDS.map(attempt))!;
+    expect(rescued.attempt).toBe(2);
     expect(rescued.description).toContain('herb-key');
     expect(rescued.report.accepted).toBe(true);
     expect(shortest(rescued.level)).toBeGreaterThan(shortest(sentryLevel));
@@ -70,7 +71,7 @@ describe('play reactions get a winnable change', () => {
     vi.stubGlobal('fetch', vi.fn(async () => ({
       ok: true,
       json: async () => ({
-        result: { type: 'patch', rationale: 'A new key-and-door challenge.', assumptions: [], operations: ROUNDS[Math.min(round++, 2)] },
+        result: { type: 'patch', rationale: `Round ${Math.min(round, 2)}.`, assumptions: [], operations: ROUNDS[Math.min(round++, 2)] },
         baseRevision: revisionId(sentryLevel), cached: true, attempts: [], totalCostUsd: 0, generationCostUsd: 0,
       }),
     })));
@@ -84,6 +85,8 @@ describe('play reactions get a winnable change', () => {
     expect(pending?.kind).toBe('patch');
     if (pending?.kind !== 'patch') return;
     expect(pending.engineRepair).toContain('out from behind its door');
+    // The summary describes the attempt that was repaired (the third), not the first.
+    expect(pending.rationale).toBe('Round 2.');
     expect(verify(pending.candidate).accepted).toBe(true);
     useApp.getState().applyPatch();
     expect(verify(useApp.getState().acceptedLevel).accepted).toBe(true);

@@ -1098,7 +1098,7 @@ export const useApp = create<AppState>()((set, get) => ({
           return;
         }
         let chosen = { result, candidate: applied.level };
-        const attempts = [{ operations: result.operations, level: applied.level }];
+        const attempts = [{ result, operations: result.operations, level: applied.level }];
         let revision: { findings: string[]; outcome: 'fixed' | 'improved' | 'unresolved' } | undefined;
         if (shouldAutoRevise(base, applied.level, result.operations)) {
           // The AI↔engine loop: the engine found the build unwinnable, so the
@@ -1121,7 +1121,7 @@ export const useApp = create<AppState>()((set, get) => ({
               const revisedApplied = applyOperations(base, revisedResult.operations);
               const kept = get().protectedIds;
               if (revisedApplied.ok && !(kept.length > 0 && touchesProtected(revisedResult.operations, new Set(kept), base))) {
-                attempts.push({ operations: revisedResult.operations, level: revisedApplied.level });
+                attempts.push({ result: revisedResult, operations: revisedResult.operations, level: revisedApplied.level });
                 const revisedReport = verify(revisedApplied.level);
                 if (reportScore(revisedReport) < bestScore) {
                   bestScore = reportScore(revisedReport);
@@ -1158,6 +1158,8 @@ export const useApp = create<AppState>()((set, get) => ({
         if (get().mode === 'playing' && !verify(candidate).accepted) {
           const rescued = rescueAttempts(base, attempts, get().protectedIds);
           if (rescued !== null) {
+            // Describe the attempt that was repaired, not the first one.
+            chosen = { result: attempts[rescued.attempt]!.result, candidate: rescued.level };
             candidate = rescued.level;
             operations = rescued.operations;
             engineRepair = rescued.description;
