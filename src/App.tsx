@@ -12,6 +12,7 @@ const AUTO_TURN_SECONDS = 1.5;
 import { CheckStrip, RuleChips } from './ui/check-strip';
 import { useLevelIsBlank } from './ui/prompt-panel';
 import { PlayPanel, requestHint } from './ui/play-panel';
+import { talkToNpc } from './ui/npc-talk';
 import { SoundToggle } from './ui/sound-toggle';
 import { ChapterCard } from './ui/adventure-panel';
 import { Landing } from './ui/landing';
@@ -465,6 +466,10 @@ function Viewport({ level, mode, report, theme, previewing }: { level: Level; mo
       }
       if ((event.key === 'h' || event.key === 'H') && !event.repeat) {
         requestHint();
+        return;
+      }
+      if ((event.key === 't' || event.key === 'T') && !event.repeat) {
+        void talkToNpc(level);
         return;
       }
       // Space waits a turn in worlds with guards or timed gates. It also

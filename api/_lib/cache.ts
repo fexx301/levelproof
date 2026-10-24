@@ -143,6 +143,7 @@ export class SharedCache<T, A extends CachedAttempt = CachedAttempt> {
 
 export const compileCache = new SharedCache<CompileResult, CachedCompileAttempt>('compile');
 export const explainCache = new SharedCache<string, CachedExplainAttempt>('explain');
+export const npcCache = new SharedCache<string, CachedExplainAttempt>('npc');
 
 export interface CacheKeyInput {
   level: Level;
@@ -204,4 +205,5 @@ export function compileCacheKey(input: {
 export function resetCache(): void {
   compileCache.clear();
   explainCache.clear();
+  npcCache.clear();
 }

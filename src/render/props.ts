@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import type { KeyLook, PropKind } from '../../shared/schema.js';
+import type { NpcKind } from '../core/npc.js';
+import { CharacterRig, characterIfLoaded, preloadCharacter, type CharacterAsset } from './character.js';
 
 /**
  * Procedural scenery meshes (cosmetic only). Everything is built from Three.js
@@ -842,6 +844,46 @@ function pool(ctx: PropContext, random: () => number, lava: boolean): BuiltProp 
   return { group, ...(lava ? { glow: { color: 0xff5a1a, offset: new THREE.Vector3(0, 60, 0), strength: 0.8 } } : {}), tall: false };
 }
 
+const NPC_LIVERY: Record<NpcKind, { color: number; rim: number }> = {
+  merchant: { color: 0xc98a2b, rim: 0xffd28a },
+  guide: { color: 0x2f8a5b, rim: 0x9ff0c0 },
+  sage: { color: 0x6a4fb0, rim: 0xc9b6ff },
+  robot: { color: 0x7fa6bf, rim: 0xd8f2ff },
+};
+
+/**
+ * A character the player can talk to (core/npc): the animated adventurer in
+ * the role's livery, idling. Clicks resolve through an invisible capsule, so
+ * picking works before and after the animated model replaces the stand-in.
+ */
+function npc(kind: NpcKind, ctx: PropContext): BuiltProp {
+  const group = new THREE.Group();
+  const livery = NPC_LIVERY[kind];
+  group.add(mesh(new THREE.CapsuleGeometry(32, 90, 4, 8), new THREE.MeshBasicMaterial({ visible: false }), 0, 78, 0));
+  const standIn = new THREE.Group();
+  const cloth = ctx.mats.get(livery.color, { rough: 0.6, emissive: livery.color, emissiveIntensity: 0.2 });
+  standIn.add(mesh(new THREE.CapsuleGeometry(24, 56, 4, 10), cloth, 0, 58, 0));
+  standIn.add(mesh(new THREE.SphereGeometry(19, 12, 10), cloth, 0, 120, 0));
+  group.add(standIn);
+  let rig: CharacterRig | null = null;
+  const attach = (asset: CharacterAsset): void => {
+    if (rig !== null) return;
+    group.remove(standIn);
+    standIn.traverse((child) => {
+      if (child instanceof THREE.Mesh) child.geometry.dispose();
+    });
+    rig = new CharacterRig(asset, { tint: livery });
+    rig.object.traverse((child) => {
+      if (child instanceof THREE.Mesh) child.raycast = () => {};
+    });
+    group.add(rig.object);
+  };
+  const loaded = characterIfLoaded();
+  if (loaded !== null) attach(loaded);
+  else preloadCharacter().then(attach, () => undefined);
+  return { group, update: (dt) => rig?.update(dt), tall: false };
+}
+
 /** Build one prop or scatter object. The group's origin sits on its base. */
 export function buildProp(kind: ScatterKind, ctx: PropContext, seed: number): BuiltProp {
   const random = seededRandom(seed);
@@ -874,6 +916,10 @@ export function buildProp(kind: ScatterKind, ctx: PropContext, seed: number): Bu
     case 'portal': return portal(ctx);
     case 'console': return consoleProp(ctx);
     case 'antenna': return antenna(ctx);
+    case 'merchant':
+    case 'guide':
+    case 'sage':
+    case 'robot': return npc(kind, ctx);
     case 'water': return groundTile('water', ctx);
     case 'lava': return groundTile('lava', ctx);
     case 'flowers': return flowers(ctx, random);

@@ -63,7 +63,7 @@ function occupancyGrid(level: Level): string[] {
 }
 
 /** Bump when the system prompt changes; participates in the cache key (§10.2). */
-export const PROMPT_VERSION = 'prompt-15';
+export const PROMPT_VERSION = 'prompt-16';
 
 export function buildSystemPrompt(level: Level, baseRevision: string): string {
   return `You are the compiler for LevelProof, a 3D puzzle editor with discrete movement. Convert the user's request into exactly ONE typed result: a patch, a clarification, a rule_proposal, or an unsupported response. You compose typed edits against the scene; you never invent traversal rules, verify puzzles, or emit raw level JSON.
@@ -95,6 +95,7 @@ SCENERY (cosmetic — the engine never reads it; it makes the world look like wh
 - {"kind":"addProp","id","prop","x","z"} — a landmark on grid cell (x, z): it stands on the highest module in that cell, or on open ground when the cell is empty. prop: ${PROP_KINDS.join(', ')}. "water" and "lava" are flat ground tiles for cells with no ground-level module ('.' in occupiedGrid, or cells whose only modules are raised) — chain them into a river or moat, for example under a bridge. At most 4 props per cell and ${BOUNDS.maxProps} in the scene. Also {"kind":"moveProp","id","x","z"} and {"kind":"removeProp","id"}.
 - Keys can look like something else: addItem accepts "look": ${KEY_LOOKS.join('|')}, and {"kind":"setKeyLook","id","look"} restyles an existing key. A look never changes what the key does.
 - Express what the kit cannot simulate through scenery plus a real mechanic: a creature or monster that only stands watch is a prop (a dragon beside the door it "guards") while a keyed or switched door does the actual gating — but a guard, sentry, or patrol that walks a beat is a real guard (addPatrol); a torch, gem, or relic that opens something is a key with that look; a river or moat is water tiles; mood words (spooky, haunted, sunny, frozen) choose environment and lighting. Say so plainly in "assumptions" (for example "The dragon is scenery; the torch-locked door is what guards the hoard."). Never claim scenery blocks, moves, attacks, or does anything in play.
+- People the author mentions — a merchant, shopkeeper, guide, villager, wise elder, wizard, teacher, robot helper — are characters: the props merchant, guide, sage, and robot (at most 3 in a world). Place each on a room the player walks through, or the cell right beside one. In play the player can talk to a character, and it tells them the engine's next step in its own voice. Characters are scenery: they never block, trade, give, or open anything — a merchant who "sells you a sword" is a merchant beside a key with the closest look, and the locked door is what gates. Say so in "assumptions".
 - Every from-scratch build, and every "make it look like…" request, sets scenery (environment, lighting, and architecture) and places 3-8 landmark props that match the description, on or right beside the rooms they belong to. Ordinary gameplay edits leave scenery alone unless asked.
 
 OPERATIONS (at most ${BOUNDS.maxOpsPerPatch} per result; ids match ^[a-z][a-z0-9-]{1,31}$; reference only ids that exist in the scene unless you are creating new ones):

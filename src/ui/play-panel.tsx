@@ -4,12 +4,14 @@ import { actorBridge } from '../render/bridge.js';
 import { compileLevel, type CompiledLevel } from '../core/topology.js';
 import { cycleOpen } from '../core/hazards.js';
 import { transitions } from '../core/movement.js';
+import { isNpc } from '../core/npc.js';
 import type { Report } from '../core/verifier.js';
 import type { Level } from '../../shared/schema.js';
 import { playSound } from '../render/sound.js';
 import { setPadHeld } from './held-input.js';
 import { PlayReact } from './play-react.js';
 import { AdventureContinue, AdventureStrip } from './adventure-panel.js';
+import { NpcTalkPanel } from './npc-talk.js';
 import { useApp, type PlayHint } from '../state/store.js';
 import { CARDINAL_NAMES, relativeCardinal, type MoveIntent } from './relative-direction.js';
 
@@ -61,12 +63,13 @@ export function PlayPanel({ level, report }: { level: Level; report: Report }) {
   const playHint = useApp((s) => s.playHint);
   // A hint answers "from here": any move or restart retires it.
   useEffect(() => {
-    useApp.setState({ playHint: null });
+    useApp.setState({ playHint: null, npcTalk: null });
   }, [play.moves, play.at, play.phase]);
-  useEffect(() => () => useApp.setState({ playHint: null }), []);
+  useEffect(() => () => useApp.setState({ playHint: null, npcTalk: null }), []);
   const hintIntent =
     playHint?.kind === 'move' || playHint?.kind === 'rule_blocked' ? INTENTS.find((intent) => relativeCardinal(facing, intent) === playHint.direction) : undefined;
   const hazards = compiled.cycle > 1;
+  const talkers = (level.props ?? []).some(isNpc);
   const guardName = (id: string): string => id.replace(/-/g, ' ');
   const guardsPaused = useApp((s) => s.guardsPaused);
   // Moves that would walk into a guard from exactly where the player stands:
@@ -141,7 +144,7 @@ export function PlayPanel({ level, report }: { level: Level; report: Report }) {
         </button>
       </div>
       <p className="panel-note play-keys-note">
-        WASD or arrows move relative to the camera · drag to look around{hazards ? ' · Space waits a turn' : ''} · H hint · R restarts · Esc exits
+        WASD or arrows move relative to the camera · drag to look around{hazards ? ' · Space waits a turn' : ''} · H hint{talkers ? ' · T talks' : ''} · R restarts · Esc exits
       </p>
       <p className="panel-note play-touch-note">Hold an arrow to keep running{hazards ? ' · tap the middle to wait a turn' : ''} · drag the world to look around</p>
       <div className="dpad">
@@ -225,6 +228,7 @@ export function PlayPanel({ level, report }: { level: Level; report: Report }) {
           {hintText(playHint, placeName, hintIntent)}
         </p>
       )}
+      <NpcTalkPanel level={level} />
       {won && (
         <div className="play-win">
           <p className="play-win-title">Level complete</p>

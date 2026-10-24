@@ -780,6 +780,11 @@ export class PlayerActor {
     this.placeAtSpawn();
   }
 
+  /** Exactly where the player stands, for a character to answer from (core/npc). */
+  standing(): { state: GameState; visited: string[] } {
+    return { state: this.animation?.move.after ?? this.state, visited: [...this.visitedModules] };
+  }
+
   /**
    * The next move of a shortest winning route from exactly where the player
    * stands (same engine as the checker), drawn on the floor until the next

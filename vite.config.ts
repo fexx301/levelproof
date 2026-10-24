@@ -18,7 +18,7 @@ function devApi(): Plugin {
       server.middlewares.use(async (req, res, next) => {
         const url = req.url ?? '';
         const route = url.split('?')[0];
-        if (route !== '/api/compile' && route !== '/api/explain') {
+        if (route !== '/api/compile' && route !== '/api/explain' && route !== '/api/npc') {
           next();
           return;
         }

@@ -36,6 +36,10 @@ const PROP_ALIASES: Record<string, (typeof PROP_KINDS)[number]> = {
   ruins: 'ruin', rubble: 'ruin', 'broken-pillar': 'ruin',
   sconce: 'torch', 'wall-torch': 'torch', torches: 'torch',
   seat: 'throne', chair: 'throne',
+  shopkeeper: 'merchant', trader: 'merchant', vendor: 'merchant', innkeeper: 'merchant', peddler: 'merchant', blacksmith: 'merchant',
+  villager: 'guide', ranger: 'guide', scout: 'guide', explorer: 'guide', npc: 'guide', 'quest-giver': 'guide', captain: 'guide',
+  wizard: 'sage', hermit: 'sage', elder: 'sage', oracle: 'sage', monk: 'sage', witch: 'sage', mage: 'sage', teacher: 'sage',
+  android: 'robot', droid: 'robot', bot: 'robot', automaton: 'robot', cyborg: 'robot', 'robot-helper': 'robot',
 };
 
 const LOOK_ALIASES: Record<string, (typeof KEY_LOOKS)[number]> = {

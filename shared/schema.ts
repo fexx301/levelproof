@@ -101,10 +101,15 @@ export const PROP_KINDS = [
   'brazier', 'torch', 'lantern', 'campfire', 'candles',
   'banner', 'statue', 'dragon', 'pillar', 'ruin', 'gravestone',
   'chest', 'throne', 'barrel', 'fountain', 'portal', 'console', 'antenna',
+  'merchant', 'guide', 'sage', 'robot',
   'water', 'lava',
 ] as const;
 export const propKindSchema = z.enum(PROP_KINDS);
 export type PropKind = z.infer<typeof propKindSchema>;
+
+/** Characters the player can talk to in play (core/npc). Still scenery: the
+ * engine never reads them, so they block, trade, and gate nothing. */
+export const NPC_PROPS: ReadonlySet<PropKind> = new Set(['merchant', 'guide', 'sage', 'robot']);
 
 /** Ground tiles: they lie flat on open ground, never on a ground-level module. */
 export const GROUND_TILE_PROPS: ReadonlySet<PropKind> = new Set(['water', 'lava']);

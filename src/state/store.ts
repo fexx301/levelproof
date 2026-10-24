@@ -388,6 +388,17 @@ export type PlayHint =
   | { kind: 'move' | 'rule_blocked'; direction: MoveAction; destination: string; movesToGoal: number }
   | { kind: 'at_goal' | 'rule_broken' | 'stranded' | 'unknown' };
 
+/** A character's line: the engine's plain words at once, then the AI voice. */
+export interface NpcTalk {
+  npcId: string;
+  /** The room the player asked from; a move retires the line. */
+  at: string;
+  plain: string;
+  voiced: string | null;
+  status: 'asking' | 'voiced' | 'plain';
+  meta?: { cached: boolean; model: string; totalCostUsd: number | null };
+}
+
 interface PlaySlice {
   at: string;
   keys: string[];
@@ -484,6 +495,8 @@ interface AppState {
   facing: Cardinal;
   /** The last play-mode hint, cleared by the next move or leaving play. */
   playHint: PlayHint | null;
+  /** What a character said (ui/npc-talk), cleared by the next move or leaving play. */
+  npcTalk: NpcTalk | null;
   recoveryStatus: 'ready' | 'malformed' | 'unavailable';
   explainCheck: (kind: CheckKind) => Promise<void>;
   submitPrompt: (prompt: string, clarificationContext?: string) => Promise<void>;
@@ -897,6 +910,7 @@ export const useApp = create<AppState>()((set, get) => ({
   followCamera: true,
   guardsPaused: false,
   playHint: null,
+  npcTalk: null,
   facing: 'N',
   recoveryStatus: initialRecoveryRead.status === 'malformed'
     ? 'malformed'

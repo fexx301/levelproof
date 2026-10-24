@@ -54,11 +54,17 @@ describe('compile prompt guardrails', () => {
   it('defaults unspecified doors to open and forbids invented conditions', () => {
     const prompt = buildSystemPrompt(vaultEmptyLevel, revisionId(vaultEmptyLevel));
 
-    expect(PROMPT_VERSION).toBe('prompt-15');
+    expect(PROMPT_VERSION).toBe('prompt-16');
     expect(prompt).toContain('A door with no explicitly requested lock or switch behavior is an OPEN, passable door');
     expect(prompt).toContain('Never invent a key, switch, or other condition for a door');
     expect(prompt).toContain('if the intended condition or location is materially ambiguous, ask one concise clarification');
     expect(prompt).toContain('omit conditions unless explicitly requested (an unconditioned door is open)');
+  });
+
+  it('turns people into talking characters that gate nothing', () => {
+    const prompt = buildSystemPrompt(vaultEmptyLevel, revisionId(vaultEmptyLevel));
+    expect(prompt).toContain('the props merchant, guide, sage, and robot');
+    expect(prompt).toContain('Characters are scenery: they never block, trade, give, or open anything');
   });
 });
 

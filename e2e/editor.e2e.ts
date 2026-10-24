@@ -1,7 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
 import type { CompileResult } from '../shared/compile-result.js';
 import type { Level } from '../shared/schema.js';
-import { revisionId } from '../src/core/serialize.js';
+import { encodeLevelShare, revisionId } from '../src/core/serialize.js';
+import { baselineLevel } from '../src/core/fixtures/baseline.js';
 
 const addBalconyKey: CompileResult = {
   type: 'patch',
@@ -534,4 +535,35 @@ test('the Sentry: Space waits a turn, and walking into the guard restarts empty-
   await expect(turn).toHaveAttribute('data-phase', '0');
   await expect(page.locator('.inventory')).toContainText('Inventory: empty');
   expect(errors).toEqual([]);
+});
+
+test('a character beside the player voices the engine’s next step, and a move retires it', async ({ page }) => {
+  test.setTimeout(180_000);
+  const level: Level = { ...baselineLevel, props: [...(baselineLevel.props ?? []), { id: 'old-merchant', prop: 'merchant', x: 1, z: 5 }] };
+  await page.route('**/api/npc', async (route) => {
+    const body = route.request().postDataJSON() as { npcId: string; state: { moduleId: string } };
+    expect(body.npcId).toBe('old-merchant');
+    expect(body.state.moduleId).toBe('entrance');
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        line: 'Ah, a customer! The brass key you need waits on the side balcony.',
+        cached: false,
+        attempts: [{ model: 'deterministic-browser-fixture', outcome: 'schema_valid', latencyMs: 2, costUsd: null }],
+        totalCostUsd: null,
+      }),
+    });
+  });
+  await page.goto(`/?p=${encodeLevelShare(level)}`);
+  const talk = page.getByRole('button', { name: 'Talk to the old merchant (T)' });
+  await expect(talk).toBeVisible({ timeout: 60_000 });
+  await talk.click();
+  const line = page.locator('.npc-talk-line');
+  await expect(line).toContainText('The brass key you need waits on the side balcony.');
+  await expect(line).toContainText('AI voice of the engine’s next step (fresh)');
+  await page.getByRole('button', { name: /^Move north/ }).click();
+  await expect(page.locator('.dpad-center')).toHaveText('lower hall', { timeout: 30_000 });
+  await expect(line).toHaveCount(0);
+  await expect(talk).toBeVisible();
 });

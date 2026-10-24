@@ -116,6 +116,31 @@ export const explainOkResponseSchema = z.strictObject({
 });
 export type ExplainOkResponse = z.infer<typeof explainOkResponseSchema>;
 
+/** Wire contract for POST /api/npc (§12): a character voices the engine's
+ * next step. The server recomputes that step from the submitted state. */
+export const npcRequestSchema = z.strictObject({
+  level: levelSchema,
+  npcId: idSchema,
+  state: z.strictObject({
+    moduleId: idSchema,
+    keys: z.array(idSchema).max(BOUNDS.maxKeys),
+    switches: z.array(idSchema).max(BOUNDS.maxSwitches),
+    phase: z.number().int().min(0).max(11),
+  }),
+  /** Rooms visited on this attempt (only passThrough rules read them). */
+  visited: z.array(idSchema).max(BOUNDS.maxModules),
+});
+export type NpcRequest = z.infer<typeof npcRequestSchema>;
+
+export const npcOkResponseSchema = z.strictObject({
+  line: z.string(),
+  cached: z.boolean(),
+  attempts: z.array(attemptRecordSchema),
+  totalCostUsd: z.number().nullable(),
+  generationCostUsd: z.number().nullable().optional(),
+});
+export type NpcOkResponse = z.infer<typeof npcOkResponseSchema>;
+
 /**
  * Streaming compile (Accept: application/x-ndjson): newline-delimited progress
  * events, ending with exactly one "result" event that carries the status and

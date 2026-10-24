@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { GROUND_TILE_PROPS, type Environment, type Level, type Lighting, type Prop } from '../../shared/schema.js';
+import { GROUND_TILE_PROPS, NPC_PROPS, type Environment, type Level, type Lighting, type Prop } from '../../shared/schema.js';
 import { GEOMETRY, centerPoint } from '../core/catalog.js';
 import { buildProp, hashString, MaterialCache, seededRandom, type BuiltProp, type PropContext, type ScatterKind } from './props.js';
 
@@ -633,7 +633,8 @@ export function buildScenery(level: Level, options: SceneryOptions): SceneryBuil
     const x = cell.x + corner[0] * offset;
     const z = cell.z + corner[1] * offset;
     built.group.position.set(x, host.y, z);
-    if (host.onModule && !tile) built.group.scale.setScalar(built.tall ? 0.62 : 0.8);
+    // Characters keep full size: they stand beside the player.
+    if (host.onModule && !tile && !NPC_PROPS.has(prop.prop)) built.group.scale.setScalar(built.tall ? 0.62 : 0.8);
     if (!tile) {
       // Face the nearest walkable module, so guardians look at the path.
       let target: { x: number; z: number } | null = null;
