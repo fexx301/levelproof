@@ -11,3 +11,6 @@ refine.md
 # Secrets — never deploy (gitignored for commits; this covers CLI deploys)
 .env
 .env.*
+
+# Demo footage from scripts/capture-demo.ts — never deploy
+demo-footage/

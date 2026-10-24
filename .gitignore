@@ -30,3 +30,6 @@ test-results/
 *.log
 .vite/
 .vercel
+
+# Demo footage from scripts/capture-demo.ts — large, local only
+demo-footage/
