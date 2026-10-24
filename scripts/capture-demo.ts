@@ -89,6 +89,8 @@ async function openTake(browser: Browser, name: string, out: string, url: string
     });
   }
   const page = await context.newPage();
+  // Every click and wait may meet a scene rebuild; give slow GPUs room.
+  page.setDefaultTimeout(WAIT.model);
   page.on('response', async (response) => {
     if (!/\/api\/(compile|npc|explain)/.test(response.url())) return;
     const body = await responseBody(response);
