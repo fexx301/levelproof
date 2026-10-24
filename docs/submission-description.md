@@ -40,4 +40,4 @@ discloses fresh vs cached, model, cost, and attempts.
 **Built with:** Three.js (all 3D procedural except the animated character,
 Quaternius' CC0 “Characters Matt”; no AI-generated assets), React, Zustand,
 Zod, Vite, Vercel serverless, OpenRouter (`gemini-3.8-flash`). Much of the code was written with AI
-coding assistants, directed, reviewed, and tested by the author (see the README’s provenance section).
+coding assistants (Claude and Gemini), directed, reviewed, and tested by the author (see the README’s provenance section).

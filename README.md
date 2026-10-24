@@ -199,10 +199,20 @@ instance and, when Upstash is configured, in a shared store for 7 days
 **Cached result**, with model, cost, and attempts in **Generation details**.
 The example chips are prewarmed after each deploy (`scripts/prewarm.ts`).
 
-Talking characters and the story rule (added Oct 24: `prompt-16`,
-`adventure-4`, `npc-1`) are covered by unit tests and a browser journey with
-a fixture voice; their live-model measurements are pending and will be
-recorded in [`docs/model-eval.md`](docs/model-eval.md).
+Re-measured on 2026-10-24 after adding talking characters and the story rule
+(`prompt-16`, `adventure-4`, `npc-1`; details in
+[`docs/model-eval.md`](docs/model-eval.md)):
+
+- Eight opening chapters: 8/8 fair; every role the prompt named was placed
+  (5/5); every story named only characters that stand in the world (8/8);
+  every character's line passed the server's checks (8/8, median 4.1 s).
+- The judge battery: 17/18 builds winnable (median 7.5 s), 4/4 honest
+  refusals, 4/4 edits, and reasonable answers to the judgement calls.
+- **Guards are the weak spot today:** 1 of 6 guard and timed-gate builds was
+  accepted (5 of 5 on Sep 29). The previous prompt scored the same today, so
+  the model's behaviour changed. A failing build stays a draft with its
+  failure replayed, and adventure chapters dismiss a guard that alone makes
+  them unfair.
 
 ## Setup and tests
 
@@ -246,7 +256,7 @@ cache, and Vercel hosting. Pre-window planning notes are private and excluded
 from this repository.
 
 **AI-assisted code.** Much of this code was written with AI coding
-assistants (Anthropic's Claude and OpenAI models), directed, reviewed, and
+assistants (Anthropic's Claude and Google's Gemini), directed, reviewed, and
 tested by the author, who ran and recorded every measurement in this
 repository.
 

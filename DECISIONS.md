@@ -29,10 +29,14 @@ Build-window decisions and measured evidence, newest first. Dates are 2026.
 - **Evidence**: 362 unit tests (new: facts, plain lines, service refusals and
   cache, handler); a fixture-voice browser journey (talk → voiced line → move
   retires it); a local browser run with no provider key showed the plain
-  line and its "AI voice unavailable" label. **Not yet measured live**: the
-  prompt changes and the voice (no provider key in this workspace). The
-  version bumps empty the compile cache, so the chips need a fresh prewarm
-  after deploy.
+  line and its "AI voice unavailable" label. The version bumps empty the
+  compile cache, so the chips need a fresh prewarm after deploy.
+- **Measured live** (docs/model-eval.md, ≈ $0.60): character battery 8/8 on
+  every grade (fair, cast, story, voice; median voice 4.1 s); judge builds
+  17/18, declines 4/4, edits 4/4. Guard builds fell to 1/6 — and the
+  previous prompt scored 1/5 the same day, so the model changed, not the
+  prompt. Not fixed here; a follow-up should give editor builds the
+  adventure's guard fallback or stronger guard findings.
 - **Docs**: README discloses AI-assisted code and that the first commit holds
   Sep 11–25; test count corrected.
 

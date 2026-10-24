@@ -230,3 +230,19 @@ off, revising while the engine says a chapter is unfair or off-band.
 | Fallback forced (`gemini-2.5-flash-lite`), 1 chain × 3 | 0/1: every attempt left the goal disconnected; repairs cannot fix geometry. If the primary fails, adventure says "try again" — it never sends the player into an unfair chapter. |
 
 Spend for this series: $0.22 (of an owner-approved $0.35).
+
+## Oct 24 — characters, the story rule, and a judge re-run (`prompt-16`, `adventure-4`, `npc-1`)
+
+All runs live on `google/gemini-3.8-flash` (fallback `gemini-2.5-flash-lite`),
+cache off, through the real services; budgets set per run.
+
+| Run | Result |
+|---|---|
+| `scripts/character-battery.ts`: 8 opening chapters (5 name a role, 3 do not), then each placed character's voice from the spawn | Fair 8/8 · the named role placed 5/5 · story names only placed characters and nobody sells or gives 8/8 · voice lines passing the server's checks 8/8, median 4.1 s (one 15.8 s). $0.087. The quest hub that once promised a merchant "ready to sell you a sturdy iron sword" now places a merchant who "offers guidance". Chapters often add a character even when none was asked for (the lighthouse got a guide), as `adventure-4` suggests. |
+| Judge battery, builds (18) | 17/18 winnable and dressed, median 7.5 s (max 45 s, "make the biggest level you can"). The miss: a lighthouse on a rocky island came back unwinnable (it stays a draft with the failure shown). In a first, stopped run "Build me a zelda style dungeon" also failed after two revisions (a guard blocked the only way); it passed in this run. |
+| Judge battery, declines (4) and edits (4) | 4/4 honest refusals; 4/4 edits applied and winnable. |
+| Judge battery, judgement calls (14) | Reasonable except "something cool", unwinnable after two revisions. Jumping, ten keys, chasing enemies, collapsing bridges, stairs, raw JSON, "delete everything", and "a level that is impossible to win" → honest unsupported with alternatives; "make it harder" → a clarifying question. |
+| Judge battery, guards and timed gates (6) | **1/6** (the timed vault door). Every guard build was unwinnable; the drawbridge was accepted but undersized. The same prompts on the previous prompt (`prompt-15`, run one at a time the same day): **1/5** plus the first case failing — so this is the model's behaviour today, not the new prompt. On Sep 29 the same set scored 5/5. Unaccepted editor builds stay drafts with the failure replayed; adventure chapters dismiss a guard that alone makes them unfair. |
+
+Two runs stopped by design when one provider call reported no cost. Spend for
+the series ≈ $0.60.
