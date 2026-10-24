@@ -88,7 +88,9 @@ are scenery: they block, trade, give, and open nothing.
 secret room**, **Make it spookier**, or just type what you want. The AI
 changes the level you are standing in, the engine checks the change before
 you see it (*can be won · nobody gets stuck · rules hold*), and **Play the
-new version** drops you straight back in. Play → react in words → the world
+new version** drops you straight back in. If every AI attempt still cannot
+be won, the engine offers its best checked repair of one instead, and says
+so (*the AI's change could not be won, so the engine fixed it: …*). Play → react in words → the world
 changes → play again. It is the same movement engine the
 checker explored — nothing the player can do was left unchecked. The
 verifier's replays use the same character as a translucent ghost: blue for a
@@ -124,10 +126,12 @@ On a failing draft you get two kinds of repair:
 - **Ask the AI to fix it** — the model proposes a fix that keeps your idea;
   the engine judges it before you see it.
 - **Find checked repairs** — a deterministic search (≤ 24 candidates, ≤ 4
-  operations) over four template families: gate the bypass with a keyed door,
-  relocate the trapping switch, move the key onto the shortcut, or dissolve
-  the trap. Every candidate is fully re-verified; repairs never weaken a
-  rule, move the goal, or grant inventory.
+  operations) over five template families: gate the bypass with a keyed door,
+  relocate the trapping switch, move the key onto the shortcut, dissolve the
+  trap, or move a key out from behind the door it opens. Every candidate is
+  fully re-verified; repairs never weaken a rule, move the goal, or grant
+  inventory. Among equally small fixes, the one with the longer winning
+  route wins, so a challenge stays a challenge.
 
 ## What the AI can edit
 
@@ -210,8 +214,11 @@ Re-measured on 2026-10-24 after adding talking characters and the story rule
   refusals, 4/4 edits, and reasonable answers to the judgement calls.
 - **Guards are the weak spot today:** 1 of 6 guard and timed-gate builds was
   accepted (5 of 5 on Sep 29). The previous prompt scored the same today, so
-  the model's behaviour changed. A failing build stays a draft with its
-  failure replayed, and adventure chapters dismiss a guard that alone makes
+  the model's behaviour changed. The commonest miss is a new key placed
+  behind the door it opens; the repair search now fixes exactly that. A
+  failing editor build stays a draft with its failure replayed (one click to
+  the checked repairs); a change asked for while playing comes back repaired;
+  adventure chapters are repaired too, and dismiss a guard that alone makes
   them unfair.
 
 ## Setup and tests

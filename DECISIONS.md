@@ -2,6 +2,30 @@
 
 Build-window decisions and measured evidence, newest first. Dates are 2026.
 
+## Oct 24 (keys locked behind their own doors; play changes come back winnable)
+
+- **Found**: the prewarmed "Too easy — make it harder" on The Sentry was
+  unwinnable after both revisions. Replaying production's cached answers
+  showed why: every round put the new key behind the very door it opens (the
+  herb garden lies past the new gate). The engine's findings said so; the
+  model did not act on them.
+- **Repair template 5**: when the level cannot be won and a key sits where
+  the player never gets to, move it to a free room the player can reach,
+  farthest from the spawn first (at most 8 rooms per key). Ranking gains a
+  tiebreak after removals, changes, and size: the longer winning route.
+- **Play reactions**: if every AI attempt still fails, the client tries the
+  checked repairs on each attempt and offers the accepted one with the
+  longest route, disclosed in the proposal. The editor is unchanged — a
+  failing draft is shown, with **Find checked repairs** one click away (now
+  including template 5). Adventure chapters already ran the repair search.
+- **Evidence**: on the three recorded rounds, the search fixes each (≤ 20 ms);
+  the rescue picks the third, shortest route 14 against the Sentry's 10.
+  Tests: the template, the rescue, the store in play (repaired, disclosed,
+  applies) and in the editor (failure shown). A browser run with the three
+  recorded answers as fixtures showed the disclosure and all three checks
+  passing. Production's cached failures need no clearing: the client now
+  repairs them on arrival.
+
 ## Oct 24 (characters who know the way; the story tells the truth)
 
 - **Why**: six judge-style prompts on production (gallery showroom, space
