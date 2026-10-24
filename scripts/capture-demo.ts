@@ -28,7 +28,7 @@
  */
 import { mkdirSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { chromium, type Browser, type Page, type Response } from '@playwright/test';
+import { chromium, type Browser, type Locator, type Page, type Response } from '@playwright/test';
 import { LiveBudget, LiveEvaluationStop, requireLiveBudget } from './live-budget';
 
 const DEFAULT_PROMPT = 'A medieval quest hub town with a merchant and a locked gate to the wild road.';
@@ -110,6 +110,15 @@ async function closeTake(take: Take, out: string): Promise<void> {
   if (video !== null) renameSync(await video.path(), join(out, `${take.name}.webm`));
 }
 
+/** Type visibly; on a machine too slow to keep up, fill the rest at once. */
+async function typeInto(locator: Locator, text: string, delay: number): Promise<void> {
+  try {
+    await locator.pressSequentially(text, { delay, timeout: 60_000 });
+  } catch {
+    await locator.fill(text);
+  }
+}
+
 /** Follow the engine's hints one move at a time until `done` holds. */
 async function followHints(page: Page, done: () => Promise<boolean>): Promise<boolean> {
   for (let step = 0; step < MAX_STEPS; step++) {
@@ -129,8 +138,7 @@ async function takeAdventure(take: Take, prompt: string): Promise<void> {
   const { page } = take;
   await page.locator('.landing-input').waitFor({ timeout: 60_000 });
   await take.mark('welcome', 2500);
-  // A slow GPU can make typing slow; the beat still happens, just later.
-  await page.locator('.landing-input').pressSequentially(prompt, { delay: 35, timeout: 180_000 });
+  await typeInto(page.locator('.landing-input'), prompt, 35);
   await take.mark('prompt-typed', 600);
   await page.locator('.landing-start').click();
   await page.getByText(/states checked/).first().waitFor({ timeout: WAIT.model });
@@ -167,7 +175,7 @@ async function takeRefusal(take: Take): Promise<void> {
   const box = page.getByRole('textbox', { name: 'Describe a change' });
   await box.waitFor({ timeout: 60_000 });
   await take.mark('editor', 1500);
-  await box.pressSequentially('add an enemy that chases you', { delay: 45, timeout: 180_000 });
+  await typeInto(box, 'add an enemy that chases you', 45);
   await page.getByRole('button', { name: 'Compile', exact: true }).click();
   await page.getByText(/Not possible|unsupported|cannot|can’t|can't/i).first().waitFor({ timeout: WAIT.model });
   await take.mark('honest-refusal', 4000);
