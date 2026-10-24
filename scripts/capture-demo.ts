@@ -34,6 +34,8 @@ import { LiveBudget, LiveEvaluationStop, requireLiveBudget } from './live-budget
 const DEFAULT_PROMPT = 'A medieval quest hub town with a merchant and a locked gate to the wild road.';
 const VIEWPORT = { width: 1440, height: 900 };
 const MAX_STEPS = 40;
+/** Upper bounds, not delays: generous enough for a slow GPU, free on a fast one. */
+const WAIT = { step: 30_000, model: 240_000, replay: 240_000 };
 
 interface Beat {
   name: string;
@@ -68,7 +70,7 @@ class Take {
   async mark(beat: string, holdMs = 0): Promise<void> {
     if (holdMs > 0) await this.page.waitForTimeout(holdMs);
     const still = join('stills', `${this.name}-${String(this.beats.length + 1).padStart(2, '0')}-${beat}.png`);
-    await this.page.screenshot({ path: join(this.out, still), timeout: 60_000 });
+    await this.page.screenshot({ path: join(this.out, still), timeout: 120_000 });
     this.beats.push({ name: beat, at: Math.round((Date.now() - this.started) / 100) / 10, still });
     console.log(`  ${this.name} ${this.beats.at(-1)!.at.toFixed(1)}s  ${beat}`);
   }
@@ -117,7 +119,7 @@ async function followHints(page: Page, done: () => Promise<boolean>): Promise<bo
     if ((await lit.count()) === 0) return done();
     const before = await page.locator('.dpad-center').innerText();
     await lit.click();
-    await page.waitForFunction((was) => document.querySelector('.dpad-center')?.textContent !== was, before, { timeout: 15_000 }).catch(() => undefined);
+    await page.waitForFunction((was) => document.querySelector('.dpad-center')?.textContent !== was, before, { timeout: WAIT.step }).catch(() => undefined);
     await page.waitForTimeout(450);
   }
   return done();
@@ -131,7 +133,7 @@ async function takeAdventure(take: Take, prompt: string): Promise<void> {
   await page.locator('.landing-input').pressSequentially(prompt, { delay: 35, timeout: 180_000 });
   await take.mark('prompt-typed', 600);
   await page.locator('.landing-start').click();
-  await page.getByText(/states checked/).first().waitFor({ timeout: 120_000 });
+  await page.getByText(/states checked/).first().waitFor({ timeout: WAIT.model });
   await take.mark('title-card-proof', 3000);
 
   const talk = page.getByRole('button', { name: /^Talk to the / });
@@ -139,9 +141,9 @@ async function takeAdventure(take: Take, prompt: string): Promise<void> {
   if (near && (await talk.count()) > 0) {
     await take.mark('beside-character', 800);
     await talk.click();
-    await page.locator('.npc-talk-line').waitFor({ timeout: 10_000 });
+    await page.locator('.npc-talk-line').waitFor({ timeout: WAIT.step });
     await take.mark('plain-line', 400);
-    await page.waitForFunction(() => !/finding the words/.test(document.querySelector('.npc-talk-line')?.textContent ?? ''), null, { timeout: 40_000 }).catch(() => undefined);
+    await page.waitForFunction(() => !/finding the words/.test(document.querySelector('.npc-talk-line')?.textContent ?? ''), null, { timeout: WAIT.model }).catch(() => undefined);
     await take.mark('character-voice', 3500);
   } else {
     console.log('  (no character on the way: talk beat skipped — try another --prompt)');
@@ -150,7 +152,7 @@ async function takeAdventure(take: Take, prompt: string): Promise<void> {
   if ((await page.getByText('Level complete').count()) === 0) {
     await page.getByRole('button', { name: 'Too easy — make it harder' }).click();
     const proposal = page.getByRole('group', { name: 'Proposed change' });
-    await proposal.waitFor({ timeout: 120_000 });
+    await proposal.waitFor({ timeout: WAIT.model });
     await take.mark('harder-precheck', 3500);
     await page.getByRole('button', { name: 'Play the new version' }).click();
     await page.waitForTimeout(2500);
@@ -167,7 +169,7 @@ async function takeRefusal(take: Take): Promise<void> {
   await take.mark('editor', 1500);
   await box.pressSequentially('add an enemy that chases you', { delay: 45, timeout: 180_000 });
   await page.getByRole('button', { name: 'Compile', exact: true }).click();
-  await page.getByText(/Not possible|unsupported|cannot|can’t|can't/i).first().waitFor({ timeout: 90_000 });
+  await page.getByText(/Not possible|unsupported|cannot|can’t|can't/i).first().waitFor({ timeout: WAIT.model });
   await take.mark('honest-refusal', 4000);
 }
 
@@ -176,20 +178,20 @@ async function takeBreakAndRepair(take: Take): Promise<void> {
   await page.getByRole('button', { name: 'The switch trap' }).waitFor({ timeout: 60_000 });
   await take.mark('balcony-vault', 1500);
   await page.getByRole('button', { name: 'The switch trap' }).click();
-  await page.getByRole('button', { name: 'Apply edit' }).click({ timeout: 90_000 });
-  await page.getByRole('region', { name: 'Verification checks' }).getByText('Not accepted').waitFor({ timeout: 30_000 });
+  await page.getByRole('button', { name: 'Apply edit' }).click({ timeout: WAIT.model });
+  await page.getByRole('region', { name: 'Verification checks' }).getByText('Not accepted').waitFor({ timeout: WAIT.step });
   await take.mark('stuck-yes', 2500);
   await page.getByRole('button', { name: 'Show the problem' }).click();
-  await page.getByRole('status').filter({ hasText: 'Paused at decisive moment' }).waitFor({ timeout: 60_000 });
+  await page.getByRole('status').filter({ hasText: 'Paused at decisive moment' }).waitFor({ timeout: WAIT.replay });
   await take.mark('ghost-decisive-move', 3000);
   const back = page.getByRole('button', { name: 'Back to repair' });
   if ((await back.count()) > 0) await back.click();
   const repairs = page.getByRole('region', { name: 'Repairs' });
   await repairs.getByRole('button', { name: 'Find checked repairs' }).click();
-  await repairs.getByRole('button', { name: 'Preview' }).first().click({ timeout: 30_000 });
+  await repairs.getByRole('button', { name: 'Preview' }).first().click({ timeout: WAIT.step });
   await take.mark('repair-preview', 3000);
   await repairs.getByRole('button', { name: 'Apply', exact: true }).click();
-  await repairs.getByText('Repaired and accepted.').waitFor({ timeout: 30_000 });
+  await repairs.getByText('Repaired and accepted.').waitFor({ timeout: WAIT.step });
   await take.mark('repaired', 1500);
   const replay = page.getByRole('button', { name: 'Replay the failing route' });
   if ((await replay.count()) > 0) {
@@ -197,7 +199,8 @@ async function takeBreakAndRepair(take: Take): Promise<void> {
     await page.waitForTimeout(9000);
     await take.mark('nobody-stranded');
   }
-  await page.getByRole('button', { name: 'Share', exact: true }).click();
+  // The header button reads "Share" or "Share accepted" depending on the draft state.
+  await page.getByRole('button', { name: /^Share( accepted)?$/ }).first().click();
   await take.mark('shared', 2500);
 }
 
