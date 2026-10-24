@@ -35,7 +35,6 @@ export interface NpcFacts {
   /** The first step's room; absent when the first step is waiting for a guard. */
   nextRoom?: string;
   waitFirst: boolean;
-  movesToGoal?: number;
   /** A spoken line must name at least one of these (empty: no requirement). */
   mustName: string[];
 }
@@ -55,7 +54,7 @@ export function npcFacts(compiled: CompiledLevel, npc: Prop, state: GameState, v
       const first = hint.move;
       const step = first.action === 'wait' ? {} : { nextRoom: room(first.destination) };
       const pickup = hint.route.find((move) => move.events.collectedKey !== undefined || move.events.activatedSwitch !== undefined);
-      const common = { ...base, ...step, waitFirst: first.action === 'wait', movesToGoal: hint.movesToGoal };
+      const common = { ...base, ...step, waitFirst: first.action === 'wait' };
       if (pickup === undefined) return { ...common, situation: 'goal', mustName: [base.goalRoom] };
       const objective = pickup.events.collectedKey !== undefined
         ? { kind: 'key' as const, name: keyName(pickup.events.collectedKey), room: room(pickup.destination) }

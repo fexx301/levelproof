@@ -27,7 +27,7 @@ export interface NpcOutcome {
 }
 
 /** Bump when the voice prompt changes; participates in the cache key. */
-export const NPC_PROMPT_VERSION = 'npc-1';
+export const NPC_PROMPT_VERSION = 'npc-2';
 
 const SERVICE_DEADLINE_MS = 30_000;
 const MIN_ATTEMPT_BUDGET_MS = 4_000;
@@ -70,7 +70,6 @@ function factLines(facts: NpcFacts): string {
   if (facts.situation === 'goal') lines.push('- they already hold everything they need: they should head for the final destination');
   if (facts.waitFirst) lines.push('- first they must wait one turn where they are and let a guard pass');
   if (facts.nextRoom !== undefined) lines.push(`- their first step: toward ${facts.nextRoom}`);
-  if (facts.movesToGoal !== undefined) lines.push(`- moves left on the shortest way: ${facts.movesToGoal}`);
   if (facts.situation === 'at_goal') lines.push('- they have arrived: congratulate them');
   if (facts.situation === 'stranded') lines.push('- no way on remains from here: they must start again (the R key)');
   if (facts.situation === 'rule_blocked') lines.push('- the destination can only be reached now by breaking a rule: suggest starting again (the R key) for a clean win');
@@ -90,6 +89,7 @@ ${factLines(facts)}
 RULES:
 - One or two sentences, at most 35 words, spoken by the character to the player.${must}
 - Use ONLY these facts. Never invent places, items, routes, prices, trades, quests, or rewards; you give directions, nothing else.
+- No numbers, distances, or counts of moves or steps: the facts give places, not how far they are.
 - No compass directions (the player's controls follow the camera) and no quotation marks.
 
 Respond with a single JSON object and nothing else:

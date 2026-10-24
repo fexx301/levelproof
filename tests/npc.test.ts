@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { POST } from '../api/npc';
 import { resetCache } from '../api/_lib/cache';
 import type { CallModel } from '../api/_lib/explain-service';
-import { voiceNpc } from '../api/_lib/npc-service';
+import { buildNpcSystemPrompt, resolveFacts, voiceNpc } from '../api/_lib/npc-service';
 import type { ProviderResult } from '../api/_lib/provider';
 import { resetRequestBudget } from '../api/_lib/request-guard';
 import type { NpcRequest } from '../shared/api';
@@ -131,6 +131,14 @@ describe('character voice service', () => {
     const again = await voiceNpc(process.env, request(), { callModel });
     expect(again.cached).toBe(true);
     expect(calls).toHaveLength(2);
+  });
+
+  it('gives the model places, never a move count it could pin on the wrong place', () => {
+    const facts = resolveFacts(request())!;
+    const prompt = buildNpcSystemPrompt(facts, 'a dusk meadow world');
+    expect(prompt).toContain('what they need next: the brass key (a key), in side balcony');
+    expect(prompt).not.toMatch(/moves left|\b\d+ moves?\b/);
+    expect(prompt).toContain('No numbers, distances, or counts of moves or steps');
   });
 
   it('fails closed, without a model call, for anything but a real character and state', async () => {
