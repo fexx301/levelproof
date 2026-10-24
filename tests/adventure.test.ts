@@ -116,6 +116,14 @@ describe('adventure requests on the server', () => {
     expect(text).toContain('must be 8-12 moves');
   });
 
+  it('keeps the story to what the world contains: characters only talk', () => {
+    const text = adventureAddendum(adventure());
+    expect(ADVENTURE_PROMPT_VERSION).toBe('adventure-4');
+    expect(text).toContain('mention only what this world contains');
+    expect(text).toContain('a person you mention must be a character prop you placed');
+    expect(text).toContain('never write that anyone sells, gives, trades, fights, or opens anything');
+  });
+
   it('treats a question as invalid for a chapter and retries', async () => {
     const calls: string[] = [];
     const replies = [
