@@ -151,7 +151,7 @@ async function takeAdventure(take: Take, prompt: string): Promise<void> {
   if (near && (await talk.count()) > 0) {
     await take.mark('beside-character', 800);
     await talk.click();
-    await page.locator('.npc-talk-line').waitFor({ timeout: WAIT.step });
+    await page.locator('.npc-talk-line').waitFor({ timeout: WAIT.model });
     await take.mark('plain-line', 400);
     await page.waitForFunction(() => !/finding the words/.test(document.querySelector('.npc-talk-line')?.textContent ?? ''), null, { timeout: WAIT.model }).catch(() => undefined);
     await take.mark('character-voice', 3500);
@@ -189,7 +189,7 @@ async function takeBreakAndRepair(take: Take): Promise<void> {
   await take.mark('balcony-vault', 1500);
   await page.getByRole('button', { name: 'The switch trap' }).click();
   await page.getByRole('button', { name: 'Apply edit' }).click({ timeout: WAIT.model });
-  await page.getByRole('region', { name: 'Verification checks' }).getByText('Not accepted').waitFor({ timeout: WAIT.step });
+  await page.getByRole('region', { name: 'Verification checks' }).getByText('Not accepted').waitFor({ timeout: WAIT.model });
   await take.mark('stuck-yes', 2500);
   await page.getByRole('button', { name: 'Show the problem' }).click();
   await page.getByRole('status').filter({ hasText: 'Paused at decisive moment' }).waitFor({ timeout: WAIT.replay });
@@ -198,10 +198,10 @@ async function takeBreakAndRepair(take: Take): Promise<void> {
   if ((await back.count()) > 0) await back.click();
   const repairs = page.getByRole('region', { name: 'Repairs' });
   await repairs.getByRole('button', { name: 'Find checked repairs' }).click();
-  await repairs.getByRole('button', { name: 'Preview' }).first().click({ timeout: WAIT.step });
+  await repairs.getByRole('button', { name: 'Preview' }).first().click({ timeout: WAIT.model });
   await take.mark('repair-preview', 3000);
   await repairs.getByRole('button', { name: 'Apply', exact: true }).click();
-  await repairs.getByText('Repaired and accepted.').waitFor({ timeout: WAIT.step });
+  await repairs.getByText('Repaired and accepted.').waitFor({ timeout: WAIT.model });
   await take.mark('repaired', 1500);
   const replay = page.getByRole('button', { name: 'Replay the failing route' });
   if ((await replay.count()) > 0) {
